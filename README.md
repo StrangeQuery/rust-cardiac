@@ -129,6 +129,7 @@ of its own, `examples/collatz/`, built with `-p collatz`.
 | `map`       | MapReduce's map: counts the words (1..16) of a shard ended by -999; outputs a deck | words, `-999` | 84         |
 | `reduce`    | MapReduce's reduce: adds up the map machines' decks, stacked behind their number | decks         | 94           |
 | `voxel`     | a voxel landscape's projection and light, a depth slice at a time: `voxel.sh` draws a picture with it | a slice | 87 |
+| `ray/`      | a ray tracer in ten machines, a mirror ball over a checkerboard: `ray.sh` draws a picture with them | a frame | 45 to 91 each |
 
 FizzBuzz prints numbers because CARDIAC's teletype prints nothing else. A negative number reads as a word, since
 FizzBuzz itself never prints one. `powers` is bigger than memory: `overlay()` splits it into a phase that works the
@@ -144,6 +145,19 @@ slice at a time, the way flight games drew hills in the early 1990s. `voxel.sh` 
 plain greyscale PGM, runs the deck on burn once for each of 120 slices, near to far, and puts what CARDIAC outputs on
 the screen as `voxel.ppm` (and `voxel.png` on a Mac). `craterlake.pgm` is Crater Lake from real elevation data (its
 comments say where from), and `terrain.sh` makes up others.
+
+`ray/` traces a mirror ball over a red and cream checkerboard, under a banded sky: the ball reflects the sky, a
+light and the floor, and casts a shadow. CARDIAC has no square root, no multiply or divide and no fractions, and no
+program of a whole ray tracer would fit in its memory, so the work is split into ten machines, each small enough for
+96 cells. `sway` and `hop` work out where the ball is in a frame and how far the floor has scrolled, from the frame
+number and a line of a printed sine table, `ray/sine120.txt` (`ray/sine.sh` writes it). `sky` colours a row of sky,
+and `zrow` and `floor` a row of the floor, as old racing games drew a road. `span` finds the pixels of a row the ball
+covers. For each of those, `norm` finds the ball's surface (a square root, by taking away odd numbers) and the ray
+that bounces off it, `bounce` sends that ray to the light, the sky or the floor, and `hit` finds the checker a ray
+lands on. `compose` lays the ball over the row. `floor` and `compose` come in two phases. `ray.sh` is the host: for a
+frame, `FRAME=0` to `119`, it runs the decks on burn, about 1,600 runs, passes each machine's output to the next,
+looks up the colour codes in a palette and writes a 96 x 48 picture, `ray.ppm` (and `ray.png` on a Mac). Every
+colour code in the picture is CARDIAC's.
 
 ## What Rust is supported
 

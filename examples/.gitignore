@@ -14,3 +14,6 @@ voxel.ppm
 voxel.png
 voxel_map.ppm
 voxel_map.png
+# what ray.sh draws
+ray.ppm
+ray.png

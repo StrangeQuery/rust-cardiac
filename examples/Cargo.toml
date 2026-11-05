@@ -77,3 +77,43 @@ path = "reduce.rs"
 [[bin]]
 name = "voxel"
 path = "voxel.rs"
+
+[[bin]]
+name = "sky"
+path = "ray/sky.rs"
+
+[[bin]]
+name = "zrow"
+path = "ray/zrow.rs"
+
+[[bin]]
+name = "floor"
+path = "ray/floor.rs"
+
+[[bin]]
+name = "span"
+path = "ray/span.rs"
+
+[[bin]]
+name = "norm"
+path = "ray/norm.rs"
+
+[[bin]]
+name = "bounce"
+path = "ray/bounce.rs"
+
+[[bin]]
+name = "hit"
+path = "ray/hit.rs"
+
+[[bin]]
+name = "compose"
+path = "ray/compose.rs"
+
+[[bin]]
+name = "sway"
+path = "ray/sway.rs"
+
+[[bin]]
+name = "hop"
+path = "ray/hop.rs"

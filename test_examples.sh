@@ -16,8 +16,9 @@ profile=""   # the profile both runs use: cargo's dev, or --profile NAME
 build() {   # the decks, with the profile; a build with another writes the same files
   cargo cardiac build -q $profile && cargo cardiac build -q $profile -p collatz || exit 1
 }
-deck() {   # NAME: its deck; an example that is a package of its own is in a directory of its name
-  if [ -d "$1" ]; then echo "$1/$1.cqb"; else echo "$1.cqb"; fi
+deck() {   # NAME: its deck; an example that is a package of its own is in a directory of its name, and the ray
+  # tracer's machines are in ray/
+  if [ -d "$1" ]; then echo "$1/$1.cqb"; elif [ -f "ray/$1.rs" ]; then echo "ray/$1.cqb"; else echo "$1.cqb"; fi
 }
 check() {   # NAME INPUT...
   name=$1; shift
@@ -75,6 +76,28 @@ mapreduce "3 1 4 1 5 9 2 6 5 3 5" "8 9 7 9 3 2 3 8 4 6" "2 6 4 3 3 8 3 2 7 9 5 0
 check days_assumed 2
 check days_assumed 12
 check voxel 12 30 $(i=0; while [ $i -lt 96 ]; do h=$((i * 7 % 50)); printf '%s ' $((36 + i / 12)) $((10 * h + i % 6)) $((i * 3 % 50)) $((i * 5 % 50)); i=$((i + 1)); done)   # a slice: land above and below the camera, lit from every side
+# the ray tracer's machines, a call or a few each: a frame's place, sky and floor rows, and rays that see the light,
+# the sky, the floor and haze
+check sway 999
+check sway -499
+check hop 37
+check sky 3
+check sky 20                           # haze
+check sky 30                           # a floor row: -1
+check zrow 34 14                       # under the ball: its shadow reaches this row
+check zrow 25 3
+check floor 60 1 -48 0 0 16 11 26      # zrow 34 14's cards, then a frame's scroll and ball
+check span 20 20 20
+check span 47 0 14                     # below the ball: none
+check norm -9 8
+check norm 4 -9
+check bounce -63 56 8 20               # the light
+check bounce 10 60 3 20                # high sky
+check bounce 10 20 3 20                # low sky
+check bounce 36 -81 -9 20              # the floor, t 1
+check bounce 5 -10 3 20                # too far: haze
+check hit 1 36 17 4 9 26 11 14
+check compose 40 5 13 8 9 10 11 $(i=0; while [ $i -lt 96 ]; do printf '%s ' $((4 + i / 7 % 2)); i=$((i + 1)); done)
 }
 build; examples
 # every example again, built with debug assertions on both ways
