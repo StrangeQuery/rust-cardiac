@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/carbide.png" alt="CARBIDE" width="256"></p>
+
 # rust-cardiac
 
 Rust compiled to CARDIAC.
@@ -15,6 +17,8 @@ pencil. It has 100 memory cells of three decimal digits and a sign, an accumulat
 load, add, subtract, store, shift, test for negative, jump, output, halt), a card reader for input and a teletype
 for output. There is no multiply, no divide, no stack and no indirect addressing. Cell 00 always holds 001, which is
 what lets a deck of cards load itself. Programs and data share cells 03 to 98, 96 cells in all.
+
+<p align="center"><img src="assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
 
 ## Getting started
 

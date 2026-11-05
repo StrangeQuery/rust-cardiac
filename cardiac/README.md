@@ -1,7 +1,11 @@
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/carbide.png" alt="CARBIDE" width="256"></p>
+
 # cardiac
 
 The built-ins of a Rust program for CARDIAC, for
 [rust-cardiac](https://github.com/StrangeQuery/rust-cardiac).
+
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
 
 ```rust
 use cardiac::*;
