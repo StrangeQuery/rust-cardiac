@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/carbide.png" alt="CARBIDE" width="256"></p>
+<p align="center"><img src="assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
 
 # rust-cardiac
 
@@ -227,6 +227,51 @@ does:
     burn: days.cqb: panicked in main: index out of bounds
 
 Cardigan reads the map too, when it is opened with the deck.
+
+## Where to run it
+
+A deck is an ordinary CARDIAC deck, so it isn't tied to our tools. These are the places we know it runs:
+
+- **[burn](https://github.com/StrangeQuery/cardiaq)**, cardiaq's runtime, from the command line. It's fast, it
+  reads the panic map, and it loads the later decks of a program in phases (`NAME.2.cqb`, ...) when the program
+  asks for them.
+- **[Cardigan](https://lab.strangequery.com/cardigan/)**, in the browser. Drop the deck on it to step through the
+  program one instruction at a time, and drop the listing and the panic map with it to see the source and why a
+  run panicked.
+- **[Brian Stuart's simulator](https://www.cs.drexel.edu/~bls96/museum/cardsim.html)**, from his
+  [CARDIAC page](https://www.cs.drexel.edu/~bls96/museum/cardiac.html) at Drexel. This is the best-known CARDIAC
+  simulator, and the one we check against. Paste the deck into the Deck box with the program's input after it,
+  then press Load, Reset and Run. Every example prints there exactly what it prints on burn and with `cargo run`.
+  The exception is a program in phases: the simulator has no way to load a second deck, so only single-phase
+  programs run there.
+- **[Brent Wilkins's simulator](http://cardiac.wilkins.in/)**
+  ([source](https://github.com/BrentWilkins/CARDIAC)). Paste the deck and the input into the Input box and press
+  Run. Its SFT instruction has a bug: it uses a variable that doesn't exist, so the first shift stops the
+  program. Programs that never shift run correctly. Of the examples, those are hello, fibonacci, fizzbuzz,
+  primes, gcd, sort, days, runs, rot13 and nim. collatz, cipher, guess and voxel shift, so they stop there.
+- **[CardiacVisualizer](https://github.com/Xukay101/CardiacVisualizer)**, a desktop emulator in Rust. It has two
+  bugs. ADD sets the sign flag from the number it adds instead of from the sum, so a TAC after an ADD can go the
+  wrong way. And a TAC that jumps also writes cell 99, which only JMP should do, so it wipes out a subroutine's
+  return address. Every example runs correctly except collatz and voxel, which hit them. With both fixed, all of
+  them run.
+- **[jawhitti/Cardiac](https://github.com/jawhitti/Cardiac)**, a 2016 interpreter and debugger in C#. Its SFT
+  doesn't keep the accumulator to four digits, so digits that should drop off the top come back, and cipher and
+  voxel go wrong. Its command line only takes inputs from 1 to 999, and it reads a path that starts with `/` as
+  an option. To get around both, append the input cards to the deck file and pass the file by a relative path.
+  When a program runs out of input it throws an exception, where CARDIAC simply stops. Every other example runs
+  correctly.
+- **[cinc](https://sourceforge.net/projects/cinc/)**, in Java (jcinc), with a window or a command line:
+  `java -jar jcinc.jar -c -i DECK`, with the input after the deck in the same file. When the card reader is empty,
+  INP reads -999 and the program carries on, where CARDIAC stops. So a program that reads until the cards run out
+  never ends there: cipher and rot13 run forever. Every other example runs correctly.
+- **[coronariac](https://github.com/pabloleonor/coronariac)**, in Java. It can't run a deck. Cell 00 starts out as
+  000 rather than 001, so there's no loader, and nothing a deck holds ends up where it belongs. With 001 put in cell
+  00 by hand it gets further, but its accumulator isn't one register. CLA sets one operand and ADD adds a second
+  without carrying the sum forward, so a store after a load writes 0. Only hello and days come out right.
+
+We haven't checked [Kaleberg's CARDIAC](http://www.kaleberg.com/software/cardiac/), which is a closed-source
+download, or Al Williams's [spreadsheet](http://www.drdobbs.com/embedded-systems/cpu-design-on-paper/240153480)
+and [FPGA](http://www.drdobbs.com/embedded-systems/paper-to-fpga/240155922) versions.
 
 ## The command
 
