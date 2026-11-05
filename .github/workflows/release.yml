@@ -80,4 +80,4 @@ jobs:
         run: |
           sha256sum *.tar.gz > SHA256SUMS
           gh release create "${{ github.ref_name }}" *.tar.gz SHA256SUMS --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" --notes "Install: cargo install cargo-cardiac. See https://lab.strangequery.com/carbide/"
+            --title "${{ github.ref_name }}" --notes "Install: cargo install cargo-cardiac. See https://lab.strangequery.com/cargo-cardiac/"

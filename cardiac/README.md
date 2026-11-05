@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/carbide.png" alt="CARBIDE" width="256"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/carbide.png" alt="cargo-cardiac" width="256"></p>
 
 # cardiac
 

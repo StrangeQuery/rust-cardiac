@@ -9,7 +9,7 @@ license = "MIT"
 repository.workspace = true
 homepage.workspace = true
 # a command: its documentation is the project's page, not an API on docs.rs
-documentation = "https://lab.strangequery.com/carbide/"
+documentation = "https://lab.strangequery.com/cargo-cardiac/"
 readme = "README.md"
 keywords = ["cardiac", "compiler", "cargo-subcommand", "retrocomputing", "mir"]
 categories = ["compilers", "development-tools::cargo-plugins", "emulators"]
@@ -74,4 +74,4 @@ exclude = ["tests/programs/crates"]
 # the repository's address and the project's page, for both published crates
 [workspace.package]
 repository = "https://github.com/StrangeQuery/rust-cardiac"
-homepage = "https://lab.strangequery.com/carbide/"
+homepage = "https://lab.strangequery.com/cargo-cardiac/"
