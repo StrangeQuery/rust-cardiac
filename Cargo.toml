@@ -64,7 +64,7 @@ debug-assertions = true
 [dependencies]
 serde_json = "1"
 # CARDIAC itself: the emulator, tapes, the assembler and CARDIASM
-heartburn = { version = "0.1.0", git = "https://github.com/StrangeQuery/cardiaq", rev = "496c1e4d643de352e05efe7d210182d79e91fa7a" }
+heartburn = { version = "0.1.0", git = "https://github.com/StrangeQuery/cardiaq", rev = "89c2776526431224b4bd830d8758def3b8952f2c" }
 
 [workspace]
 members = ["cardiac", "examples", "examples/collatz"]

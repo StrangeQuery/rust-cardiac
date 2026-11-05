@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "heartburn"
 version = "0.1.0"
-source = "git+https://github.com/StrangeQuery/cardiaq?rev=496c1e4d643de352e05efe7d210182d79e91fa7a#496c1e4d643de352e05efe7d210182d79e91fa7a"
+source = "git+https://github.com/StrangeQuery/cardiaq?rev=89c2776526431224b4bd830d8758def3b8952f2c#89c2776526431224b4bd830d8758def3b8952f2c"
 
 [[package]]
 name = "itoa"
