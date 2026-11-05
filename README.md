@@ -2,21 +2,26 @@
 
 # cargo-cardiac
 
-Rust compiled to CARDIAC.
+Bringing the safety and security of Rust to the most legacy of legacy platforms: the [CARDboard Illustrative Aid to Computation](https://en.wikipedia.org/wiki/CARDboard_Illustrative_Aid_to_Computation).  Compile Rust to either the classic six-column 
+listing form or raw cards ready to be fed directly into a CARDIAC and executed.  For demos and the most up-to-date information see the 
+[cargo-cardiac home page on Strange Query](https://lab.strangequery.com/cargo-cardiac/).  Open Source and MIT-licensed.
 
-Write an ordinary Rust program, build it with cargo and run it. Then build it for CARDIAC: `cargo cardiac build`
-turns it into a deck, the cards a CARDIAC loads a program from. Run the deck with burn, from
-[cardiaq](https://github.com/StrangeQuery/cardiaq), or open it in [Cardigan](https://lab.strangequery.com/cardigan/)
-and step through it, one instruction at a time.
+## cargo-cardiac: part of a full development platform
+cargo-cardiac integrates [Cardigan](https://lab.strangequery.com/cardigan/) and [cardiaq](https://github.com/StrangeQuery/cardiaq)
+to give you a full development platform.  Write your code in your favorite Rust environment and compile it with
+
+`cargo cardiac build`
+
+then use [Cardigan](https://lab.strangequery.com/cardigan/) to step through the CARDIAC assembly or use the command-line debugger `ekg` included in [cardiaq](https://github.com/StrangeQuery/cardiaq).  And then execute your code on the emulator of choice; when you want speed run it on Strange Query's HEARTBURN engine included in [cardiaq](https://github.com/StrangeQuery/cardiaq).
+
 
 ## CARDIAC
 
-CARDIAC (CARDboard Illustrative Aid to Computation) was a paper computer that Bell Labs gave to schools in 1968. You
-were the processor: you slid the cardboard to move the program counter and worked each instruction by hand, with a
-pencil. It has 100 memory cells of three decimal digits and a sign, an accumulator, ten instructions (read a card,
+CARDIAC (CARDboard Illustrative Aid to Computation) was a paper computer that Bell Labs gave to schools in 1968. 
+It has 100 memory cells of three decimal digits and a sign, an accumulator, ten instructions (read a card,
 load, add, subtract, store, shift, test for negative, jump, output, halt), a card reader for input and a teletype
-for output. There is no multiply, no divide, no stack and no indirect addressing. Cell 00 always holds 001, which is
-what lets a deck of cards load itself. Programs and data share cells 03 to 98, 96 cells in all.
+for output. See [The CARDIAC Archive](https://lab.strangequery.com/cardiac/) for more information on CARDIAC, its
+history and lore, the machine specification, the opcodes, and programming tips and tricks.
 
 <p align="center"><img src="assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
 
@@ -37,10 +42,11 @@ have that nightly yet, it also asks rustup to install it, in its minimal profile
 own Rust stays as it is. Programs can use what Rust 1.97 has. To build the compiler from source instead, see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-`examples/hello.rs` is an ordinary Cargo program. `out()` comes from the `cardiac` crate, a normal dependency:
+## Hello
+`examples/hello.rs` counts down from ten to zero.
 
 ```rust
-//! Hello, world. CARDIAC's teletype prints numbers, so this one counts down: 10, 9, ... 1, 0.
+//! Hello, World counts down: 10, 9, ... 1, 0.
 use cardiac::*;
 
 fn main() {
@@ -50,16 +56,22 @@ fn main() {
 }
 ```
 
+Notice the use of `out()` instead of `println!`. CARDIAC has limited I/O. `println!` goes through Rust's formatting machinery, `core::fmt`. That's thousands of instructions of code, and CARDIAC has 96 cells. `out()` is a built-in the compiler recognises by name and turns into a single OUT instruction. CARDIAC can only print a number per line anyway, so `out()` covers everything `println!` could do there.
+
+When you run the program natively `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
+
+docs/RUST.md has a full list of what isn't supported: `println!`, `format!`, `assert_eq!` and `assert_ne!` are refused, and the suggested replacements are `out()` and `assert!(a == b)`.
+
+## Building and running Hello
 In a checkout of this repository, in `examples/`, run it, build it for CARDIAC, and run the deck:
 
-    cargo run --bin hello                # 10, 9, ... 0, one number a line
-    cargo cardiac build --bin hello      # hello.rs: 1 phase, 8 cells
-    burn hello.cqb                       # the same 10, 9, ... 0, on CARDIAC
+    cargo run --bin hello                # 10, 9, ... 0, native code
+    cargo cardiac build --bin hello      # build cardiac binary hello.cqb
+    burn hello.cqb                       # the same 10, 9, ... 0, on HEARTBURN
 
 `cargo cardiac build` writes `hello.cqb`, the deck, and `hello.map`, its panic map, next to `hello.rs`. Leave out
 `--bin` to build every program in the package. To watch it run, open Cardigan and drop `hello.cqb` on it. Build with
-`--emit deck,listing,map` and drop `hello.cq` and `hello.map` with it, and Cardigan shows the listing too, and says
-why the program panicked if it does.
+`--emit deck,listing,map` and drop `hello.cq` and `hello.map` with it, and Cardigan shows the listing too, and says why the program panicked if it does.
 
 ## Your own program
 
@@ -102,11 +114,10 @@ It changes only what your Cargo.toml doesn't set, in `[profile.dev]` or for the 
 and yours is used, and the note stops mentioning it. `cargo run` keeps cargo's own settings. That means an
 overflow `cargo run` panics on goes unchecked on CARDIAC, unless you set `overflow-checks = true`.
 
-## The examples
+## Examples
 
-Each one is in `examples/`, prints the same natively and on CARDIAC (`./test_examples.sh` checks that), and fits in
-CARDIAC's 96 cells. All but `collatz` are binaries of the package `examples`, whose `dev` profile is optimized and
-has no overflow checks. `collatz` counts on its overflow checks, and a profile is per package, so it is a package
+Starter programs are bundled in `examples/`. Each of them produces the same output natively and on CARDIAC (`./test_examples.sh` checks that), and each fits in
+CARDIAC's 96 cells. All but `collatz` are binaries of the package `examples`, whose `dev` profile is optimized and has no overflow checks. `collatz` counts on its overflow checks, and a profile is per package, so it is a package
 of its own, `examples/collatz/`, built with `-p collatz`.
 
 | program     | what it does                                                                   | input            | cells        |
@@ -129,40 +140,16 @@ of its own, `examples/collatz/`, built with `-p collatz`.
 | `map`       | MapReduce's map: counts the words (1..16) of a shard ended by -999; outputs a deck | words, `-999` | 84         |
 | `reduce`    | MapReduce's reduce: adds up the map machines' decks, stacked behind their number | decks         | 94           |
 | `voxel`     | a voxel landscape's projection and light, a depth slice at a time: `voxel.sh` draws a picture with it | a slice | 87 |
-| `ray/`      | a ray tracer in ten machines, a mirror ball over a checkerboard: `ray.sh` draws a picture with them | a frame | 45 to 91 each |
+| `ray/`      | a ray tracer in ten machines, a mirror ball over a checkerboard: `ray.sh` draws a picture with them | `FRAME` | 45 to 91 each |
 
-FizzBuzz prints numbers because CARDIAC's teletype prints nothing else. A negative number reads as a word, since
-FizzBuzz itself never prints one. `powers` is bigger than memory: `overlay()` splits it into a phase that works the
-digits out and one that prints them, loaded over the first, with the 31 cells of data shared. `cipher` loads its
-key with `load_resource("key")`, from `examples/resources/key`. `days_assumed` assumes its month is 1 to 12,
-`unsafe { assume(month <= 12) }`, so the bounds check goes. `runs` keeps its flags as `Flag`s, not `bool`s: with
-`bool`s it is 76 cells, and `cargo cardiac build` says so. `rot13` reads until the reader is empty, and ROT13 is its
-own inverse, so two in a pipe give the message back: `burn rot13.cqb -- 8 5 12 12 15 | burn rot13.cqb` outputs
-8 5 12 12 15, HELLO. `map` and `reduce` are MapReduce on cardboard: each map machine counts the words of its own
-shard and outputs a deck, and the reduce machine adds up the decks, stacked behind a card saying how many. `voxel`
-works out where each piece of a height map shows on a 96-column screen, and how brightly the sun lights it, one depth
-slice at a time, the way flight games drew hills in the early 1990s. `voxel.sh` is its host: it reads a height map, a
-plain greyscale PGM, runs the deck on burn once for each of 120 slices, near to far, and puts what CARDIAC outputs on
-the screen as `voxel.ppm` (and `voxel.png` on a Mac). `craterlake.pgm` is Crater Lake from real elevation data (its
-comments say where from), and `terrain.sh` makes up others.
 
-`ray/` traces a mirror ball over a red and cream checkerboard, under a banded sky: the ball reflects the sky, a
-light and the floor, and casts a shadow. CARDIAC has no square root, no multiply or divide and no fractions, and no
-program of a whole ray tracer would fit in its memory, so the work is split into ten machines, each small enough for
-96 cells. `sway` and `hop` work out where the ball is in a frame and how far the floor has scrolled, from the frame
-number and a line of a printed sine table, `ray/sine120.txt` (`ray/sine.sh` writes it). `sky` colours a row of sky,
-and `zrow` and `floor` a row of the floor, as old racing games drew a road. `span` finds the pixels of a row the ball
-covers. For each of those, `norm` finds the ball's surface (a square root, by taking away odd numbers) and the ray
-that bounces off it, `bounce` sends that ray to the light, the sky or the floor, and `hit` finds the checker a ray
-lands on. `compose` lays the ball over the row. `floor` and `compose` come in two phases. `ray.sh` is the host: for a
-frame, `FRAME=0` to `119`, it runs the decks on burn, about 1,600 runs, passes each machine's output to the next,
-looks up the colour codes in a palette and writes a 96 x 48 picture, `ray.ppm` (and `ray.png` on a Mac). Every
-colour code in the picture is CARDIAC's.
+
+[voxel](https://lab.strangequery.com/cargo-cardiac/demo/voxel/) and [ray](https://lab.strangequery.com/cargo-cardiac/demo/ray/) both have extensive writeups on Strange Query's cargo-cardiac home page.
+
 
 ## What Rust is supported
 
-rustc does all of the front end: parsing, type checking, the borrow checker. A program it rejects never reaches
-CARDIAC, and you get Rust's own errors. cargo-cardiac compiles what rustc writes out. In short:
+rustc does all of the front end: parsing, type checking, the borrow checker. A program it rejects never reaches CARDIAC, and you get Rust's own errors. cargo-cardiac compiles what rustc writes out. In short:
 
 - **Works well:** `i16` (a card's -999..=999), `u8`, `usize`, `bool`; `+`, `-` and comparisons, `*` by a constant,
   `/` and `%` by a power of ten; `if`, `while`, `loop`, `match` on integers, `for` over a range; fixed-size arrays,
@@ -230,7 +217,7 @@ with two cards, 002 and 800, which turn cells 01 and 02 into a loader. Then come
 for that cell, and it ends with the pair 002 8xx, a jump to the program's start. Cells that start at 0 are left out.
 The program's input comes after the deck. Any CARDIAC that follows the 1968 manual can load it.
 
-On CARDIAC a panic is the value -999 and a halt. `cargo cardiac build` also writes a panic map, `NAME.map`, beside
+On HEARTBURN the value -999 is interpreted as a panic and a halt. `cargo cardiac build` also writes a panic map, `NAME.map`, beside
 the deck, as a .pdb sits beside an .exe: where the program's checks are, and what each one checks. The deck is the
 same with or without it. With the map beside the deck, burn says why a run panicked and exits 101, as `cargo run`
 does:
@@ -244,7 +231,7 @@ Cardigan reads the map too, when it is opened with the deck.
 
 ## Where to run it
 
-A deck is an ordinary CARDIAC deck, so it isn't tied to our tools. These are the places we know it runs:
+A .cqb file is an ordinary CARDIAC deck, so it isn't tied to our tools. These are the places we know it runs:
 
 - **[burn](https://github.com/StrangeQuery/cardiaq)**, cardiaq's runtime, from the command line. It's fast, it
   reads the panic map, and it loads the later decks of a program in phases (`NAME.2.cqb`, ...) when the program
