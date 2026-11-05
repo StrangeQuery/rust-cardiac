@@ -1,4 +1,6 @@
 <p align="center"><img src="assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
+<p align="center"><a href="https://lab.strangequery.com/cargo-cardiac/"><code>lab.strangequery.com/cargo-cardiac</code></a></p>
+<p align="center"><a href="https://github.com/StrangeQuery/cargo-cardiac"><img src="https://img.shields.io/badge/GitHub-cargo--cardiac-181717?logo=github&amp;logoColor=white" alt="GitHub"></a> <a href="https://discord.gg/VsqKEdBYzJ"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Discord"></a></p>
 
 # cargo-cardiac
 
@@ -27,13 +29,10 @@ history and lore, the machine specification, the opcodes, and programming tips a
 
 ## Getting started
 
-You need rustup (https://rustup.rs, not a distribution's packaged Rust), and burn, from cardiaq, to run what you
-build:
+You need rustup (https://rustup.rs, not a distribution's packaged Rust). Install cargo-cardiac, and cardiaq for
+burn, which runs what you build:
 
-    cargo install cargo-cardiac
-    brew install strangequery/tap/cardiaq      # burn; or unpack an archive from cardiaq's releases
-
-With Homebrew, `brew install strangequery/tap/cargo-cardiac` installs `cargo cardiac` and burn together.
+    cargo install cargo-cardiac cardiaq
 
 The compiler runs inside rustc. Its backend is the CARDIAC driver, which is rustc built as a library on one
 pinned nightly, `nightly-2026-05-22`, the last of Rust 1.97's. The first time you build a program, `cargo cardiac`
