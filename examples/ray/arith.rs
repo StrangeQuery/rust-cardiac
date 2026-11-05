@@ -2,8 +2,8 @@
 //! division, each by repeated subtraction. They are small, so rustc inlines them into each machine.
 #![allow(dead_code)]
 
-/// The integer square root of n (0 for n below 1): the odd numbers 1, 3, 5, ... taken away while they fit, counted,
-/// since their sums are the squares.
+/// The integer square root of n (0 for n below 1): the odd numbers 1, 3, 5, ...
+/// taken away while they fit, counted, since their sums are the squares.
 pub fn isqrt(mut n: i16) -> i16 {
     let mut root = 0;
     let mut odd = 1;
