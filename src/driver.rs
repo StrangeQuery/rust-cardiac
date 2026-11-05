@@ -40,6 +40,13 @@ use crate::compile::program::{Built, Emit, OptLevel, Rustc, CFG};
 /// The nightly the driver is built with: the last of 1.97's, whose MIR is the same as 1.97's.
 pub const TOOLCHAIN: &str = "nightly-2026-05-22";
 
+/// That nightly for the platform cargo-cardiac was built for, which is the driver's: on Windows, rustup's plain
+/// `nightly-2026-05-22` is the MSVC one or the GNU one as rustup's default host says, and a driver loads only the
+/// libraries of its own.
+fn toolchain() -> String {
+    format!("{TOOLCHAIN}-{}", env!("CARDIAC_HOST"))
+}
+
 /// The variable that carries `Settings` to the driver.
 pub const SETTINGS: &str = "CARDIAC_BUILD";
 
@@ -116,11 +123,12 @@ fn look() -> Result<Driver, String> {
     let libs = match sysroot() {
         Some(libs) => libs,
         None => {
-            eprintln!("  Installing {TOOLCHAIN} with rustup, once: the CARDIAC driver runs on that nightly's libraries");
+            let name = toolchain();
+            eprintln!("  Installing {name} with rustup, once: the CARDIAC driver runs on that nightly's libraries");
             let _ = Command::new("rustup")
-                .args(["toolchain", "install", TOOLCHAIN, "--profile", "minimal"])
+                .args(["toolchain", "install", &name, "--profile", "minimal"])
                 .status();
-            sysroot().ok_or_else(|| format!("the CARDIAC driver needs the {TOOLCHAIN} toolchain's libraries, and rustup couldn't install it: install it with `rustup toolchain install {TOOLCHAIN} --profile minimal`"))?
+            sysroot().ok_or_else(|| format!("the CARDIAC driver needs the {name} toolchain's libraries, and rustup couldn't install it: install it with `rustup toolchain install {name} --profile minimal`"))?
         }
     };
     Ok(Driver { exe, libs })
@@ -129,7 +137,7 @@ fn look() -> Result<Driver, String> {
 /// The directory of the pinned nightly's libraries, as rustup has it, or None if rustup has no such toolchain.
 fn sysroot() -> Option<PathBuf> {
     let out = Command::new("rustup")
-        .args(["run", TOOLCHAIN, "rustc", "--print", "sysroot"])
+        .args(["run", &toolchain(), "rustc", "--print", "sysroot"])
         .output()
         .ok()
         .filter(|o| o.status.success())?;
