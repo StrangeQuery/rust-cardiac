@@ -1,0 +1,85 @@
+# The two-crate examples: each is a program that uses the crate `kit` or the built-ins crate `cardiac`, built with
+# `cargo cardiac`.
+[package]
+name = "crates-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+autobins = false
+
+[dependencies]
+kit = { path = "kit" }
+cardiac = { path = "../../../cardiac" }
+
+[[bin]]
+name = "xcall"
+path = "xcall.rs"
+
+[[bin]]
+name = "xtable"
+path = "xtable.rs"
+
+[[bin]]
+name = "xstruct"
+path = "xstruct.rs"
+
+[[bin]]
+name = "xchain"
+path = "xchain.rs"
+
+[[bin]]
+name = "xassume"
+path = "xassume.rs"
+
+[[bin]]
+name = "xbroken"
+path = "xbroken.rs"
+
+[[bin]]
+name = "xgeneric"
+path = "xgeneric.rs"
+
+# The settings test_compiler.sh builds these with, as the single test programs get them from rustc's flags: MIR at
+# opt-level 1 or 2, with overflow checks or without (opt1 is dev: opt-level 1, checks on). No debuginfo, debug
+# assertions or incremental builds, which would each change the MIR rustc writes.
+[profile.dev]
+opt-level = 1
+debug = false
+debug-assertions = false
+incremental = false
+
+[profile.opt1]
+inherits = "dev"
+
+[profile.opt1-unchecked]
+inherits = "opt1"
+overflow-checks = false
+
+[profile.opt2]
+inherits = "dev"
+opt-level = 2
+
+[profile.opt2-unchecked]
+inherits = "opt2"
+overflow-checks = false
+
+# opt1-unchecked and opt2-unchecked with debug assertions, which make cardiac::assume() an assert!, a check
+[profile.opt1-asserted]
+inherits = "opt1-unchecked"
+debug-assertions = true
+
+[profile.opt2-asserted]
+inherits = "opt2-unchecked"
+debug-assertions = true
+
+[[bin]]
+name = "xhint"
+path = "xhint.rs"
+
+[[bin]]
+name = "xrepeat"
+path = "xrepeat.rs"
+
+[[bin]]
+name = "xskip"
+path = "xskip.rs"

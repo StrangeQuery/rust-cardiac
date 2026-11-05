@@ -1,0 +1,15 @@
+[package]
+name = "cardiac-driver"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.rust-analyzer]
+rustc_private = true
+
+# its own toolchain (a pinned nightly with rustc-dev), so not one of the workspace's packages
+[workspace]
+
+[dependencies]
+# the compiler's IR (and its parser, for the oracle), built on the driver's nightly
+cargo-cardiac = { path = ".." }

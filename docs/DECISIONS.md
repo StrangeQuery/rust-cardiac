@@ -1,0 +1,1385 @@
+# Decision log
+
+Newest first. Each entry is the decision, why, and what it costs. (The project was called Ferritin until it was
+released on its own as rust-cardiac.)
+
+## 2026-11-05 · Listings use the source's names
+
+- **Decision.** A listing (and the assembly) names a cell after the variable the MIR's debug info says it holds
+  (`debug height => _9;`): `height` where it said `main_9`, `height_1` for a field of it, `a_height` for the
+  constant holding its address. A name two functions use keeps the function in front (`main_n`, `add_n`), a
+  shadowed one is numbered (`n`, `n_2`), and one that reads as a name the compiler makes (`k5`, `t0`, `main_bb3`,
+  `rt_...`) or an opcode keeps its function too. When a pass makes two variables one local, or rustc gave one
+  local two names, the cell takes the name declared first and its data line notes the other (`also colour`).
+  Comments say the MIR statement in Rust's terms: `copy` and `move` dropped, constants without their type,
+  arithmetic, comparisons and `Lin` written infix (`height = cell / 10`, `if row < 96`); any other shape stays as
+  the MIR prints it, its locals named. Unnamed temporaries stay `_12` and `main_12`. The names are worked out
+  before lowering (`names::Names::of`), the comments rewritten as each function is lowered, and the cells renamed
+  on the finished program before it is assembled, so every cell stays where it was and the deck is the same.
+- **Why.** `main_9` and `_9 = Div(copy _8, const 10_i16)` say what rustc made of the program, not what the
+  programmer wrote; a listing is read beside the source.
+- **Cost.** A shared cell carries one name, so a comment on a line working the other variable reads in the first
+  one's name (`height = camera - height` for `let below = camera - height`). A rename that would give two symbols
+  one name is not made.
+
+## 2026-11-04 · Decks, not tapes; build is the only command; burn runs the decks
+
+- **Decision.** `cargo cardiac build` writes cardiaq's files: `NAME.cqb` (`NAME.2.cqb`, ... for a program in
+  phases) and its slots in `NAME.cqb.meta`, and with `--emit listing` the six-column listing `NAME.cq`, which carc
+  assembles. `--emit` takes `deck` where it took `tape`, and `--message-format=json` says `deck`. `cargo cardiac
+  run` and `cargo cardiac cardiasm` are gone, and so are the flipboard and the CARDIASM baseline. burn runs a deck,
+  and reads the panic map beside it (cardiaq#9), so the map's reading side (`Map::parse`, `Map::panic`, `Panic`)
+  moved to heartburn; making a map from a compiled program (`panics::map_of`) stays here. The tests and the fuzzer
+  run decks on burn (`BURN`, or burn on the PATH).
+- **Why.** Running a deck is the runtime's job, and cardiaq is the runtime: one machine, one set of names, and the
+  map read where the deck is run, as a debugger reads a .pdb beside an .exe. Cardigan replaced the flipboard.
+- **Cost.** What `run -v` and `-vv` said of a run (each card read and output, where it stopped) is gone; ekg and
+  Cardigan show a run in more detail. Building and running are two commands, where `cargo cardiac run` was one.
+  A build still removes the `.tape`, `.tape.meta` and `.lst` files an earlier build left.
+
+## 2026-10-24 · `skip_cards(n)` and `add_times(c, n)`: computed jumps into shared rows
+
+- **Decision.** Two built-ins, each a runtime routine put in once a program (as `mul` and `div` are) with a row of
+  identical instructions entered by a jump the routine builds from the digit: `rt_skip`, ten `INP 00` (27 cells),
+  and `rt_times`, nine `ADD rt_times_c` (34). Each row ends in `TAC 99`: back to the cell after the jump that came
+  in, with cell 99 untouched, as long as the accumulator is below 0 there. `skip_cards` enters with a TAC (no JMP,
+  so 99 keeps the caller's way back) and counts the tens in the accumulator, -T-1 up to 0, running the whole row
+  once more for each: n up to 999, 15 instructions and about 1.2 a card. `add_times` enters with JMPs (it keeps
+  its caller's way back in its exit cell): the tens digit from -100, a shift that makes T c - 100 into 10 T c -
+  1000, then the units, and 1000 added back. The offsets keep the accumulator below 0 at each `TAC 99` whenever n
+  c fits on a card, and n is 0..=99, the tens digit one row's worth: 24 instructions and one an addition. A
+  constant n is `INP 00`s in place (n up to 3) or `c * n` (adds and a shift). The cell-sharing pass follows a
+  built jump into its row (`rt_x_go...` to the cells before `rt_x_end`), and a label a constant names
+  (`DAT rt_times_end+800`) is a use of it. The constants built on a routine's labels are in its code: the data
+  section is assembled alone first and can't name them.
+- **Why.** A counted loop takes 6 or 7 instructions a pass; programs that read to the nth card or multiply by a
+  small count by repeated addition spend most of their time there. The rows are shared, not one per call or per
+  function, because 10 cells a call is more than most programs can spare; one per program costs a call 2 or 4
+  cells and some 15 to 25 instructions for the routine's own setup.
+- **Cost.** About 27 or 34 cells once; for n below about 4 a loop is cheaper. No check: an n out of range, or a
+  product past a card, is undefined on CARDIAC (natively both panic). n is capped at 99 for `add_times`: a
+  hundreds digit is one more pass, about 7 cells. `skip_cards(-1)` and `add_times(c, 100)` with a constant are
+  compile errors.
+
+## 2026-10-22 · `move x` is x's last read, after every pass; a compare's bool is set on the way that reads it
+
+- **Decision.** The lowering trusts `move x` to be x's last read: a comparison moved into a switch or an assert is
+  one branch that never stores the bool. Every pass keeps that true. Copy forwarding (`_5 = copy _6;
+  switchInt(move _5)`) and cell sharing can rename a move onto a local that is still read later, so after them
+  `blocks::copy_unless_last` turns such a move into a copy. And a comparison tested at once and read again later
+  (`let e = x > y; if !e { .. } if e { .. }`, or `a && b`) is still one branch: `blocks::bools_on_edges` sets the
+  bool as a constant on each way out where it is still read (a block on the edge, or one already setting it), and
+  `thread_constants` then takes a constant tested again straight to its arm. Before `thread_constants` it sets b
+  only where every way that reads it goes straight to a test of b (threading takes it past); elsewhere it waits
+  until after the last pass, since `arith::rematerialize` may yet work b out again where it is read, which costs
+  no cell (a larger program's `aim` grew 93 to 97 when b was set early).
+- **Why.** Forwarding made `switchInt(move _6)` of a bool tested again later, the branch never stored it, and the
+  later test read a stale value (wrong answers at every opt-level).
+- **Cost.** A program that was wrong grows by the stores it needs (a larger program's `dhit` as first written,
+  91 wrong to 94 right); one whose bool is threaded can shrink (the bug's first reproduction, 38 wrong to 28). Setting the bool on
+  the edges is no dearer than storing it as 0 or 1 and testing it: six of that program's machines shrank by 2 to 4 cells
+  (dmul 75 to 71), none grew, every render identical.
+
+## 2026-10-22 · `x & m` on an integer is x.rem_euclid(m + 1); other bit operations are refused
+
+- **Decision.** `&` and `|` were lowered as the bool forms (and = 0 if a is 0, else b) whatever the operands'
+  type, so `x & 3` on a counter 0..7 was "0 if x < 1, else 3". The bool forms are now for bools only. On an
+  integer, `x & m` (the mask on either side) for m one below a power of two is lowered as x.rem_euclid(m + 1),
+  which it is in two's complement: subtract m + 1 until the accumulator goes negative and add it back once, and
+  for a value that can be negative (an i16, a usize past a card) first add m + 1 until it is not. Any other `&`,
+  and every integer `|` and `^`, is refused, as docs/RUST.md already said. The range pass gives `a & c` 0..=c for
+  c not below 0 (so `t[x & 3]` on a `[_; 4]` needs no bounds check).
+- **Why.** A wrong answer; RUST.md listed `&` on integers as refused, but nothing checked the type. Masks are the
+  one bit operation programs use on a decimal machine (an index that wraps, `x & 3`), and the loop is what `%` by
+  a variable costs, without the routine.
+- **Cost.** About x / (m + 1) passes of a three-instruction loop: 250 for `999 & 3`. Two cells more for an i16.
+
+## 2026-10-20 · A result is worked in its own cell
+
+- **Decision.** `copies::share_cells` may merge a local into one of the function's result cells (the result keeps
+  its name), under the same test as any other merge: never needed at once, with the caller's read after each
+  return counted (`blocks::live_after_returning`). `Some(t)` at the end of a function that counts in t, or
+  `(hi, lo)` built in locals, then counts in the result and the closing copy goes.
+- **Why.** An `Option<i16>` returned as `Some(t)` cost a copy and a jump more than the same function returning a
+  sentinel in `_0`; a larger program's trial of Option needs the two to cost the same.
+- **Cost.** None measured: every test program that changed shrank (structs2 78 to 72, repeats 84 to 80), and no
+  machine of a larger program grew (flee 88 to 86). The result cell lives longer, so the stack can't overlap it with a
+  parameter that is still read; the local it replaces had that cell's lifetime anyway.
+
+## 2026-10-20 · Struct constants, tuples across calls, and shared references as values
+
+- **Struct constants.** A struct literal passed by value (`const Pair {{ .. }}`) is passed field by field, as a
+  struct's cells are; the struct pass learns the fields from the constant when nothing else builds that struct. A
+  promoted constant (`const main::promoted[N]`, rustc's `&P { .. }` or `&None`) is read in the IR
+  (`Const::Promoted`) and built in the function that uses it, in locals of its own, from the promoted item's text.
+- **Tuples across calls.** A tuple of scalars passed to or returned from a function that isn't inlined is a
+  struct with fields `.0`, `.1`, ... (an overflow-checked op's `(T, bool)` stays a pair).
+- **A shared reference is the value.** A `&Struct` is the struct by value: `*r` reads are the struct's
+  cells, `r = &p` a copy. A shared reference to a scalar is passed as the value where every use is a `*r` read or
+  an argument to a parameter of the same kind, and every definition a borrow or another such reference (a fixpoint;
+  anything else keeps its address). Nothing can change behind a shared reference while it lives, so the value is
+  the same. `addr_out` 41 to 33 cells; `addr_out_mut.rs` keeps the address path tested. `&mut Struct` is refused.
+- **Derived `==` at opt-level 1.** rustc calls the impl's `eq` with a promoted constant: that is the promoted
+  constant above; `ne` (core's own, whose body isn't compiled) is `!eq`; and the C-like pass no longer rewrites the
+  enum's name inside a call's path (`<Colour as PartialEq>::eq` stays the function it names).
+
+## 2026-10-20 · Fewer tests and copies: sign tags, jump threading, no self-copies
+
+- **Why.** CARDIAC's one test is TAC, "jump if negative": `x == k` is a subtraction and two TACs, a `match` a chain
+  of those, and a value tested once and then again pays twice. Most of what enums cost was tests.
+- **Sign tags.** A two-variant enum numbered 0 and 1 with no niche (`Result<i16, i16>`, an `Option` whose payload
+  may be negative) holds its number less one in the tag cell, -1 or 0: which variant it is, is the tag's sign, one
+  TAC. A discriminant only switched on is that test; one read as a number is the tag plus one.
+- **Jump threading.** A block that sets x to a constant and jumps to a block that only tests x (`switchInt(x)`,
+  or `d = x op k; switchInt(d)`) jumps to the arm the constant picks, setting d itself; what the entry then no
+  longer reaches goes. It is what rustc's own jump threading does at opt-level 2, and at opt-level 1 it undoes
+  most of what the inlined methods cost (`checked_add` builds an `Option`, `unwrap_or` tests it at once). It also
+  shrinks programs with no enums: `if c { 1 } else { 0 }` tested again, a loop's first test (the loop is rotated).
+- **`==` of two `Option`s at opt-level 1** switches on each discriminant in turn (so each is a TAC) rather than
+  comparing them as numbers. **`checked_add`, `checked_sub`, `checked_mul`** at opt-level 1 are the overflow-checked
+  op and a test of its flag, as rustc inlines them at 2: `None` past a card.
+- **Comparisons of two variables narrow both (range pass).** Where `a >= b` holds, a is at least b's lowest value
+  and b at most a's highest (and so for each comparison, both ways), for i16 and u8. With it, `opt == Some(c)` and
+  `Some(e) if e >= s` compare the payload first and test its sign after, which the ranges then decide; and
+  `x.is_none()`'s `!(d == 1)` on a niche or a sign tag is the cell's own sign test, not a 0 or 1 worked out twice.
+  A larger program's machines rewritten with `Option` for their -1 sentinels (stamp, gspan, and dist and sum reading to an
+  end card with `while let`) are each the size of the original or smaller, their renders identical.
+- **`x % k` and `x / k` with k past a card are x and 0.**
+- **A sum's term read through an address comes first,** straight into the accumulator, rather than through a
+  scratch cell.
+- **No copy of a cell onto itself.** `STO x` right after `CLA x` (TACs and OUTs between) goes, in the peephole
+  rules and once more after the compiled stack shares cells, which makes such pairs of a local and the argument cell
+  it is passed in. Only that rule runs after the sharing: the others know a scratch cell's uses as they were before
+  it (run whole, they dropped an argument stored for the multiply routine: the test programs caught it).
+- **Evidence.** No test program grew; most shrank (try_result at opt-level 1 81 to 59 cells, result_methods 87 to
+  51). A larger program's renders are identical to native Rust and no machine grew; 43 shrank, 91 cells in all.
+
+## 2026-10-20 · An `Option<i16>` that is never negative has no tag: `None` is -1
+
+- **Decision.** An enum shaped as `Option<i16>` (a plain variant and one carrying a single `i16`, numbered 0 and
+  1) is laid out as its payload's cell alone when no payload it is given is ever negative: the plain variant is -1
+  in that cell. `is_some()` is `payload >= 0`, a TAC; `x.unwrap_or(-1)` is the cell as it is; and
+  `opt == Some(c)` tests `payload == c` first and `c >= 0` after, which the range pass decides when `c` is a
+  counter from 0 (none is exactly -1, so the two orders agree).
+- **Proved, not assumed.** Each payload written is followed by a guard, `assert(payload >= 0)`. The program is
+  compiled with every such enum given the niche; an enum whose guard the range pass doesn't drop somewhere is laid
+  out with its tag, and the program compiled again (`compile_niched`). A compile with niches that fails (too big,
+  say) is done again with none. Guards proved cost nothing; the final compile has none left.
+- **A test the ranges decide is a jump.** On its last visit the range pass turns a switch on `x op k`, with
+  `x` an `i16` or `u8` whose range already decides it, into a jump: the facts it already trusts to drop asserts.
+  (A `usize` past a card is held below 0, so its range isn't one to fold on.)
+- **Not a `u8`'s.** -1 isn't a `u8`, and the range pass knows a `u8` is 0 to 255, so it would decide the payload's
+  test wrongly: an `Option<u8>` keeps its tag.
+- **Evidence.** A larger program's `boids/stamp.rs` written with `next_column: Option<i16>` (and `assume(c >= 0)` for the
+  deck's columns) in place of `NONE = -1` is 64 cells and 54 instructions, as the original is, with the same
+  output; `globe/target.rs` with `-> Option<i16>` in place of a sentinel function is 2 cells more (the callee's
+  result copy). niche, niche_eq, niche_negative and niche_u8 match native Rust. The fold shrank several existing
+  tests (compare_past 67 to 34 cells: `x < 1000` holds for every card) and grew none.
+
+## 2026-10-20 · An enum with data is a struct of its cells
+
+- **Decision.** An enum with data (`Option<i16>`, `Result<i16, i16>`, `enum Shape { Dot, Circle(i16), Rect(i16,
+  i16) }`) is a tag cell, the variant's number, and cells for the fields, which the variants share: a field takes
+  the first cell of its type that no earlier field of its variant has (`Shape` is three cells, `Option<i16>` two). A
+  field that is itself an enum with data takes a run of cells, its own layout's, so what `?` builds
+  (`ControlFlow<Result<Infallible, i16>, i16>`) works; a field of a type with no values (`Infallible`) takes none.
+  `enums::data_enums` writes each such enum as a struct of those cells (`(_x as Some).0` is a cell, `discriminant(_x)`
+  the tag, a variant built is the tag and its fields' cells), and the struct pass takes it apart as any struct, so
+  passing and returning one needed nothing new.
+- **The layouts come from rustc.** The driver writes down each enum the crate's locals have, per instantiation
+  (`Option<i16>` and `Option<u8>` apart), each variant's number and its fields' types (`driver/src/facts.rs`). A path
+  into std is core's: rustc names `Option` `std::option::Option` in a program with std.
+- **Opt-level 1 and s.** rustc calls `is_some`, `unwrap_or`, `Try::branch` and the like rather than inlining them;
+  `enum_methods` writes the code it would have inlined, as `methods` does for the integer methods. `unwrap()` and
+  `expect()` on the failing variant call core's `unwrap_failed` and `expect_failed`, which never return: they are
+  panics with Rust's messages. `map` with a closure is refused there: its closure argument isn't read yet.
+- **Costs.** Within one function rustc's own MIR passes usually take an `Option` apart: a larger program's `globe/target`
+  with an `Option` in place of its -1 sentinel is 62 cells to 61. Across a call the tag is a cell and a test or two,
+  and the range pass doesn't know a callee's tag is one of its variants' numbers (tried: a `u8` tag, and assumptions
+  where it is read; neither changed a cell, since the switch reads the callee's cell directly). The niche layout
+  (`None` as -1 in the payload's cell) is next.
+- **Evidence.** New tests (enum_consts, enums_for, option_methods, result_methods, try_option, try_result) match
+  native Rust; the fuzzer generates enums (`--enums PCT`, 30 by default; `--enums 0` gives the old programs); no
+  other test program's cells changed, and a larger program's listings and tapes are byte-identical.
+
+## 2026-10-20 · The target is `cardiac-unknown-none`
+
+- **Decision.** The notional triple, and the target directory `cargo cardiac` builds in, is `cardiac-unknown-none`
+  (it was `cardiac-bell-none`): the machine, no vendor, no operating system.
+- **Why.** rustc's target tier policy asks that a name not lead people "to form incorrect beliefs about what it
+  targets": `bell` could read as Bell Labs' own or endorsed. The vendor field names who defines a platform (`apple`,
+  `sony`, `vex`) or `unknown` (181 of rustc 1.97's 322 targets), and the OS field is `none` for bare metal. The
+  policy also warns that a name is disruptive to change once it spreads: changed now, before binaries are published.
+  rustc never sees it (an official target needs a backend in rustc itself), so it is a name only.
+- **Not a product's name.** The first field is what the compiler compiles to, and the promise is standard CARDIAC,
+  the 1968 machine as Bell Labs specified it: a tape runs on any faithful CARDIAC (the C# one, the flipboard, the
+  cardboard by hand). A CARDIAC product of ours is one implementation of that platform, not its vendor; anything a
+  program needed beyond the standard machine would break the promise (today nothing does: the tape is cards the
+  machine's own bootstrap loads, and the panic map is a side file it never reads).
+
+## 2026-10-20 · The driver is the backend
+
+- **Decision.** The CARDIAC driver compiles a program for CARDIAC in rustc's process. `cargo cardiac` runs
+  `cargo check` with the driver as cargo's `RUSTC` (or, for a single file, the driver itself), and tells it what to
+  make in `CARDIAC_BUILD` (JSON: `build` or `test`, the programs by source file, each with its name, its source as
+  shown and its resources, and the crates they use); the opt-level and debug assertions are rustc's session's. When
+  rustc has analysed a crate given `--cfg cardiac` whose root is one of the programs, the driver converts its MIR to
+  the IR, converts the MIR of each crate it uses from that crate's metadata (they are built with
+  `-Zalways-encode-mir`), links them (`crates::link`, now on the IR, its renaming rules as they were), compiles, and
+  writes the listing, the tape and the panic map (or, for `test`, FILE.mir and FILE.asm) where `cargo cardiac`
+  wrote them. It says what it made in a line of JSON on rustc's standard error, which cargo hands on as one of the
+  program's messages; `cargo cardiac` prints from it what it printed before (the sizes, `-v`'s sections, the
+  notes) and reads the tape and map back for `run`. A program that doesn't compile for CARDIAC is a rustc error with
+  the text `cargo cardiac` prints (`error: FILE: ...`), so rustc fails, and cargo's build with it; `cargo cardiac`
+  renders rustc's other diagnostics itself, as cargo would, and says that one as before. A program's crate
+  depends on `CARDIAC_RUN` (rustc's env-dep), new for every run, so cargo compiles the programs every time: their
+  outputs are not cargo's to track, and the compiler or a resource may have changed. No `.mir`, `.cardiac.mir` or
+  `.cardiac.json` is written or read on the way; `program::read_mir` and its mtime rule, `single_mir`,
+  `enums::beside` and the facts file are gone.
+- **Another crate's names.** The driver converts a dependency in the *program's* session, so rustc names its
+  items as the program sees them (`kit::tables::SQUARES`, `<Point as Clone>::clone`), and the crate's name is taken
+  off the front of its own items' definitions and calls. A first version renamed them back to what each crate's own
+  build would have printed, by modelling rustc's printer over the crate's metadata, to keep listings byte for byte;
+  that was dropped: names need only agree within one build, and what the compiler is held to is its output, not
+  its labels. An impl's function in a dependency is converted only if a call reaches it (a derived `Clone` no call
+  makes needn't compile), as only reached ones were before, when the text named the others `<impl at ..>`. A
+  dependency's statics have no MIR in its metadata, so they are not in the IR (the compiler refuses statics).
+- **The fallback.** Dropped: the driver is required. Plain rustc could only give the program to the compiler as
+  MIR files, the hand-off this replaces, and keeping that path meant keeping its parser input, its mtime rule and
+  the text linker beside the new ones, for programs that already lost enums and methods without the
+  driver. Without a driver `cargo cardiac` says how to build one (`cd driver && cargo build --release`; rustup
+  installs the pinned nightly from `driver/rust-toolchain.toml`).
+- **How it was checked.** The oracle (`CARDIAC_IR_CHECK`, `ir_check.sh`) checks each program's own IR against
+  rustc's text as before; each dependency's items, converted from metadata, against rustc's text of the same
+  bodies; and the same items as the view names them against the IR the dependency's own build converted (kept,
+  under the oracle only, beside its report): 44,576 reports, 261,092 items, all equal, over the test programs, the
+  two-crate package's six profiles, the examples' three, the fuzzer's programs and 300 generated ones, and a larger program of 109 machines. Every listing of the test programs (opt-level 1 and 2,
+  checks on and off), the examples, the two-crate package and that larger program is byte-identical to main's; test_compiler.sh
+  334 MATCH, test_examples.sh 45 SAME, the fuzzer 0 FAIL and 300 generated programs 0 differ (13,840 runs, as main),
+  the larger program's references 3146/3146. A clean build leaves no `.mir` or `.cardiac.*` file in any target directory.
+- **Cost.** The view is a model of rustc's printer for another session, kept in step with it by the oracle, and it
+  can be wrong where metadata is silent (a glob import a dependency uses). A program's crate is checked again on
+  every build: the larger program's 109 machines take 0.36 s with nothing changed (main 0.21 s), 0.40 s clean (main 0.52 s). A CARDIAC error now also gets cargo's own line (`error: could not compile ...`)
+  before `cargo cardiac`'s, and a panic of the compiler's is rustc's thread's (`thread 'rustc' panicked`), reported
+  as an error, not a crash of `cargo cardiac`. A dependency rustc didn't load for the program (one it never names) is
+  not linked, so its names no longer count when two crates' functions clash.
+
+## 2026-10-20 · An impl's function is named as its calls name it
+
+- **Decision.** In the IR the driver builds, a function in an impl (inherent or a trait's) that a call in its crate
+  reaches is named as that call names it: `P::sum`, `<P as Twice>::twice`, rustc's printer without the
+  `<impl at FILE:L:C: L:C>` the text gives it. Each call is resolved to the definition it runs
+  (`Instance::try_resolve`, a trait's function to the impl's) to know which. The front end makes
+  `<P as Twice>::twice` one plain name, `P_as_Twice__twice`, at the definition and at each call, as it does
+  `kit::arith::twice`. One no call reaches keeps the text's name, and the compiler leaves it out, as before; an
+  impl's const keeps it too (the front end knows a const's owner by it).
+- **Why.** The text names a method's definition by where its impl is and its calls by its type, so no call could be
+  matched to its definition: a method rustc didn't inline (`#[inline(never)]`, or opt-level 1) was refused as a
+  call to an unknown function.
+- **Measured.** No listing changes: in the test programs, examples, fuzz programs and a larger program no other function is
+  renamed (the oracle counts the renamed, and compares them under the text's names: 12, all in
+  `tests/programs/methods.rs`). `methods.rs` builds at opt-level 1 and 2 and prints what native Rust does.
+- **Cost.** A derived `==` on a C-like enum at opt-level 1 is still refused: its call passes a promoted constant
+  (`&Colour::Green`, `const main::promoted[1]`), which the IR doesn't read, and its definition takes references.
+
+## 2026-10-20 · The compiler reads the IR the driver builds from rustc_public
+
+- **Decision.** The CARDIAC driver builds the compiler's IR (`ir::File`) from rustc_public's MIR
+  (`driver/src/convert.rs`) and writes it, printed as MIR (`ir::File`'s `Display`), beside rustc's text:
+  `NAME.cardiac.mir`. The compiler reads that in place of `NAME.mir` when it is there and current
+  (`program::read_mir`, for single files and packages alike); without the driver, or for a crate it couldn't
+  convert, it reads rustc's text as before. The IR's structure is rustc_public's: items, locals and the shapes of
+  their types, statements, places, operands, rvalues, terminators, switch arms, assert messages, and integer, bool
+  and unit constants from their bits. Its names are rustc's printer's, through `rustc_internal`, as the text's are
+  (trimmed paths depend on resolver state rustc_public doesn't show), and so are the constants, lines and items the
+  IR keeps as text; three facts rustc_public leaves out come from rustc's MIR (a local's scope, which orders the
+  declarations; a coercion's source; why an unwind terminates).
+- **Why.** The next fixes need rustc's facts, not its printer's text: a call resolved to the definition it reaches,
+  a variant's number. The IR the compiler works on now comes from them, and a fact can be added to it
+  without a new syntax to parse.
+- **How it was checked.** An oracle (`CARDIAC_IR_CHECK`, `ir_check.sh`): the driver also makes rustc's text as
+  `--emit=mir` does and compares the IR the compiler parses from it with the converted one, item by item, and
+  checks that both print and read back the same. Over every test program (opt-level 1 and 2, overflow checks on
+  and off, debug assertions), the two-crate package's six profiles, the examples' three, the fuzzer's programs and
+  300 generated ones in eight settings, and a larger program's machines: 3,386 crates, 16,872 items, all equal. Where the
+  parser reads the text oddly (`u8::MAX` is 255 but `i16::MAX` a name, a switch arm its bits, `Cmp(a, b)` an enum
+  variant, `(copy _1,)` and a unit struct not read), the conversion does the same, each said where it is matched.
+  Every listing (test programs at opt-level 1 and 2 with checks on and off, examples, the two-crate package,
+  a larger program) is byte-identical to the text-reading compiler's.
+- **Cost.** The conversion has to be kept in step with the parser while both exist, and the oracle is what keeps
+  them so: a construct the parser learns must be converted too. The names, and constants other than scalars, still
+  pass through rustc's printer.
+
+## 2026-10-20 · Into the compiler: rustc as a library, on a pinned nightly
+
+- **Decision.** A driver (`driver/`, the binary `cardiac-driver`) is rustc built as a library (`rustc_driver`, and
+  `rustc_public` to look at what it compiled), on `nightly-2026-05-22`, the last of 1.97's nightlies. It runs as
+  rustc does, configured as rustc's own driver configures itself, so its MIR prints byte for byte the same; and
+  where it writes a crate's MIR (`NAME.mir`) it writes `NAME.cardiac.json` beside it, what the text leaves out.
+  First the enums the crate's functions use, with each variant's number. `cargo cardiac` runs it in place of
+  rustc, for a single file and as cargo's `RUSTC`, when it finds it (`CARDIAC_DRIVER`, beside itself, or this
+  repository's `driver/` build), with the nightly's libraries from rustup; otherwise plain rustc, as before.
+- **Why.** The MIR text is rustc's printer's, for people ("subject to change without notice"), and several bugs
+  were what it leaves out or prints oddly: switch arms as unsigned bits, 255 as `u8::MAX`, a call of
+  core's whose debug-assertions setting it doesn't show, a method's definition and calls under different
+  names, and enums' numbers, which it never gives. Inside rustc each of those is a fact to look up. This
+  replaces part of 2026-10-12's "Take MIR from stable rustc": the cost it named, "a backend inside rustc is the
+  long-term fix", is being paid. The text's own pin to 1.97 (its format changes between releases) is a pin
+  still, to the nightly of the same MIR: the compiler's tests, examples, fuzzer and a larger program are byte-identical
+  through the driver, the compiler as it was the oracle.
+- **Cost.** The nightly (rustup installs it from `driver/rust-toolchain.toml`) and its `rustc-dev` component, and
+  porting the driver when the pin moves: `rustc_public` changed between May and October 2026 (`Crate::adts`, how a
+  variant is numbered). Next: the IR from `rustc_public`'s MIR rather than the text, checked equal to the text's.
+
+## 2026-10-20 · The build's debug-assertions setting reaches the compiler
+
+- **Decision.** `Mir` carries whether rustc built the program with debug assertions on: from `-C
+  debug-assertions` for a single file (rustc's default otherwise: on at opt-level 0, off above it), from cargo's
+  metadata (`profile.debug_assertions`) for a package. With it on, the precondition pass makes a call of
+  `core::hint::assert_unchecked` itself the same check as its inlined `precondition_check`: Rust's message, exit
+  134. With it off the call stays the program's promise.
+- **Why.** At opt-level 1 and s rustc doesn't inline `assert_unchecked`, and its body, which checks the condition
+  when debug assertions are on, is core's: no crate's MIR carries it, and the caller's MIR is the same either way.
+  So a false condition with debug assertions on printed a value where Rust aborts.
+- **Measured.** No listing changes for a build with debug assertions off; precond_assume and xhint, which differed
+  at opt-level 1 with them on, match.
+
+## 2026-10-20 · Core's checks of unsafe preconditions are asserts
+
+- **Decision.** With debug assertions on, rustc keeps the checks core makes of an unsafe function's precondition
+  (`ub_checks`): `x.unchecked_add(y)` first calls `unchecked_add::precondition_check(x, y)`, a function of core's
+  that no crate's MIR carries. The front end (`preconditions`, before anything else) makes each such call an
+  assert of what it checks, with Rust's message, which the panic map gives: unchecked_add, _sub and _mul an
+  overflow-checked op and its flag (`usize::unchecked_sub cannot overflow`), unchecked_neg `0 - x`,
+  unchecked_shl and _shr the shift below the bits, get_unchecked and get_unchecked_mut the index below the length,
+  assert_unchecked its condition, unreachable_unchecked `assert(const false)`. One the test before it proves is
+  dropped there: a `for` loop's step, which rustc's inlined `next()` takes only after `start < end`, so
+  `unchecked_add(start, 1)` (and `end - 1` of a reversed range) can't overflow; a signed range's overflow way into
+  unreachable_unchecked's check is `unreachable`, as it is without debug assertions. Natively a violation is a
+  panic that can't unwind, and the process aborts (SIGABRT, exit 134); on CARDIAC it punches -999 and halts as
+  every failed check does, and `cargo cardiac run` says why and exits 134 too. `-C debug-assertions=on|off` is
+  a single file's flag, as rustc's. test_examples.sh builds and runs every example with the `checked` profile as
+  well, both ways.
+- **Why.** The `checked` profile couldn't build `primes`, `sort`, `cipher` or `powers`: every `for` loop over a
+  range has such a check in it. A check dropped unasked would be a wrong answer where Rust aborts (dropped,
+  `3usize.unchecked_sub(5)` is -2, as it is without debug assertions), so each is kept unless proved; and only
+  the step a loop's own test proves is dropped before the passes, because the for-loop pass needs the step in
+  the block that tests, as rustc writes it without debug assertions. The rest the range pass proves or keeps, as
+  for any check. One machine, one way to stop: the -999 card is the panic either way; the exit code is the
+  host's, and it says what `cargo run` says.
+- **Measured.** Every example builds with the `checked` profile, the same size as with `dev` (`days_assumed`
+  aside, whose `assume` is checked there: 38 cells). No listing of a test program, an example's `dev` build or a
+  larger program's machine changes. `precond_loops` (each kind of `for` loop) is the same code with debug assertions as
+  without.
+- **Cost.** A check the passes can't prove costs a few cells (`a.unchecked_sub(b)` of two parameters: 4), and a
+  proved overflow-checked op leaves its sum's dead store where the passes don't remove one (a field of a
+  tuple). At opt-level 1 rustc doesn't inline `assert_unchecked`, and the compiler, not told of debug
+  assertions, takes the call as a promise, unchecked (unchecked_add and its kin are refused there). The checks of
+  get_unchecked (on a slice), unwrap_unchecked (an Option), unchecked_mul and the shifts (no lowering of their
+  ops) are made, but those programs are refused for their types or ops all the same.
+
+## 2026-10-20 · Natively, the panic hook is set up before main
+
+- **Decision.** The built-ins crate's native half puts a pointer to its setup in the executable's section of
+  constructors (`__DATA,__mod_init_func` on macOS, `.init_array` on other Unix, `.CRT$XCU` on Windows), which the
+  loader runs before `main`, as it runs a C++ global's constructor. The setup is the panic hook that prints -999. The
+  first `inp()`, `out()` or `load_resource()` still sets it up (once), for any other target.
+- **Why.** Stable Rust has no way to run code before `main`, so the hook was set up by the first `inp()` or
+  `out()`. A program that panicked before either printed nothing natively and -999 on CARDIAC, and the fuzzer and
+  native comparisons called that a difference. Teaching them that "nothing, exit 101" matches "-999, exit 101"
+  would have been a special case in every comparison; this makes the native build do what CARDIAC does.
+- **Cost.** A `#[used]` static in a `#[link_section]` (no `unsafe`). Checked on macOS in debug, release and with fat
+  and thin LTO, for a program that names nothing in the crate.
+
+## 2026-10-20 · Code that runs off its end brings the next unit with it
+
+- **Decision.** When main's last phase, or a function or routine, ends in an instruction that carries on to the next
+  cell (not HRS, not a JMP that isn't a call), the unit after it comes with it: `split_phases` puts it straight after
+  the phase's code whether or not anything names it, and keeps a unit that runs into the next as one unit with it.
+  Peephole rule 6 keeps the `rt_panic` label while the line before runs into it. With those, rule 4 drops every JMP
+  to the next label, `rt_panic`'s too, and the earlier exception (keep the last branch to `rt_panic`) is gone.
+- **Why.** A phase takes in a unit only when its code names it. Jump threading, rule 4 and the label sweep can leave
+  main reaching the panic routine only by running into it: at opt-level 2, `for i in 0..0 {..}; out(0); out(0 / 0)`
+  lost both branches to `rt_panic` (the exception kept one only while it was the last), then the label, so the
+  routine's two instructions stayed in main's code unlabelled; the panic map had no stop, and `cargo cardiac run`
+  exited 0 after the -999. Keeping the label alone made it worse: the routine became a unit nothing named, and was
+  left out. A function always ends with its `_exit` cell, so none runs into the routine today; the rule covers it.
+- **Measured.** A program whose panic main runs into is one cell smaller (the exception's kept JMP), and the program above one
+  larger (12 cells: block layout keeps the piece that runs into the routine last), where it exited 0.
+- **Amended.** No instruction at all before a label counts as running into it: the program starts there. A
+  main that is only `panic!()` lost the label and exited 0 again. Its `JMP rt_panic` stays too, though the routine
+  comes next, as does any whose check no line before it can take (none, or one with a check of its own): the panic
+  map gives a run's reason by the line that ran into the routine, and without one it said only "a check failed".
+
+## 2026-10-20 · A usize past a card is held below 0
+
+- **Decision.** `-1i16 as usize` is usize::MAX in Rust, and no error; without overflow checks `0usize - 1` is too.
+  Such a usize, past a card, is held as the negative number it is short of 2^64 by (-1 for usize::MAX), in the
+  locals `ranges::huge_usizes` finds can hold one: those an `i16 as usize` or a usize difference that can go below
+  0 (a `SubWrapping`) is stored into, and those a copy, sum or difference of one is. Not `_0`, a struct
+  result's field, or a local whose address is taken: a caller or a pointer reads those as a usize a card holds. The
+  cast no longer panics. What is done with one: a comparison tests its sign first, since such a usize is above
+  every usize a card holds, and then compares as before (one side: a load and a TAC; both: two of each and
+  jumps); `as i16` is the number held; `as u8` adds 256 while it is negative before taking 256 away; a sum or
+  difference into another such local is the plain op, exact modulo 2^64; as an index, the bounds check (a
+  comparison) fails, as Rust's does. Anything else, passed to a function, stored where a card's usize is read
+  (`_0`, an element, a field), multiplied, divided, or an overflow-checked op, panics there first: "the value
+  doesn't fit on a card". The range pass gives these locals -999..=999 where it knows nothing better, settles no
+  comparison of one that can be below 0, and narrows `x < c` to 0..c-1 but `x > c` not at all when x can be below
+  0. Whether a difference can go below 0 depends on which usizes can, so the analysis runs from none and again
+  until the differences it finds can go below 0 are all counted.
+- **Why.** The cast panicked as if a bounds check followed (`out((m - 1) as usize as i16)` printed -999 for 0,
+  where Rust prints -1), and an index made from `0usize - 1` without checks was -1, which passed `j < 4` and read
+  the cell before the table. Rust's answer is exact on a card for what a usize past a card is used for in practice:
+  compared, cast back, indexed with. Where it isn't (Rust's value is past 999 or panics on overflow, which no card
+  shows), it panics as a value past a card does with overflow checks on, never a wrong number: with checks on,
+  any checked op on such a usize either overflows in Rust or gives another usize past a card.
+- **Measured.** checked_cast, without overflow checks, 76 to 79 cells (its `(i + 254) as u8` of an i + 254 that
+  can be past a card); with them the panic moves from the cast to the bounds check, the same size, as in the
+  examples' days and cipher. In a larger program: ray's compose 33 + 26 / 42 to 32 + 25 / 42 cells (data + phase 1 / phase
+  2: its `inp() as usize` count no longer needs the panic routine in phase 1), flight's wave_add the same 81 with
+  its check moved; every frame of every effect and the cut identical to native. No other listing changes.
+- **Cost.** A comparison of a usize that can be past a card costs its sign test, a local it is stored in can't be
+  carried in the accumulator, and a use that can't hold one costs a load and a TAC. A usize past a card that
+  is passed to a function, multiplied or divided panics where Rust carries on.
+
+## 2026-10-20 · A u8 wraps, as Rust's does without overflow checks
+
+- **Decision.** Before any pass, `ranges::mark_wrapping` makes each `+`, `-` and `*` rustc writes on u8 (with
+  overflow checks off, or an inlined `wrapping_add` and its kin) its wrapping op, `AddWrapping` and its kin. The
+  range pass turns one back into the plain op where the operands' ranges keep the result within 0..=255; one it
+  can't lowers to the plain op and then the wrap in the accumulator: a difference of two u8s gets 256 added back
+  when it is negative (3 instructions), a sum or product has 256 taken away while it lasts (4). The ops the passes
+  write themselves (a `for` loop's step, `saturating_sub`'s difference) wrap nothing and stay plain. Beside it the
+  range pass now narrows on `switchInt(copy n) -> [0: .., otherwise: ..]`: n is not 0 on the way that steps, so a
+  u8 counted down to 0 needs no wrap (and, checked, no check).
+- **Why.** A cell kept `0u8 - 1` as -1, which no u8 holds: `c < 8` passed and `T[c as usize]` read the cell before
+  the table, where Rust's bounds check panics at 255. Every u8 now holds 0..=255, so its comparisons and indexes
+  are Rust's.
+- **Measured.** Unchecked, where the ranges can't keep the result a u8: add 30 to 35 cells, nested 45 to 50, fib
+  17 to 22, fib_overflow 12 to 17, arrays 52 to 60, refs 75 to 80, div_by_own 43 to 48, divide 38 to 42,
+  forloops4 63/62 to 67/66 (opt-level 1/2), underflow 6 to 10; add, fib_overflow and underflow print what Rust
+  does now where they printed 280, -1 and the like. Checked, countdown 12 to 8 (the new narrowing proves its
+  `n -= 1`). The examples' and a larger program's listings don't change.
+- **Cost.** A wrap where the ranges can't follow a value: a u8 parameter (`k * 2` in a function of its own), a
+  sum through a reference, a counter stepped by 2 to 0. A u8 product past 999 is past a card: the cell has kept
+  its low three digits before the wrap.
+
+## 2026-10-20 · A check rustc has proved fails is the panic
+
+- **Decision.** A pass before all the others (`blocks::settled_checks`, at every opt-level) takes an assert on a
+  constant, `assert(const false, ..)` or `assert(!const true, ..)`, as rustc writes them for a program that
+  `#[allow(unconditional_panic)]`s (an index past the end by constants, `x % 0`, `T[-1 as usize]`). One that holds
+  is a goto; one that fails keeps no statements and goes on to itself, so the blocks after it are reached from
+  nowhere and are dropped, with the statements that only fed them. It lowers to `JMP rt_panic`, marked with the
+  check's reason for the panic map. (Beside it, peephole rule 4 kept the last branch to `rt_panic` even when the
+  routine came next; running into the next unit replaced that.)
+- **Why.** Native Rust panics there, so CARDIAC must too, with the same reason; it refused them instead
+  ("unsupported place const false"). Once the program has panicked nothing it stored can be seen, so the failing
+  block's statements need not run: `T[K as usize]` with `K = -1` stores `usize::MAX`, past a card, only for the
+  bounds check that fails, and is never stored now. Rule 4 dropped a branch to `rt_panic` that the routine
+  followed, and with no other branch left the routine lost its label and the panic map its stop: a program whose
+  only panic ran straight on into it (`out(x); panic!()`) exited 0 from `cargo cardiac run`.
+- **Measured.** No listing of a test program, an example or a larger program's machine changes; settled_oob, settled_rem and
+  settled_neg, refused before, are 6 to 25 cells. No program the fuzzer makes from seed 22 is refused this way now.
+- **Cost.** One cell (the kept `JMP rt_panic`) in a program whose one check falls into the panic routine.
+
+## 2026-10-20 · Code rustc copies into both ways of a test is joined again
+
+- **Decision.** A pass after the range pass (`tails::join_tails`) finds a two-way branch whose two ways, each
+  reached only from it and followed block by block through gotos, asserts and calls, run the same steps somewhere
+  in between (the same statements, checks and calls, in the same order, on the same locals). Those steps go into
+  blocks of their own that both ways go on to, each way keeping what it ran before them; the shared blocks end by
+  making the branch's test again and going on to what each way ran after. Only when the test can be made again
+  (its comparison's operands, or its bool, are whole locals whose address is never taken and which nothing on the
+  way writes), and only when the shared steps are worth at least 8 cells by a rough count (a call to the multiply
+  or divide routine and something more). Beside it, a peephole rule (14): a block that starts `CLA x` where every
+  way in, each jump to it and what falls into it, has just stored or loaded x, loses the `CLA`. It is tried only
+  once the other rules are done, since it takes away the `CLA` rule 10 starts from.
+- **Why.** Once `abs(v)` is inlined, rustc answers the second `v < 0` from the first and copies `abs(v) * 10 / z`,
+  zero check and all, into both ways (jump threading): two calls of the division routine, each with its argument
+  stores and return, where testing the sign again is a load and a TAC. Each way still does the same work in the
+  same order from the same values, so the join is sound when the second test gives the first one's answer. After
+  the range pass, the checks each way's own facts proved are gone already, and only code both ways still run is
+  joined: no check comes back (the zero check after a promise and the `MIN / -1` one stay dropped). The joined
+  code starts by reloading what both starts stored, which rule 14 drops; it drops the same reload after any if/else
+  whose arms both store what follows reads, and at a loop's head that reloads what the loop just stored.
+- **Measured.** The program that showed it (`inp()`, `assume(z >= 1)`) at opt-level 2 without overflow checks: 102 cells
+  to 95 (101 by rule 14 alone), so it fits. The fuzzer's `branches`: 81 to 78 there, and 110 to 101 at opt-level
+  1 unchecked. `joined_tails` (a multiply by a local, its overflow check shared) 92 to 84 at opt-level 2 checked;
+  `joined_tails2` 72 to 68 unchecked. A divide alone is not joined: it measured 2 to 3 cells more (the second
+  test, a jump, and the test's operand kept apart from the start's result), so `divide_branches` is 90 to 89, by
+  rule 14 only. Rule 14 takes 78 cells off 47 of the 110 machines of a larger program, 1 each off cipher, primes, sort and
+  both phases of powers, and 1 to 3 off 17 test programs; nothing anywhere gets bigger. The join itself finds
+  nothing in that program. Every frame of it, built with both, is still identical to its native reference (3146
+  of 3146 in the cut).
+- **Cost.** The ways now run the test twice, a load and a TAC more each time through. The worth count is rough:
+  it may join a run that costs a cell or two, or leave one that would pay, and a way's steps are matched only in
+  the order they come (a run that shares its steps in another order is left).
+
+## 2026-10-20 · `assume()`, an unsafe fn, replaces `promise!`
+
+- **Decision.** `cardiac::assume(cond)` is an `unsafe fn`, called as `unsafe { assume(cond) }` with a `// SAFETY:`
+  comment saying where the guarantee comes from. On CARDIAC it is `core::hint::assert_unchecked`, no code, unless
+  debug assertions are on (`debug-assertions` in the profile), where it is an `assert!`: a false assumption punches
+  -999 and halts. Natively it is always an `assert!` (`#[track_caller]`, so the panic names the line). The
+  `checked` profile builds the examples that way. `promise!` is gone.
+- **Why.** `promise!` hid its `unsafe`: safe-looking code whose false condition is undefined behaviour, which Rust
+  calls unsound. Rust shows undefined behaviour at the call site, and its own `assert_unchecked` is an unsafe fn
+  that checks in debug builds; `assume` does both, the name C++ (`[[assume]]`) and LLVM (`llvm.assume`) use for
+  "trust this, generate nothing". `promise!` also didn't build with debug assertions on: rustc puts a precondition
+  check into `assert_unchecked` there, a function the compiler doesn't know.
+- **Measured.** The default build is unchanged: a test program with three assumptions is the same 72-cell tape
+  with `assume` as with `promise!`. `days_assumed` (the `days` example assuming a month 1..=12) is 21 cells to
+  `days`'s 31. Checked, it is 64: the checks are about 3 cells each, and the rest is the month table, which is
+  built at run time when a check comes before it instead of being loaded with the tape.
+- **Cost.** Two `unsafe` lines where there was one macro call. A checked panic's reason is "explicit panic", not
+  "a broken assumption", as for every `assert!` message.
+
+## 2026-10-19 · A compiled stack: data cells shared by liveness
+
+- **Decision.** After the peephole rules, a pass (`stack::share_cells`) works out where each data cell is live
+  across the whole program, functions included (a call goes to the callee's entry; its return comes back after
+  every call to it), and packs cells that are never live at once into one, the first in the listing standing for
+  the rest (its line notes them: `also main_8 (never live at once)`). Both halves at once: a loop
+  counter used early with a total used late, and the cells of two functions never active together. Accesses stay
+  plain direct addresses. A cell takes part only if every use is a plain read or write (CLA, ADD, SUB, OUT, STO,
+  INP) and something writes it: constants and address templates (never written), arrays and resource slots
+  (reached through their address), cells named in a `DAT` or as `name+N`, and exit cells keep their own. A
+  program in phases, or with a jump the pass doesn't follow, is left as it is.
+- **Why.** Measured first: of 1477 such cells in the 266 one-phase reference cases, 508 could go. Built: 194 cases
+  change, every one smaller, 580 cells in all; the reference machines lose 167 between them (`flee`, at the
+  96-cell limit, 6); a test program that didn't fit now does. Examples: gcd 83 to 80, sort 77 to 76, cipher 57 to
+  56, days 32 to 31. Every changed tape was run old and new on 300 random decks each, decks that keep the
+  machine's promises (`promise!`): identical (55,800 runs). Decks that break them read past an array, and what is
+  there depends on the layout, so they differ, as undefined behaviour may. Planting a bug in the pass (a TAC's
+  target left out of the flow) makes 21,638 of those runs differ.
+- **Cost.** Phases aren't shared yet (each phase's data is split already, and they were left out of scope). The pass
+  packs greedily, the most constrained cells first: not always the fewest cells, but deterministic.
+
+## 2026-10-19 · A comparison against an array element is mirrored, not parked
+
+- **Decision.** In an ordering comparison (<, <=, >, >=) of two values where one comes through the accumulator (an
+  array element, read through its address), that one is loaded and the other, in its cell, subtracted. When the
+  usual form would subtract it instead, the comparison is mirrored: `x < y` as `y - x - 1` not negative, `x <= y`
+  as `x - y - 1` negative, the 1 subtracted from cell 00, which always holds 001. When both come through the
+  accumulator, the one subtracted is parked in a scratch cell. Equality and comparisons with a constant are as
+  before, and so is a value carried in the accumulator from the statement before (it is never loaded over).
+- **Why.** CARDIAC subtracts only a cell. Parking the element and loading the other side cost a store, a load and a
+  scratch cell where the mirror costs one SUB. Found by measuring each pass switched off: `sort` ran faster without the
+  first `forward_copies`, which had left `xs[i] < xs[min]` with the element on the right.
+- **Cost.** None: three reference cases change, each 2 cells smaller (`golden-pre-mirror/` has the old ones), and
+  `sort` goes from 80 cells and 2356 instructions to 77 and 2188. `compare_left`, `compare_right` and
+  `compare_both` check every ordering against native Rust, with negatives and equal pairs.
+
+## 2026-10-19 · No profile-guided optimisation: measured, no pass ever trades speed for size
+
+- **Decision.** No PGO. The passes run as they do, the same for every program.
+- **Why.** PGO pays when a transformation helps some programs and hurts others, so choosing per program, by
+  running each candidate, beats always doing it. Measured first: each of the 14 IR passes switched off in turn,
+  over the examples with their test inputs (15 runs) and the test programs at opt-level 2, with and without
+  overflow checks (83 that finish), against all passes on. In 97 of the 98 runs no pass is ever better off, in
+  instructions run or in cells: every pass is neutral or a win. The one exception is `sort` with the first
+  `forward_copies` off, better on both counts (2356 instructions to 2170, 80 cells to 77): not a trade-off for a
+  profile to choose, but a pass that does worse on one program, to fix in the pass. Measured inlining, the
+  first candidate, was already measured and set aside.
+- **Cost.** None built. If a transformation that trades speed for cells is added, measure again.
+
+## 2026-10-19 · A panic map says why a run panicked
+
+- **Decision.** `cargo cardiac build` writes a panic map, `NAME.map`, beside the tape: the cell of each branch to
+  `rt_panic` (or of the line that runs on into it) with what it checks, as Rust says it (`index out of bounds`,
+  `attempt to add with overflow`; a runtime routine's own check, `the value doesn't fit on a card`), where each
+  function starts, and where `rt_panic` is, for each phase. A host runs the tape keeping track of the last three
+  instructions run (`cardiac::run_traced`); a run that halts in `rt_panic` (its OUT, then its HRS) panicked, and
+  the instruction before them is the check. A runtime routine's check is reported in its caller, found by the
+  routine's return jump (cell 99 for `rt_chk`, the routine's exit cell for the others). `cargo cardiac run` prints
+  `panicked in main: index out of bounds` on standard error and exits 101; the flipboard says it in its caption,
+  given the map with the tape; in Rust, `panics::Map::panic`. The check travels from lowering to the map on
+  `Line::panic`, which is never printed and is no part of a line's equality: listings and tapes are unchanged.
+- **Why.** The first proposal was to read cell 99 after the halt, but a TAC to `rt_panic` doesn't write cell 99, and 60
+  of the reference cases have one: each would have needed a JMP of its own, a cell, and a full program would no
+  longer fit. Keeping track on the host's side costs the machine nothing, covers TAC, JMP and running on into
+  `rt_panic` alike, and leaves a real CARDIAC as it was: -999 and a halt. A program that prints -999 itself and
+  halts elsewhere is not taken for a panic.
+- **Cost.** No source line: stable rustc's MIR has none for a check, so the report names the function. The values
+  (the index, the length) aren't known either, as the map is written before the program runs. Tracking runs only
+  with a map, and costs nothing measurable even then (325 million instructions in 0.45 s, as before).
+
+## 2026-10-19 · No inliner of our own: measured, it would rarely pay
+
+- **Decision.** The compiler doesn't inline (plan step 6, measured inlining). rustc's inlining at opt-level 2 is
+  the only inlining, and `#[inline(never)]` keeps a call.
+- **Why.** Inlining pays when a call's overhead (about 5 cells: the return address kept, the exit cell, the
+  return jump, the call) is more than the body it copies. Among the 466 reference cases, setting aside every
+  function marked `#[inline(never)]`, five helpers called once would save about 5 cells each, nearly all at
+  opt-level 1, where rustc doesn't inline; at opt-level 2 rustc has already inlined what is small. The two
+  real-world helpers rustc keeps as calls lose when inlined: one, with two loops and two call sites, would grow
+  its program by about 60 cells past the 96 it has; the other grew its program from 61 cells to 66. And
+  `#[inline(never)]` isn't in the MIR, so respecting it would mean parsing every program's source too.
+- **Cost.** A program built at opt-level 1 keeps a call to a helper it calls once (about 5 cells). Build at
+  opt-level 2, or mark the helper `#[inline(always)]`, where rustc will inline it.
+
+## 2026-10-19 · lin_fold stays within a block: measured, it would never fire
+
+- **Decision.** lin_fold is not extended across blocks (plan step 5). It folds within one block, as before.
+- **Why.** Measured first, as planned: a temporary of plain Add, Sub, Neg or a small Mul, used once in a later block
+  of a straight run (a goto, an assert or a call's return between, the later block entered only from the one
+  before). Across the 466 reference cases, every test program at opt-level 1 and 2 without overflow checks, and
+  all nine examples, there are none. `merge_blocks` already joins the gotos just before lin_fold, so only asserts
+  and calls are left between, and code that starts a sum, divides or calls, and then finishes the same sum doesn't
+  turn up. The plan's own example, `c * 3 - (a / d + b) * 2`, does fold (3 cells), and only without overflow checks.
+- **Cost.** None: nothing is built. If a program of that shape turns up, measure again.
+
+## 2026-10-19 · A resource is loaded once: in main, outside any loop
+
+- **Decision.** `load_resource` is a compile error outside `main`, and on a loop in `main` (a block a path from it
+  leads back to), at every opt-level. With the rule already there, one load of each resource in the whole program,
+  a resource's load runs exactly once. One slot per resource stays, and the program may write to the array after
+  it is loaded: as scratch, or anything else. A second copy is `let copy = key;`, cells of its own.
+- **Why.** The loader fills a slot once, when the tape is loaded; natively each call reads the file afresh. A
+  load that ran twice would find on CARDIAC what the program left in the slot, and fresh values natively: two
+  answers. Making the array read-only was considered and rejected: once loaded it is memory like any other, and a
+  program that reuses its cells (as scratch, or with `overlay()`) must be able to. Allowing two loads of a
+  resource, each a slot of its own, was rejected too: a host binds one slot per resource for every run, and a tape
+  whose code differs with the number of loads is not the one tape many data blocks are bound into.
+- **Cost.** A program that wants a resource in a helper or a loop loads it in `main` first and passes it on. Every
+  program that loaded a resource already did so: the five captured cases compile as before.
+
+## 2026-10-19 · A loader binds resources, not a linker
+
+- **Decision.** `carried::<N>()` is gone; a program loads a named resource, `let key: [i16; 10] =
+  load_resource("key");`, the file `resources/key` beside the package's `Cargo.toml`, written as the input is. The
+  name is required, a string literal. The tape records the slot as `# resource NAME ADDRESS LENGTH`, with `bound`
+  after it once the slot's cards hold the values. `cargo cardiac build` binds each slot whose file is there, so the
+  tape it writes is complete; `cargo cardiac run FILE.tape` binds a slot still empty from `resources/` beside the
+  tape, and `--resource NAME=FILE` binds one from any file; a host binds in memory with `Tape::bind`. A slot still
+  empty is an error that names it, and nothing is ever taken from the input for it. Natively, `load_resource` reads
+  the file when it is called, from `CARGO_MANIFEST_DIR`, which `cargo run` sets, else from the current directory.
+  In the listing the slot's label is `resource_NAME`. This supersedes in part "`carried()` is CARDIAC's memory
+  mapping" and "`carried()`: tables that come on the tape" (2026-10-18).
+- **Why.** Binding a slot is writing N values into N known cards: nothing is compiled, resolved or moved. That is a
+  loader's job, done at load time, not a linker's. Data a host changes for every run is
+  bound in memory just before it; a link step writing a new tape each time would add nothing. Natively the data is
+  read when the program runs, never built in (no `include_bytes!`), so both builds read one file and it can change
+  without a rebuild. A name, not "the first N values of the input", means the input is the program's own again, and
+  the old rule that the table must come before the first `inp()` goes. The label is named after the resource, not
+  after the `let` binding (`main_key`), so the listing shows what fills it whatever the variable is called.
+- **Cost.** A program loads each resource once (twice is an error: pass the array on). `cargo cardiac test` runs a
+  listing without a loader, so a resource's cells hold 0 there, as a test program's stub returns natively. Five
+  captured cases call the old `carried::<N>()` and no longer compile; written with `load_resource`, they compile to
+  the same cells, with only the label and the tape's line renamed. The flipboard runs bound tapes only.
+
+## 2026-10-19 · Settings come from cargo profiles
+
+- **Decision.** `cargo cardiac build` and `run` build with a Cargo profile, as `cargo build` does: `dev`, `release`
+  with `--release`, or the one `--profile NAME` names. The MIR comes from `cargo check` on the package, with
+  `--cfg cardiac --emit=mir` added to rustc's flags and a target directory of its own (`target/cardiac-bell-none`),
+  so cargo resolves the profile itself: its defaults, `[profile.*]` in the workspace's `Cargo.toml`, `inherits`,
+  per-package overrides, and each dependency's own settings. The profile's `overflow-checks` replaces the
+  `// cardiac: overflow-checks=on` line, and its `opt-level`, which cargo reports for each program, also sets the
+  compiler's own passes: off at 0, as they are today at 1 and 2, and the same as at 2 for 3, `s` and `z` for now.
+  A single file has no `Cargo.toml`: it takes rustc's flags, `-C opt-level` and `-C overflow-checks`, with rustc's
+  defaults. `MIR_OPT`, `OVERFLOW` and `--no-opt` are gone. This supersedes "Programs compile like a release build"
+  (2026-10-16).
+- **Why.** The goal is an idiomatic Rust tool, and a Rust programmer sets these in `Cargo.toml`. Asking cargo rather
+  than reading the TOML ourselves means every way cargo has of setting a profile works, with no `toml` crate, and a
+  program is checked as the binary it is, as a native build compiles it.
+- **Cost.** rustc's MIR depends on more than the opt-level: debuginfo, debug assertions and incremental builds each
+  change it (less is inlined). So the examples' `dev` profile, in the top-level `Cargo.toml`, sets all five for the
+  `examples` and `cardiac` packages; the tool's own dev build is untouched. A profile is per package, not per
+  program: `examples/collatz.rs` had its checks on by the comment, and the other examples need them off (`powers`
+  doesn't fit with them), so collatz is now a package of its own, `examples/collatz/`, with checks on in `dev` and
+  `release`, chosen with `-p collatz` as cargo chooses a package; its tape is the same as before. The two-crate
+  test programs were `#![no_std]` binaries with no panic handler, which cargo refuses to check; they lost the
+  attribute, and their MIR is the same. MIR at opt-level 0, cargo's `dev` default, parses for every test program,
+  but with the passes off few fit in memory, and an iterator's `next` stays a call the
+  compiler can't lower: an error there says so and points to the opt-level.
+
+## 2026-10-19 · Patterns are tested on the IR, not its printed text
+
+- **Decision.** A pass recognises a construct by its typed parts, never by how it prints:
+  - a path by its segments (`Path::is_path(&["core", "intrinsics", "cold_path"])`);
+  - a one-word constant by `Const::is_scalar`;
+  - a type by its variant;
+  - a symbol in the machine IR only where it is defined or named as an operand. A number never names one.
+- **Why.** The tests were carried over from the compiler's regex days: "no space in the text", "no `)` in the type",
+  "the text contains `i16::`". Each was an approximation that a new shape of rustc's output could slip past.
+- **Cost.** None in output: no captured case changes. A program that hits an unsupported shape may get a different
+  error message than before.
+
+## 2026-10-19 · Range bounds are exact integers
+
+- **Decision.** The range analysis keeps each bound as an `i64`, not as an `f64` carried over from the compiler's
+  JavaScript days, when NaN stood for "this type has no range". Sums, differences and products saturate at
+  `i64`'s ends.
+- **Why.** An `f64` is inexact past 2^53, and a product of products outgrows any fixed width. A saturated bound
+  is still wider than any value a cell can hold, so every decision it supports stays sound. `i32` is too narrow:
+  the open side of a comparison is ±1e9.
+- **Cost.** None in output: no bound in the captured cases passes about 2.2 million, where `f64` was exact.
+
+## 2026-10-19 · The compiler reads MIR into a typed IR
+
+- **Decision.** The compiler parses the text of `rustc --emit=mir` into a typed IR (`src/compile/ir`): a lexer, a
+  recursive-descent parser, and the types rustc's own MIR has, named as rustc names them (`Place`, `Operand`,
+  `Rvalue`, `Statement`, `Terminator`, `Ty`). The passes are typed transformations over it; the front end's are
+  written as a mutable visitor (`ir/visit_mut.rs`, in the manner of rustc's `MutVisitor`). Lowering emits a typed
+  machine IR (`src/compile/machine.rs`), the listing as lines of instructions, labels and data cells, which the
+  runtime, the peephole rules, the phase splitter and the tape work on, and which is printed as assembly at the
+  end. `src/compile/regex.rs` and the `fancy-regex` dependency are gone. This supersedes "The compiler is Rust: a
+  straight port" (2026-10-18).
+- **Why.** A pattern over text cannot tell `_1` from `_12` unless every pattern takes care to, and every pass had
+  to parse again what the one before had printed. Typed values say what each line is, a pass matches on them, and
+  a line it doesn't understand is an error rather than a missed match. A statement or terminator outside what the
+  compiler can compile is kept as `Unsupported`, with rustc's text, so it is rejected with the line rustc wrote.
+- **How it was checked.** One step at a time, each against the 466 captured cases: every case compiles to the
+  same bytes. The changes in output made on purpose have entries of their own (the listing's layout, the order of
+  a function's data cells).
+- **Cost.** It still reads MIR as text, whose format rustc does not keep stable, so the compiler needs the rustc
+  it was written for (1.97). Outside the captured cases, some error messages and some programs that could not
+  compile before come out differently: `i32` becomes `i16` only in types, suffixes and paths, no longer in a name
+  such as `to_i32`. Reading rustc's own data structures instead still needs nightly rustc and `rustc-dev`.
+
+## 2026-10-19 · A fixed point compares facts, not their order
+
+- **Decision.** The analyses run until nothing changes, repeated work and the range pass, decide that by
+  comparing what they know as maps, whatever order the facts came in: repeated work keeps what is held in a
+  `BTreeMap`, the range pass its facts and edges in `HashMap`s.
+- **Why.** The facts were kept in `Ordered`, which compares the order too: the same facts in another order
+  counted as a change and cost another round, and could run an analysis into its round limit (50 for repeated
+  work; 40 for ranges, which is an error) after its facts had stopped changing. No later step reads their order:
+  each fact is worked out on its own.
+- **Cost.** None in cells: no captured case changes. Each round's facts are the same as before, so the widening
+  after six rounds sees the same ranges; only the round that finds nothing changed can come sooner.
+
+## 2026-10-19 · `carried()` is CARDIAC's memory mapping
+
+Superseded in part by "A loader binds resources, not a linker" (2026-10-19): `carried()` is now
+`load_resource("NAME")`, its slot `# resource NAME ADDRESS LENGTH`, bound from a named file, never from the input.
+
+- **Decision.** `carried()` stays (see "tables that come on the tape", 2026-10-18). It is the closest CARDIAC
+  comes to memory-mapped data: cells whose contents are put there before the program starts, by whoever builds
+  the tape, and that the program only reads.
+- **How it fits the machine.** CARDIAC has no way to put a value in memory except through its input: "Programs
+  have to be loaded through the input, just like data" (the 1968 manual). The bootstrap, `002` and `800` with the
+  `001` wired into cell 00, reads address and value pairs until the jump to the program's start. A table is more
+  of those pairs: the loader puts it in memory with the program's own cells, and no instruction of the program
+  reads it in. A host that builds a fresh tape for each run, with that run's table in it, is using the machine as
+  intended; the tape's `# carried ADDRESS LENGTH` line tells it where the table goes.
+- **Alternatives.**
+  - Read the table with `INP` once the program starts: a second loading loop, doing the loader's job again, in
+    the program's own cells. `examples/cipher.rs` is 57 cells with `carried()` and 70 with the loop.
+  - A `const` array: also loaded with the program at no cost in code, but its values are fixed when the program is
+    built. `carried()` is for values that change from run to run.
+- **Cost.** It is not in the manual: on the paper machine, the operator writes the table's pairs on input cards
+  after the bootstrap and the program, ahead of the jump to its start. `# carried` is a line of rust-cardiac's
+  `.tape` format, not of CARDIAC. Natively, `carried()` must come before the first `inp()`.
+- **See also.** README.md, "Tapes are code, resources and hand-offs".
+
+## 2026-10-19 · A function's data cells in the order of their locals
+
+- **Decision.** A function's one-cell locals and fields are laid out by local number, each whole local before
+  its fields, then the cells lowering makes up (a divide's remainder). The order is the symbols' own (`Sym` is
+  `Ord`), not their names' text.
+- **Why.** The cells were sorted by name as text, a leftover of the text compiler: `main_10` came before
+  `main_2`, and `main_10_0` before `main_1_0` but after `main_1`. Sorting the names meant printing every symbol
+  to compare it.
+- **Cost.** None in cells. 227 of the 466 captured cases change, all in functions with a local numbered 10 or
+  more: the same data lines in another order, so the cells after them have other addresses and the tapes differ.
+  No program grows or stops fitting.
+
+## 2026-10-19 · Comments carry no meaning
+
+- **Decision.** No pass reads a comment in the machine IR. A `carried()` table's label is a line of its own kind
+  (`Kind::Table`), and the tape finds the tables by it. To the peephole rules every label is a code label, with a
+  comment or without; a table's label is data, as a labelled cell is, so it is neither a jump target nor a barrier.
+- **Why.** The tape looked for a label whose comment started with `carried`, and the peephole rules took any
+  commented label for a non-label, so editing a comment could change the program. Counting table labels as code
+  labels instead breaks them: rule 6 drops a label no instruction names, and the 5 captured cases with tables lose
+  their `# carried` line and the table's cards.
+- **Cost.** None in cells: no captured case changes. The only commented labels the compiler emits are table
+  labels, which the rules already passed over. A table label read back from assembly text is a plain label.
+
+## 2026-10-19 · An address constant is a use of its cell
+
+- **Decision.** Peephole rule 11 (drop a `STO` whose cell is read only by the next instruction) counts labelled
+  `DAT` cells that name the cell, as rule 7 does: address constants (`a_y: DAT y`) and the instruction constants
+  built from them. The store is still dropped when the code after it runs straight to `HRS` without a label, a jump
+  or a use of the constant, since nothing can read the cell after that.
+- **Why.** Rule 11 missed address constants, so it dropped the store into a local whose address was taken, and a
+  read through the address got 0. Blocking the rule whenever a constant exists also fixed it, but cost
+  2 cells at each spot and pushed two captured cases past cell 98; the straight-to-`HRS` case covers all of them.
+- **Cost.** None in cells: no captured case changes.
+
+## 2026-10-19 · The listing's layout belongs to the printer
+
+- **Decision.** A line of the machine IR holds no spacing. The printer places every comment's `;` at one column
+  (or one space past a longer line) and every labelled cell's `DAT` at another. The parser accepts any spacing.
+- **Why.** The listing used to be text, and a rewritten instruction kept the spaces of the one it replaced, so
+  comments drifted. Moving it to typed lines meant storing those spaces to keep the output byte-identical, which
+  put layout in the IR, where every pass that rewrites a line had to carry it.
+- **Cost.** A one-time whitespace change to the `.asm` listings: 373 of the 466 captured cases, none different
+  once runs of spaces are collapsed. The tapes are unchanged.
+
+## 2026-10-18 · The emulator's instructions are an enum, decoded by a match
+
+- **Decision.** The ten instructions are `enum Op`, so the emulator's `match` covers them all with no catch-all
+  arm. A cell's first digit becomes an `Op` through a `match` on the digit (`cardiac::op`).
+- **Why not a table.** Indexing a `[Op; 10]` by the digit is the obvious way to write it, and it made the emulator
+  25 to 40% slower: 300 million steps of a `CLA ADD TAC STO JMP` loop took 980–1160 ms against 750–810 ms for
+  the `match`. Decoding runs on every write to a cell (every `STO`, `INP`, and the return jump `JMP` leaves in
+  cell 99), so it sits in the hot loop. With the `match`, the enum runs as fast as the integer constants it
+  replaced.
+- **Cost.** None measured.
+
+## 2026-10-18 · A program is an ordinary Cargo program
+
+- **Decision.** A program is a Cargo binary with `fn main()`, and its built-ins come from a crate, `cardiac`, as a
+  normal dependency (`use cardiac::*;`). `cargo run` runs it natively; `cargo cardiac build` compiles the same
+  source for CARDIAC. Nothing in the source is there only for CARDIAC: no `#![no_std]`, no `include!`.
+- **How the two builds differ.** rustc is given `--cfg cardiac` when it compiles for CARDIAC. The `cardiac` crate
+  then has bodiless stubs, marked `#[inline(never)]` so rustc leaves the calls in the MIR, where the compiler turns
+  them into instructions. Without the cfg, the built-ins have ordinary bodies on standard input and output.
+- **How the compiler knows them.** By name, at the root of a crate: `inp`, `out`, `overlay`, `carried`, `digit`
+  (`compile::BUILTINS`). A call to `cardiac::inp` is matched to the `cardiac` crate's `inp` like any call into
+  another crate, and from then on it is the built-in. A program that defines its own `inp` at its root (the test
+  programs do) gets the same built-in, so no crate name is written into the compiler.
+- **`std`'s paths.** A program with `std` names what it takes from `core` by `std`'s paths in the MIR
+  (`std::ops::Range`). They are rewritten to `core`'s before the passes run, since the passes look for those.
+- **Why a crate rather than a file to include.** A dependency is how a Rust program already gets functions it
+  didn't write, and it lets the native build be the program's own `cargo run`, with nothing to set up.
+- **Cost.** The program is compiled as a library for its MIR, so rustc would warn that `main` is never used; that
+  lint is turned off for that build.
+
+## 2026-10-18 · Natively, the built-ins are standard input and output
+
+- **Decision.** `inp()` reads the next number from standard input (numbers separated by spaces or new lines);
+  `out()` prints one on a line of its own.
+- **End of input.** The program stops quietly, as CARDIAC stops when its reader is empty, and prints what it
+  printed until then. A word that isn't a number from -999 to 999 stops it with an error, since no card holds it.
+- **Overflow.** `out()` of a value outside -999..=999 panics, and every native panic prints -999 first (a panic
+  hook, set at the first call to a built-in), the card CARDIAC's panic routine punches. On CARDIAC the value can
+  never reach the punch: with overflow checks on, the arithmetic that made it panics with -999; with them off, a cell
+  keeps the low three digits. So the outputs agree when every value fits, and when an overflowing value goes
+  straight to `out()` with checks on. `examples/collatz.rs`, which turns checks on, prints the same 37 cards both
+  ways from 27, ending in -999.
+- **Why not wrap natively, as a cell does.** Wrapping at `out()` would agree with CARDIAC only for a value printed
+  as soon as it is made, and would print a wrong number without saying so. A panic says so.
+- **Cost.** Values held natively are not checked until they are printed: native Rust keeps an `i16` past 999 that
+  a cell would lose digits of. A panic before the first call to a built-in prints no -999.
+
+## 2026-10-18 · The tape is the output; `cargo cardiac run` runs it
+
+- **Decision.** `cargo cardiac build` writes, beside each program's assembly, `NAME.tape`: the cards CARDIAC loads
+  it from, one per line. `cargo cardiac run` builds a program and runs its tape on the emulator, printing a card a
+  line, so its output and `cargo run`'s can be compared as they are. The flipboard loads the same file.
+- **Format.** Plain text, one signed number a line, `#` comments. Two comments carry meaning: `# phase N` before a
+  later phase's tape, and `# carried ADDRESS LENGTH` for a table. A file anyone can read, edit and print.
+- **Cells that start at 0** are left off the first phase's tape, since memory starts cleared: `examples/primes.rs`'
+  tape has no card for any of its 50 sieve cells. A later phase loads over the one before, so all of its cells are
+  punched.
+- **Phases and input.** Each phase ends with JMP 00, the loader, and the next phase's tape goes in the reader then,
+  ahead of the input still unread. The input is then one stream, read in order by whichever phase reads it, which is
+  what the native build does. The alternative, every phase's tape first and the input after, works only for a
+  program whose first phases read nothing. `examples/powers.rs` reads its input in its first phase. The emulator
+  does this when told the phases (`cardiac::run_phases`); a JMP 00 from cell 02 is the loader's own and doesn't
+  count.
+- **Tables.** A `carried()` table's cells are on the first phase's tape, and `cargo cardiac run` and the flipboard
+  fill them from the start of the input; natively `carried()` reads the same numbers. One stream again.
+- **Size check.** A program or phase over 96 cells is now an error at build time, with its size, rather than a tape
+  that runs past cell 98.
+- **Names.** Output files are named after the binary target, not the source file, so `src/main.rs` of package
+  `countdown` gives `countdown.tape`.
+
+## 2026-10-18 · One command: `cargo cardiac`
+
+- **Decision.** The package is `cargo-cardiac`, and its one binary is the cargo subcommand: `cargo cardiac build`,
+  `run`, `test` and `cardiasm`. The tool's name is written in one place (`TOOL` in `src/lib.rs`), with the cfg it
+  gives rustc (`compile::program::CFG`).
+- **Why.** A program is a Cargo package, and `cargo install cargo-cardiac` then `cargo cardiac build` is what a
+  Rust programmer expects. One binary is one name to keep from clashing with others.
+- **Run in the wrong package.** Run in a package whose binaries can't be CARDIAC programs (rust-cardiac's own, or
+  one that needs a proc-macro crate), it stops and says to run it where the programs are, such as `examples/`.
+
+## 2026-10-18 · Arrays of `bool`
+
+- **Decision.** `[bool; N]` is an array of cells holding 0 or 1, like `[u8; N]`.
+- **Why.** A sieve reads best as an array of crossed-out flags (`examples/primes.rs`). A `bool` local was already
+  one cell; only arrays of them were turned away.
+- **Cost.** None: arrays of other types compile as before.
+
+## 2026-10-18 · A parameter passed straight on shares the argument's cell
+
+- **Decision.** When a function kept as a call reads a parameter only once, as an argument of another call or as
+  an operand of the multiply or divide routine, the parameter lives in that argument's cell. The caller stores
+  straight into it, and the parameter's own cell and the copy (two instructions per call) go. It carries through
+  more than one call: in `fn area(w, h) -> i16 { multiply(w, h) }` with `multiply` doing `x * y`, the caller of
+  `area` stores into `rt_mul_a` and `rt_mul_b`.
+- **When.** Only where the cell is sure to hold until the read: the read is in the function's first block, which
+  nothing jumps back to; nothing before it in that block multiplies or divides (that would use the routines'
+  cells); and the parameter is not part of a struct result, which the caller reads after the call. Calls only end
+  a block, so no other call can come first. A parameter read twice, or changed, keeps its cell.
+- **Why the size check.** The program is compiled with and without it, and the smaller one kept (with it on a
+  tie). It should never be bigger, and the check makes sure. A program where no parameter qualifies is compiled
+  once.
+- **Cost.** None found: every other test program compiles to the same cells. `tests/programs/forward.rs` goes from
+  114 cells, which doesn't fit, to 96, and runs 12 fewer instructions per pass of its loop. The routines change
+  their own cells (the multiply negates its factors), which is one more reason the parameter must not be read
+  again.
+
+## 2026-10-18 · A phase is the blocks its start reaches
+
+- **Decision.** Before main is lowered, its blocks are put in phase order: a phase's blocks are those its start
+  reaches without passing an `overlay()`, kept in their own order, with the `overlay()` last. A block two phases
+  reach is copied into the later one under a new name. The split after lowering is unchanged.
+- **Why.** The split took main's code in rustc's block order and cut it at each `overlay()`. rustc puts an inlined
+  function's blocks after the rest of the function. `tests/programs/phases.rs` fills an array of structs in its
+  first phase through an inlined helper that prints as it goes (`points[n] = step(n as i16)`); the helper's blocks,
+  which belong to the first phase's loop, came after the `overlay()`, so phase 1 jumped into phase 2.
+- **Why copy rather than stop.** Each phase is loaded over the last, so a block both need has to be on both tapes.
+  Functions and routines are already copied into every phase that calls them; a shared block of main is the same.
+- **Cost.** None for programs whose blocks were already in phase order, which compile byte for byte as before; a
+  copied block costs its cells again in the later phase. `cargo cardiac test` runs a phased program as tapes, one
+  per phase, so the split is tested: `tests/programs/phases.rs`, and `phases2.rs`, where both phases need the same
+  loop.
+
+## 2026-10-18 · Programs use other crates, through Cargo
+
+- **Decision.** A program can call functions and use consts from other crates. Programs are the binary targets of a
+  Cargo package and name their crates as its dependencies; `cargo cardiac build` builds them. It reads the package
+  with `cargo metadata`, has rustc compile each dependency to MIR and metadata with the program's own settings
+  (overflow checks, opt-level), compiles the program against that metadata, and joins the MIR texts before the
+  compiler reads them. From then on another crate's function or const is compiled as if it were the program's own,
+  and only what `main` reaches goes on the tape. `cargo cardiac build FILE.rs` stays, for single files that use no
+  other crate.
+- **Why stable rustc's MIR, again.** A driver inside rustc would see every crate's MIR directly, but it needs nightly
+  and `rustc-dev`. rustc already writes a crate's MIR with `--emit=mir`; it only writes it for one crate at a time.
+  Compiling each crate in turn and joining the texts gets the whole program on stable.
+- **Why Cargo.** It is how a Rust program already says what it depends on. A flag of the compiler's own for each
+  crate was tried first and dropped: it worked the same inside, but it was one more thing to learn and keep in step
+  with a `Cargo.toml` that said the same.
+- **Why the same settings.** At opt-level 2 rustc inlines small functions across crates, taking their MIR from the
+  dependency's metadata, so that MIR has to be built the way the program is. With overflow checks on in a program,
+  the inlined code is checked too, as it was when the code was a module of the program.
+- **Names.** rustc prints each name as short as it can while keeping it unique, and decides that separately in
+  each crate: `twice` in its own crate's MIR, `kit::arith::twice` at a call in the program's. A call into another
+  crate is matched to a function there by the end of its path. A dependency's function keeps the name its own crate
+  prints, unless another crate prints the same name, when it gets its crate's name in front. With that, a program
+  compiles to the same cells whether the code it uses is a module of it or a crate of its own.
+- **Not covered.** A generic function rustc doesn't inline: its MIR exists only in generic form, so the build stops
+  with an error naming the call. Two crates defining a const of the same name: consts are found by their last name,
+  so the build stops and names it. Proc-macro crates, and features beyond the defaults.
+- **Cost.** Each dependency is compiled once per setting per build, a fraction of a second. `cargo cardiac` reads
+  `cargo metadata`'s JSON with `serde_json`.
+- **Evidence.** `tests/programs/crates`: a call (kept and inlined), a const table read by the program and by the
+  other crate, struct consts and struct results, and a function that calls another, with a function of the same
+  name in the program. Each matches native Rust at both opt-levels, and each compiles to the same cells as with the
+  other crate as a module. A generic call is rejected with its name.
+
+## 2026-10-18 · The compiler writes CARDIAC assembly, in .asm files
+
+- **Decision.** The compiler's output is called what it is, CARDIAC assembly, and written as `name.asm`. Its
+  header says `cargo cardiac build`. The `.cardiasm` name and the word CARDIASM mean only the separate CARDIASM
+  language (`cargo cardiac cardiasm`), which the compiler doesn't use.
+- **Why not compile to CARDIASM.** The compiler already decides where every value lives, shares cells between
+  values never needed together, and drops what is never read. CARDIASM would place variables itself, from 98
+  down, and add nothing the compiler needs.
+- **Cost.** Tape headers changed, so tapes are no longer byte-identical to the JavaScript compiler's, and the check
+  against it is retired.
+
+## 2026-10-18 · The compiler is Rust: a straight port
+
+Superseded by "The compiler reads MIR into a typed IR" (2026-10-19): the passes no longer use regular expressions.
+
+- **Decision.** The compiler, first written in JavaScript, is ported to Rust pass for pass, as `src/compile`. The
+  port changes nothing the compiler does: every pass, in the same order, with the same regular expressions on the
+  MIR text, run by the `fancy-regex` crate.
+- **Why byte-identical.** A port that also improved things would leave no way to tell a porting mistake from a
+  change. With the output identical for every test program at MIR opt-levels 0, 1 and 2, with overflow checks on
+  and off, optimized and not, the port is checked pass by pass, and any later change to the compiler can be judged
+  on its own.
+- **Why the patterns stayed.** Rewritten as hand-made parsing, 2000 lines of regex-driven passes would each have
+  needed checking again. Kept as they were, each Rust pass reads against the JavaScript line by line. They run
+  on `fancy-regex`, not `regex`, because they use lookahead, lookbehind and back references. A regex engine
+  written for the port was tried first and dropped: 560 lines nobody should have to trust, against one
+  dependency, with identical output.
+- **Cost.** The patterns are as hard to read as they were in JavaScript, and the MIR text format is just as
+  unstable. Compiling is about twice as fast as node; a build of many programs is mostly rustc.
+- **Next.** A driver that reads MIR as rustc's own data structures instead of its text. That needs nightly rustc
+  with the `rustc-dev` component (`rustc_driver`, `rustc_middle`); this port runs on stable and needs neither.
+
+## 2026-10-18 · Arrays of structs are one array per field; struct consts; results copied once
+
+- **Decision.** An array of structs, `[Point; 3]`, is kept as one array per field: `points[i].y` is
+  `points_y[i]`. Taking an element whole (`print(pts[i])`, `pts[1] = diagonal(7)` in `tests/programs/structs3.rs`) works field by field.
+- **Why this layout.** Every array path the compiler already has (built instructions for a variable index, a
+  constant index as a fixed cell, cards read or punched straight into an element) works on each field unchanged.
+  Reading field y of element i needs only i, never i × 3, which CARDIAC would have to add up. Storing a struct's
+  fields side by side would let a whole element be found from one address, but nothing here needs that.
+- **Also:**
+  - A struct const (`const CORNER: Point = ...`, or `Point::ORIGIN` in an `impl`) is replaced at each use by the
+    struct it stands for.
+  - A struct result is read straight out of the function's own cells: one copy, or none when it's only read once
+    (`let p = diagonal(9); out(p.z)` punches the callee's cell). In the rewritten MIR the callee's cell is `@callee.N`.
+  - A field read, through an index or not, goes straight into `out()` or a call's arguments without a scratch
+    cell. A card read and later stored into an element is read straight into it.
+- **Cost.** Each field array needs its own address constants for a variable index (a read and a write
+  constant, a cell each, for each field read or written that way: `tests/programs/structs3.rs` has four), where
+  one flat array with a computed offset would share one set. Programs without arrays of structs compile as before.
+  Structs behind references are still not supported.
+- **Evidence.** `tests/programs/structs3.rs` (arrays of structs) and `structs4.rs` (struct consts and results)
+  match native Rust at both opt-levels.
+
+## 2026-10-18 · Work out a repeated value once
+
+- **Decision.** When a sum, difference, product, quotient, remainder or negation is worked out again from the
+  same values, and every way into that point has already worked it out into one local with nothing changed since,
+  the program takes it from that local instead.
+- **Why.** At opt-level 2 an inlined helper called twice with the same argument is worked out twice: in
+  `tests/programs/repeats.rs`, `far(a, b)` is `if size(a) < size(b) { size(b) } else { size(a) }`, and each
+  `size` is worked out again in the branch it chooses. Writing it into a local by hand shouldn't be the only way to keep a program
+  small.
+- **What it took:**
+  - It checks every way into a block, not just the one above it, so a value worked out on only one side of a
+    branch isn't reused after the join.
+  - A local whose address is taken never takes part.
+  - Comparisons are left out: testing again is cheaper than keeping a bool.
+  - A reuse is kept only when it makes the program smaller. A value that only ever sat in the accumulator would
+    need a store and a cell of its own to keep, more than working out a sum again costs, so without this check a
+    program could grow.
+  - Where rustc has copied a test into two blocks, each setting and testing the same bool, the test and its branch
+    still become one.
+- **Cost.** Compile time only: a reuse is kept only when the program comes out smaller, so it can't make one
+  bigger. Tests: `tests/programs/repeats.rs` and `repeats2.rs` (a sum worked out before a branch and again on one
+  side of it, and again after one of its values changes, where it must be worked out afresh).
+
+## 2026-10-18 · Expression form costs no more than statement form
+
+- **Decision.** Three steps after the other clean-ups, so that `let h = hour(inp())`, `if v < 0 { -v } else { v }`
+  and `let (a, b) = if c { (y, x) } else { (x + 1, y) }` compile as small as the same code written as statements:
+  - **Sharing cells.** Two locals that are never needed at the same time, where one is made from the other, become
+    one cell. The copy between them goes, and `h + 24` is done in place.
+  - **Copies at a join.** Copies at the start of a block that both arms of an `if` jump to are tried in each arm
+    instead, where they can be worked out with the arm's own lines. They stay there only when that leaves fewer
+    lines.
+  - **Block order.** A run of blocks starts at one that nothing else still to be placed jumps to, so more jumps
+    become fall-throughs.
+- **Why.** Readable Rust uses small helpers and `let` with a value. It shouldn't cost cells.
+- **Limits.** Sharing leaves alone a local used in one block only (it already gets a shared scratch cell), and a
+  function's result read once (it is read straight from the function's cell). Both made programs bigger.
+- **Cost.** None known. The three forms are tested in `tests/programs/exprhelp.rs` (helpers that return a value),
+  `exprif.rs` and `exprtuple.rs`.
+
+## 2026-10-18 · Programs also build natively
+
+- **Decision.** The built-ins have a second set of bodies, used in a native build, so the same source runs as an
+  ordinary Rust program. (Since the built-ins became the `cardiac` crate, the native build is `cargo run`; see the
+  first entry.) The CARDIAC build doesn't change: every tape compiles byte for byte the same.
+- **Why.** It checks the compiler directly: the same source, compiled two ways, must print the same cards.
+  `test_examples.sh` runs every example both ways, and `test_compiler.sh` every test program.
+- **Choices:**
+  - `overlay()` does nothing natively, so one call runs every phase.
+  - `promise!()` is an `assert!` natively. On CARDIAC a broken promise is undefined; natively it is an error.
+- **Cost.** Values aren't checked until they are printed: a value past 999 kept in a variable natively is caught
+  only if it reaches `out()`.
+
+## 2026-10-18 · `for` loops over ranges become counter loops
+
+- **Decision.** `for i in a..b`, `a..=b` and either one `.rev()`, over `i16`, `u8` or `usize`, are turned back into
+  the counting loop they stand for, before anything else runs (`compile::forloops`). rustc writes them as calls
+  into the standard library: build a range, call `next()` until it returns nothing. The pass recognises those
+  calls, and at opt-level 2 also rustc's own inlined version of them, and makes each one a test and a step on two
+  cells, the range's start and end. Where the body doesn't need the counter's old value, the step moves to the end
+  of the body and the counter itself is `i`.
+- **Why.** A counted loop is the most common thing in a program, and `for i in 0..n` reads better than a `while`
+  with its own counter.
+- **Cost.** None in size: the loop compiles to the same code as the `while` it replaces, and with overflow checks
+  on it is smaller, because the step can't overflow and needs no check. Programs rewritten with `for` came out the
+  same size or smaller. An inclusive range can't run to the edge of a card (an end of 999, or a start of -999 when
+  reversed): the counter would step one past it. Other iterators (`.iter()`, `.step_by()`, `zip`) still aren't
+  supported.
+- **Also fixed.** A checked add could store its result early into a block that was already compiled, which lost
+  it; only blocks still to come are rewritten now. No existing program hit this.
+
+## 2026-10-18 · Programs compile from MIR at opt-level 2
+
+- **Decision.** rustc is asked for MIR at opt-level 2 (it was 1).
+- **Why.** At opt-level 2 rustc inlines small functions in the MIR, so a helper (`read_point()`, `print(p)`)
+  costs nothing on CARDIAC. That lets programs be written as readable Rust, with named helpers instead of repeated
+  `inp()`/`out()` lines. Mark a function `#[inline(never)]` to keep one shared copy.
+- **What it took:**
+  - The inlined form of `promise!`, an `assume(b)` statement, now cuts its block and is treated like the
+    un-inlined call.
+  - An inlined `p.add(n)` on a raw pointer is `Offset(p, n)`, which is plain addition.
+  - The range analysis now goes through the code in the order it runs, and only gives up on a growing range at
+    the top of a loop. Inlining shuffles the order rustc writes the code in, and giving up anywhere else lost ranges
+    it needed, and bounds checks came back.
+- **Cost.** Mixed: inlining makes some programs smaller and some bigger (a helper called in several places is
+  copied into each). `#[inline(never)]` keeps one copy where that is smaller. The test suite runs at both
+  opt-levels.
+
+## 2026-10-18 · Functions in modules keep their path
+
+- **Decision.** `kit::arith::twice` becomes `kit__arith__twice`, at its definition and at every call.
+- **Why.** Code is organised in modules; the old parser took only bare names.
+
+## 2026-10-18 · Named consts by path; array consts become literals
+
+- **Decision.** A `const` table (`pub const SQUARES: [i16; 16] = [...]`) is read from its body in the MIR, and
+  every use of it by path (`const tables::SQUARES`) becomes the array literal. Scalar consts lose their path, and
+  `i16` and `usize` consts now work as well as `u8`.
+- **Why.** It lets a table live in a module, or in another crate, and still cost nothing extra: used at the top of
+  `main`, an array literal becomes the cells' initial values on the tape, exactly as an inline one would
+  (`tests/programs/tables.rs`, and `tests/programs/crates/xtable.rs` from the crate `kit`).
+- **Cost.** Every use of a const is the whole literal, so a const table used in two functions takes its cells
+  twice.
+
+## 2026-10-18 · Structs become one cell per field
+
+- **Decision.** A struct local is taken apart before any other pass runs (`mir::scalarize_structs`). Each field
+  becomes a local of its own, named after the variable (`p_x`, `p_y`, `p_z` in the debug names). Building, copying
+  and field access all turn into per-field statements.
+- **Passing and returning.** Passing a struct passes its fields as separate arguments, so the callee's parameter
+  splits the same way. A function returning a struct leaves the fields in its own cells, and the caller copies
+  them out after the call (`@callee._N` in the rewritten MIR, the callee's cell `callee_N`).
+- **Why.** CARDIAC has nothing to point at a record with except self-modifying code. Fields in separate cells
+  cost nothing to read: `CLA p_x` is the same instruction as for any local. And every existing pass (the range
+  analysis, copy forwarding, the scratch pool) already understands plain locals, so none of them had to learn
+  about structs.
+- **Costs.**
+  - A struct returned by a function was copied twice: callee cells into a scratch cell, then into the
+    destination (since fixed: see arrays of structs, above).
+  - No struct behind a reference (`&Point`, `&mut Point`): the compiler stops with an error saying so. It needs a
+    struct to have an address, which this layout deliberately avoids (since changed: a shared reference is the
+    value, and a `&mut` is a `&mut` of each field, below).
+  - Fields must be scalars, so there are no nested structs yet (since changed: see nested structs, below).
+- **Evidence.** `tests/programs/structs.rs` and `structs2.rs` match native Rust. Programs without structs compile
+  to byte-identical tapes.
+
+## 2026-10-21 · The overlay convention: a phase stops with the bug on the next tape
+
+- **Decision.** A phase ends with `HRS n`, not `JMP 00`: the machine stops with the bug (the program counter) on n,
+  the number of the tape to load next. The operator puts that tape in the reader, ahead of the input still unread,
+  moves the bug to 00 and presses Run; the loader reads it in. The bug on 00 is a stop for good, as every program
+  already ends (`HRS 0`, the panic routine's too).
+- **Why.** With `JMP 00` the machine never stopped: the loader read the next card at once, so the next tape had to
+  be in the reader already. The emulator put it there the moment the jump ran, an operator who knew the future. On
+  CARDIAC that works only for a deck stacked beforehand, which needs the number of cards each phase reads known in
+  advance; a program like the guessing game, which reads as many cards as the player takes, can't be stacked. A
+  stop is something an operator can see and act on, and naming the tape lets the machine ask for any of them
+  (loading one again is left for later).
+- **Overlay mode belongs to the program.** HRS does what it always did (halt, the bug on its address); only the
+  operator's reading of it is new, and only for a program in phases. A program not in phases can still stop on any
+  cell to be run on from there ("play again?"). In the emulator: `run` halts at any HRS; `run_phases` (`cargo
+  cardiac run`, the tests) feeds the tape asked for; `run_stacked`, for a deck stacked beforehand (as a larger program's is),
+  runs on at 00 with the deck's next card. `JMP 00` is a plain jump into the loader again, as on the machine.
+- **Rejected: a flag in the accumulator** (a tape number in it at the stop). Every program halts with whatever its
+  accumulator holds, a panic with the value that overflowed, so an old program could look like a request; and it
+  costs a CLA at each stop.
+- **Cost.** None: `HRS n` is one cell, as `JMP 00` was. A larger program's listings changed in 11 lines (`JMP 00` to
+  `HRS 02`), its cells not at all, its renders identical to native. The peephole's rules that took any HRS for the
+  program's end (a scratch cell or a constant read after it, a load before it) now take only `HRS 0`.
+
+## 2026-10-21 · auto-overlay: the compiler places the phases
+
+- **Decision.** A setting, off by default: `auto-overlay = true` under `[package.metadata.cardiac]` (a single
+  file: `--auto-overlay`). On, a program whose main doesn't fit in memory is cut into phases by the compiler, and
+  an `overlay()` in main is an error. Off, nothing changes: the program places its phases with `overlay()`.
+- **Where it cuts.** Main's optimized blocks, once the passes are done and before anything is decided block by block
+  (`phases::cut_points`): on a way from one block to the next, or between two statements of a block, where every run
+  passes once on its way to main's return and that is the only way into the rest, so a phase is never loaded twice.
+  A main that never returns gets no cut. Each place is compiled and measured; the split kept is the
+  smallest in all whose phases each fit with the shared data, a tie going to the smaller largest phase. When no one
+  cut is enough, the cut that leaves the largest phase smallest is kept and another is looked for, up to 4 phases.
+- **Why a setting, and why overlay() is an error with it on.** The programmer decides whether the compiler
+  tries at all, and falls back to `overlay()` with it off; with it on, `overlay()` has no place in the source. A
+  program that mixed the two would have its own cuts and the compiler's to reconcile.
+- **Phase order.** A phase now starts with the block it is entered at. The loader starts a phase at its first line,
+  and blocks came in rustc's numbering; the block a cut returns to can be numbered after others of its phase.
+- **Evidence.** A larger program's 11 machines with `overlay()`, the calls taken out and the setting on: eight split with
+  exactly the cells of the hand-placed cut (rotor's is mid-block), and solid, compose and floor no longer need a
+  second phase (96, 94 and 90 cells); renders identical to native. That program's whole build takes under a second.
+  `tests/programs/auto_overlay.rs` (2^60 in digits) runs past memory without the setting and matches native with
+  it.
+- **Fuzzing.** `CARDIAC_FORCE_CUT=K[,K...]` cuts every program at its Kth places, fit or not; with it, `sh fuzz.sh
+  --generate` checks split programs against native in every setting. It found three faults, fixed: cuts inside an
+  `if`'s arm (passed by some runs, not all), a cut through a block whose temporary was already a scratch cell, and
+  cuts in a main that always panics; and a phase that starts with a panic (below), on main too. Then 1,200 programs, 12 seeds, one to three cuts each,
+  about 29,000 runs: no difference.
+- **Cost.** A program too big compiles once per place it could be cut, and again per extra phase. Only cuts in
+  main, never in a function it calls or inside a loop.
+## 2026-10-21 · A phase that starts with a panic keeps its jump to it
+
+- **Decision.** The peephole's look back for "the line before", which takes over a dropped `JMP rt_panic`'s check
+  when the panic routine comes next, stops at a phase's start. A phase whose code starts with the panic keeps its
+  jump.
+- **Why.** The line before was the last of the phase before, a different tape: the check was filed under that
+  phase, and `rt_panic`'s label, which nothing named any more, went too, so the panic map had no stop for the phase.
+  `cargo cardiac run` punched -999 and exited 0, where Rust exits 101. Found by fuzzing auto-overlay with forced cuts.
+- **Cost.** One cell (the JMP), only in a phase that starts by panicking. `tests/programs/panic_phase.rs`.
+
+## 2026-10-21 · A negative word is skipped, and kept for new instructions
+
+- **Decision.** The emulator skips a cell holding a negative number when it is reached as an instruction: a no-op,
+  as Brian Stuart's simulator (https://www.cs.drexel.edu/~bls96/museum/cardiac.html) has it, where the 1969 manual
+  says nothing. Before, it ran the word's digits (-123 as `CLA 23`).
+- **Why.** It leaves the negative words free, an opcode space for new instructions later (-0xx to
+  -9xx), where running their digits would have given them a meaning already. The flipboard's two extensions live
+  there already, CUT n as -(600 + n) and LDC n as -(100 + n); the emulator, with no card rack, took them for STO
+  and CLA, and now passes over them. It also matches the simulator that
+  settles the manual's other open questions, and agrees with ours on all of them (a 4-digit accumulator, STO
+  keeping the low three digits, cell 00 fixed at 001, JMP writing 800 plus the next address into 99).
+- **Cost.** None to compiled programs, which never execute a negative word; only a program that runs into its own
+  data behaves differently.
+
+## 2026-10-21 · A later phase's opening constants, dead stores, and ways in that can't be taken
+
+Three small ones a larger program's rewrite in plain Rust found, each a few cells where the plain form cost more:
+- **A later phase's opening run**. Main's opening blocks, run once, store their constants as their cells'
+  initial values on the tape. So now does the run each `overlay()` returns to, for a local no earlier phase names:
+  its cell is punched by a tape before anything reads it. `overlay(); for _ in 0..96 {..}` starts its counter at -96
+  on the tape, not with a CLA and STO in phase 2 (phase 2: 10 cells to 7).
+- **Dead stores** (`blocks::dead_stores`). A value or a comparison stored where no way on reads it before it
+  is set again goes, by liveness: `if (0..36).contains(&c)` left `_2 = const false` on its false way, past the test
+  that read it (14 cells to 10, the hand-written `c >= 0 && c < 36`). Only plain locals whose address is never
+  taken; a return reads the result.
+- **Ways in that can't be taken**. The range pass joins what holds on each way into a block; a way on which
+  some range is empty (`233 <= x` on the way out of `x < 233`) is never taken, and is left out of the join. The
+  descending `match l { 233.. => 3, 124..233 => 2, 31..124 => 1, ..31 => 0 }` loses its redundant test: 30 cells,
+  as ascending, from 33.
+
+## 2026-10-21 · A constant past a card is a compile-time error, always
+
+- **Decision.** A constant no card holds, written or folded by rustc (`if x == 0 { 0 } else { 101 * 10 }`, where
+  rustc hands the compiler 1010), stays refused, whether or not a run would reach it, with a message that says so in
+  Rust's terms. The fuzzer counts such a program as one past a card, never as a finding.
+- **Why.** It is what Rust does with overflow it can see: `30000 * 2` in an i16 is an error (`arithmetic_overflow`,
+  deny by default) in debug and release builds, in a branch that never runs too, and `i16::MAX + 1` in a `const` is
+  E0080. A card is the CARDIAC i16. Panicking at run time instead would put off an error rustc's own rules make a
+  compile-time one.
+- **Cost.** It is as good as rustc's constant folding, which depends on the opt-level: the same expression may be
+  refused at one and panic as an overflow at run time at another. rustc's lint has the same limit.
+
+## 2026-10-21 · Range patterns and consecutive arms cost what an if chain does
+
+- **Decision.** Two changes to how a `match` is tested, both about comparison, what costs on CARDIAC. The range
+  pass now settles a test written `k <= x` (the constant first, as rustc writes a range pattern's start) as it did
+  `x >= k`, and the peephole drops a TAC straight after another TAC, which never jumps. And a switch whose
+  arms are consecutive values (`0 => .., 1 => .., 2 => ..`, an enum's variants) is one subtraction, x - v0 below 0
+  the other way, then `SUB 00; TAC arm` for each value in turn, where each arm was an equality, two tests.
+- **Why.** A larger program rewritten in plain Rust: `match y { ..6 => 0, 6..13 => 1, 13..19 => 2, _ => 3 }` was 34 cells
+  against 30 for the first-match form or the if chain; `match s { 0 => .., 1 => .., 2 => .., _ => .. }` was 39
+  against 30 for `..=0 / ..=1 / ..=2`.
+- **Cost.** The disjoint form is now 30 cells, the consecutive one 32: its first test (x below v0) stays when the
+  ranges show x can't be, as the lowering doesn't see them.
+- **Evidence.** `tests/programs/match_ranges.rs` and `switch_consecutive.rs` match native Rust.
+
+## 2026-10-21 · A counter that only counts counts to 0
+
+- **Decision.** After the range pass (`blocks::rebase_counters`), a local that is only set to constants,
+  stepped by a constant and compared with one constant m (`c < k` read as `c < m`, `c <= k` as `c < k + 1`) counts
+  from each constant minus m up to 0, and is compared with 0: `for _ in 0..96` is the `for _ in -96..0` a
+  CARDIAC programmer writes. A loop `for _ in a..n`, n known only at run time, counts n down instead and drops its
+  counter, the step first in the body where the test's subtraction is the new n: what `(a..n).rev()` compiles to.
+  That needs n to hold the bound whenever the counter starts and to stay put while it counts: from the counter's
+  block no way back to it but through a line that sets n, from such a line no way to the test but through that
+  block, and from that block on nothing reads n but the test. So n may be a parameter, set on one arm of an
+  `if`, set again before each run of an inner loop, or set before `overlay()`.
+- **Why.** Comparison is what costs on CARDIAC: its one test is "below 0", so `c < 96` is a subtraction, a TAC and
+  a cell for 96, where `c < 0` is the TAC alone. Every group of a larger program's machines, rewritten in plain Rust, found
+  `for _ in 0..N` 1 to 3 cells over the hand-written loop, and wrote `-N..0` with a comment to say why.
+- **Cost.** A counter whose value is read (`for x in 0..96` using x) is left as it is. So is one compared with two
+  bounds, or set from a variable.
+- **Evidence.** `for _ in 0..96 { out(k - inp()) }` is 14 cells, from 16, as `-96..0` is; `for _ in 0..n` is 11,
+  from 14, as `(0..n).rev()` is. `tests/programs/count_loops.rs` and `count_down.rs` match native Rust.
+
+## 2026-10-21 · Nested structs, and structs behind a `&mut`, are taken apart leaf by leaf
+
+- **Decision.** A struct's field may be a struct, an enum with data (which the enum pass has written as a struct),
+  or an array of scalars. The struct pass takes a struct apart into its leaves: its fields, with each field
+  that is a struct its own leaves in turn (`Line { a: Point, b: Point }` is `l_a_x`, `l_a_y`, `l_b_x`, `l_b_y`).
+  A place is one leaf's cell (`((_1.0: Point).1: i16)` is `l_a_y`) or, when it names a struct, a run of them,
+  which a copy, a call's argument or a result copies cell by cell. A `&mut` to a struct is a `&mut` of each leaf:
+  `(*r).x` is `*r_x`, `r = &mut p` is `r_x = &mut p_x; r_y = &mut p_y`, and passing r passes each.
+- **Why.** It keeps the one rule of the struct pass: every later pass sees plain cells. It is what the enum pass
+  already did for an enum within an enum, and it lets an enum carry a struct (`Option<Point>`) or sit in one
+  (`struct Card { kind: Option<i16> }`) without either pass knowing about the other. A variant carrying a tuple of
+  scalars (`Option<(i16, i16)>`) carries the struct such a tuple is written as, `tuple__i16_i16`.
+- **Cost.** A `&mut` is an address a cell: each read or write through it is self-modifying code. Passing the
+  values in and copying them back would be cheaper for a function that touches each field. An array within
+  a struct can't be behind a `&mut` or in an array of structs yet, nor an enum in a struct in an enum.
+- **Evidence.** `tests/programs/struct_nested.rs`, `struct_mut.rs`, `struct_array_field.rs`, `enum_field.rs`,
+  `enum_field_mut.rs`, `enum_mut.rs`, `enum_payload.rs`, `enum_payload_array.rs` and `enum_payload_mut.rs` match
+  native Rust; no other test program changed size.
+
+## 2026-10-18 · `digit(v, k)` is built in, and compiles to a shift made on the spot
+
+- **Decision.** Taking digit k of a three-digit card compiles to `SFT (k+1)3`, built for k and run (5 cells).
+  The Rust function has a body, used by native builds, that says what it means.
+- **Why.** When k is a variable, the Rust equivalent picks one of three divisions by it.
+  `tests/programs/digit.rs`, which prints each digit of three numbers from an array, is 38 cells with `digit()`
+  and 57 with `digit()`'s own Rust body written in its place; `examples/cipher.rs` is 57 cells with it and 71
+  without.
+- **Cost.** It is the one place where a hand-written CARDIAC trick lives in the compiler rather than coming
+  from Rust code.
+
+## 2026-10-18 · `promise!(c)` is `core::hint::assert_unchecked`
+
+Superseded by "`assume()`, an unsafe fn, replaces `promise!`" (2026-10-20).
+
+- **Decision.** No code. The condition becomes a fact for the range analysis, so bounds checks it proves can go.
+- **Why.** Programs know things about their input that no analysis can see (a month is 1..=12). Rust already has
+  the honest way to say that.
+- **Cost.** A broken promise is undefined behaviour, as in Rust. Natively it is an `assert!`, so running the
+  program with `cargo run` on the same input catches a wrong promise.
+
+## 2026-10-18 · `carried()`: tables that come on the tape
+
+Superseded in part by "A loader binds resources, not a linker" (2026-10-19): the table is a named resource, never
+filled from the input.
+
+- **Decision.** `let t: [i16; N] = carried();` compiles to nothing. It is a lookup table given at run time, ahead
+  of the input: the tape records where its cells are (`# carried`), and its cells are filled from the start of the input when the tape is run, so CARDIAC's loader
+  puts it in memory with the program's own cells. Natively `carried()` reads the same first N numbers.
+- **Why.** The table is data, not code: a different key, price list or conversion table needs no new build. And
+  loading it with the program costs no code. `examples/cipher.rs` takes its ten-digit key this way in 57 cells;
+  read with `for i in 0..10 { key[i] = inp(); }` instead, it is 70.
+- **Cost.** Natively, `carried()` must come before the first `inp()`, since its numbers are the first of the
+  input.
+
+## 2026-10-17 · Range analysis runs until nothing changes
+
+- **Decision.** The analysis goes round the whole program until no range changes. A range still growing after six
+  rounds jumps to the next of the program's own constants (a loop's limit, say), and six more rounds then pull the
+  ranges back in where the loop's own test allows.
+- **Why.** The first, single-pass version couldn't prove a loop counter in range. That cost bounds checks, and
+  programs no longer fit.
+
+## 2026-10-17 · The panic card
+
+- **Decision.** Every failed check jumps to one shared routine, `rt_panic`, which punches -999 from a constant cell
+  and halts (`OUT kn999`). One routine for every check keeps each check to a test and a jump.
+- **Cost.** Three cells (the two instructions and the constant), in programs that keep a check.
+
+## 2026-10-16 · Programs compile like a release build
+
+- **Decision.** Overflow checks are off and bounds checks are on, as in `cargo build --release`.
+  `// cardiac: overflow-checks=on` turns overflow checks back on.
+- **Why.** Overflow checks cost cells on every add, and programs don't fit with them. A program whose values stay
+  on a card never needs them; the native build, with checks on in a debug build, shows the ones that don't.
+
+## 2026-10-12 · An `i16` is a card
+
+- **Decision.** `i16` (and `i32`, Rust's default integer) lives in one cell, -999..999. Past that it panics
+  when checks are on.
+- **Why.** That's what a CARDIAC cell holds. The limit is CARDIAC's, not Rust's, and the README says so.
+
+## 2026-10-12 · Take MIR from stable rustc; compile it ourselves
+
+- **Decision.** rustc does parsing, types, the borrow checker and its own optimisation, and writes out MIR, its
+  simplified form of the program (`--emit=mir`). rust-cardiac compiles that text.
+- **Why.** No nightly toolchain, no LLVM backend for a decimal machine, and every front-end guarantee Rust makes
+  still holds.
+- **Cost.** The MIR text format is unstable ("intended for human consumers only"), and only the crate being
+  compiled has MIR (so other crates are compiled to MIR one by one: see "Programs use other crates"). A backend
+  inside rustc is the long-term fix.

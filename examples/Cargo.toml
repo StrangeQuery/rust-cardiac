@@ -1,0 +1,79 @@
+# Example programs. Each is an ordinary Rust program: `cargo run --bin NAME` runs it here, and
+# `cargo cardiac build --bin NAME` builds its deck, NAME.cqb, and `burn NAME.cqb` runs it on CARDIAC. Both print the same numbers.
+[package]
+name = "examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+autobins = false
+
+[dependencies]
+cardiac = { path = "../cardiac" }
+
+[[bin]]
+name = "hello"
+path = "hello.rs"
+
+[[bin]]
+name = "fibonacci"
+path = "fibonacci.rs"
+
+[[bin]]
+name = "fizzbuzz"
+path = "fizzbuzz.rs"
+
+[[bin]]
+name = "primes"
+path = "primes.rs"
+
+[[bin]]
+name = "gcd"
+path = "gcd.rs"
+
+[[bin]]
+name = "sort"
+path = "sort.rs"
+
+[[bin]]
+name = "powers"
+path = "powers.rs"
+
+[[bin]]
+name = "cipher"
+path = "cipher.rs"
+
+[[bin]]
+name = "days"
+path = "days.rs"
+
+[[bin]]
+name = "days_assumed"
+path = "days_assumed.rs"
+
+[[bin]]
+name = "runs"
+path = "runs.rs"
+
+[[bin]]
+name = "rot13"
+path = "rot13.rs"
+
+[[bin]]
+name = "guess"
+path = "guess.rs"
+
+[[bin]]
+name = "nim"
+path = "nim.rs"
+
+[[bin]]
+name = "map"
+path = "map.rs"
+
+[[bin]]
+name = "reduce"
+path = "reduce.rs"
+
+[[bin]]
+name = "voxel"
+path = "voxel.rs"

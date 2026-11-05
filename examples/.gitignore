@@ -1,0 +1,16 @@
+# what cargo cardiac build and cargo cardiac test write
+*.asm
+*.cqb
+*.mir
+*.map
+*.cqb.meta
+*.cq
+# the height maps terrain.sh makes, and what voxel.sh draws
+hills.pgm
+islands.pgm
+alps.pgm
+sines.pgm
+voxel.ppm
+voxel.png
+voxel_map.ppm
+voxel_map.png

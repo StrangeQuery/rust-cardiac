@@ -1,0 +1,16 @@
+# The Collatz example, a package of its own: it is built with overflow checks on (the top-level Cargo.toml's
+# [profile.*.package.collatz]), where the other examples have them off. `cargo run -p collatz` runs it here, and
+# `cargo cardiac build -p collatz` and `burn collatz/collatz.cqb` on CARDIAC.
+[package]
+name = "collatz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+autobins = false
+
+[dependencies]
+cardiac = { path = "../../cardiac" }
+
+[[bin]]
+name = "collatz"
+path = "collatz.rs"

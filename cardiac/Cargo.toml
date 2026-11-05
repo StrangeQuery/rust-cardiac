@@ -1,0 +1,17 @@
+[package]
+name = "cardiac"
+version = "0.1.0"
+edition = "2021"
+# the [lints] table
+rust-version = "1.74"
+description = "The built-ins of a Rust program for CARDIAC: inp(), out() and friends. They run on your machine with cargo run, and cargo-cardiac compiles them to CARDIAC instructions."
+license = "MIT"
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["cardiac", "compiler", "retrocomputing", "education"]
+categories = ["compilers", "emulators"]
+
+[lints.rust]
+# set by the CARDIAC compiler when it builds this crate; never by cargo
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(cardiac)"] }

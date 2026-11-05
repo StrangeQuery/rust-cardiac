@@ -1,0 +1,77 @@
+[package]
+name = "cargo-cardiac"
+version = "0.1.0"
+edition = "2021"
+# the compiler reads the MIR text that rustc 1.97 prints, so that is the rustc it needs, to build and to run
+rust-version = "1.97"
+description = "Rust for CARDIAC: a cargo subcommand that compiles a Rust program to a CARDIAC deck, for burn or Cardigan to run"
+license = "MIT"
+repository.workspace = true
+homepage.workspace = true
+# a command: its documentation is the project's page, not an API on docs.rs
+documentation = "https://lab.strangequery.com/carbide/"
+readme = "README.md"
+keywords = ["cardiac", "compiler", "cargo-subcommand", "retrocomputing", "mir"]
+categories = ["compilers", "development-tools::cargo-plugins", "emulators"]
+# examples/ is a package of its own (the example programs), not cargo examples of this one
+autoexamples = false
+# what crates.io gets: the command, its source and how to build it
+include = ["/src", "/build.rs", "/README.md", "/LICENSE"]
+
+[[bin]]
+name = "cargo-cardiac"
+path = "src/main.rs"
+
+[profile.release]
+debug = false
+
+# dev builds the examples optimized, as embedded Rust does; debuginfo, debug assertions and incremental change the MIR
+[profile.dev.package.examples]
+opt-level = 2
+overflow-checks = false
+debug-assertions = false
+debug = false
+incremental = false
+
+[profile.dev.package.cardiac]
+opt-level = 2
+overflow-checks = false
+debug-assertions = false
+debug = false
+incremental = false
+
+# collatz counts on its overflow checks to stop where a card overflows: on in dev and in release
+[profile.dev.package.collatz]
+opt-level = 2
+overflow-checks = true
+debug-assertions = false
+debug = false
+incremental = false
+
+[profile.release.package.collatz]
+overflow-checks = true
+
+# checked: the dev build with debug assertions on, so an assume() is checked on CARDIAC too
+[profile.checked]
+inherits = "dev"
+
+[profile.checked.package.examples]
+debug-assertions = true
+
+[profile.checked.package.cardiac]
+debug-assertions = true
+
+[dependencies]
+serde_json = "1"
+# CARDIAC itself: the emulator, tapes, the assembler and CARDIASM
+heartburn = { version = "0.1.0", git = "https://github.com/StrangeQuery/cardiaq", rev = "496c1e4d643de352e05efe7d210182d79e91fa7a" }
+
+[workspace]
+members = ["cardiac", "examples", "examples/collatz"]
+# the compiler's test package for programs of two crates: built only by the tests
+exclude = ["tests/programs/crates"]
+
+# the repository's address and the project's page, for both published crates
+[workspace.package]
+repository = "https://github.com/StrangeQuery/rust-cardiac"
+homepage = "https://lab.strangequery.com/carbide/"

@@ -1,0 +1,20 @@
+# The fuzzer's programs (fuzz.sh): a name, the program's source, and the inputs each run gets, in order.
+# An input is LO..HI, one number in that range; NxLO..HI is N of them, and N-MxLO..HI between N and M of them.
+# The ranges keep each program's promises (assume): breaking one is undefined, not a miscompile.
+# These are the written programs; `fuzz.sh --generate N` makes programs of its own (tests/fuzz/generate.rs).
+gcd           examples/gcd.rs                 -999..999 -999..999
+sort          examples/sort.rs                10x-999..999
+powers        examples/powers.rs              0..120
+cipher        examples/cipher.rs              1-6x0..999
+days          examples/days.rs                -999..999
+days_assumed  examples/days_assumed.rs        1..12
+collatz       examples/collatz/collatz.rs     -999..999
+divide        tests/fuzz/programs/divide.rs   -999..999 -999..999
+multiply      tests/fuzz/programs/multiply.rs -31..31 -31..31
+compare       tests/fuzz/programs/compare.rs  -999..999 -999..999
+edges         tests/fuzz/programs/edges.rs    -999..999
+promise       tests/fuzz/programs/promise.rs  1..999 0..999
+branches      tests/fuzz/programs/branches.rs -99..99 1..999
+tables        tests/fuzz/programs/tables.rs   -2..5 -2..5
+sums          tests/fuzz/programs/sums.rs     1-8x-300..300
+early         tests/fuzz/programs/early.rs    -999..999

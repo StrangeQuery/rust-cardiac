@@ -1,0 +1,16 @@
+target/
+# the compiler's output for the test programs (`cargo cardiac test` writes them next to the sources)
+tests/programs/*.asm
+tests/programs/*.mir
+tests/programs/*.cqb
+tests/programs/*.map
+tests/programs/*.cqb.meta
+tests/programs/*.cq
+tests/programs/crates/*.asm
+tests/programs/crates/*.mir
+tests/programs/crates/*.cqb
+tests/programs/crates/*.map
+tests/programs/crates/*.cqb.meta
+tests/programs/crates/*.cq
+# rustc's internal error reports, which the test scripts check for
+rustc-ice-*.txt

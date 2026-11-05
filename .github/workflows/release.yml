@@ -1,0 +1,83 @@
+# A release: on a tag vX.Y.Z, build cargo-cardiac and the CARDIAC driver for each platform and attach them to the
+# tag's GitHub release. Two archives a platform: cargo-cardiac-TARGET.tar.gz (both programs, for installing by hand
+# or by Homebrew) and cardiac-driver-TARGET.tar.gz (the driver alone, which cargo-cardiac downloads for itself when
+# it was installed from crates.io). The driver runs on the nightly driver/rust-toolchain.toml pins, so each one is
+# built on its own platform's runner, msvc and gnu Windows apart.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14 }
+          - { target: x86_64-apple-darwin, os: macos-15-intel }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
+          - { target: x86_64-pc-windows-gnu, os: windows-2022 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchains
+        run: |
+          rustup toolchain install "stable-${{ matrix.target }}" --profile minimal --force-non-host
+          echo "STABLE=stable-${{ matrix.target }}" >> "$GITHUB_ENV"
+          nightly=$(sed -n 's/^channel = "\(.*\)"/\1/p' driver/rust-toolchain.toml)
+          rustup toolchain install "$nightly-${{ matrix.target }}" --profile minimal --component rustc-dev,llvm-tools --force-non-host
+          echo "NIGHTLY=$nightly-${{ matrix.target }}" >> "$GITHUB_ENV"
+      - name: MinGW's binutils (the gnu driver links with them)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          C:/msys64/usr/bin/pacman -S --noconfirm --needed mingw-w64-x86_64-binutils
+          echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
+      - name: cargo-cardiac
+        run: cargo "+$STABLE" build --release --locked --target ${{ matrix.target }}
+      - name: The driver
+        working-directory: driver
+        run: cargo "+$NIGHTLY" build --release --locked --target ${{ matrix.target }}
+      - name: Compile an example with them
+        run: |
+          exe=; [[ ${{ matrix.target }} == *windows* ]] && exe=.exe
+          CARDIAC_DRIVER="$PWD/driver/target/${{ matrix.target }}/release/cardiac-driver$exe" \
+            "target/${{ matrix.target }}/release/cargo-cardiac$exe" cardiac build -p collatz
+          git diff --exit-code examples/collatz
+      - name: Archives
+        run: |
+          exe=; [[ ${{ matrix.target }} == *windows* ]] && exe=.exe
+          mkdir -p dist/both dist/driver
+          cp "target/${{ matrix.target }}/release/cargo-cardiac$exe" "driver/target/${{ matrix.target }}/release/cardiac-driver$exe" README.md LICENSE dist/both/
+          cp "driver/target/${{ matrix.target }}/release/cardiac-driver$exe" dist/driver/
+          tar -czf "cargo-cardiac-${{ matrix.target }}.tar.gz" -C dist/both .
+          tar -czf "cardiac-driver-${{ matrix.target }}.tar.gz" -C dist/driver .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: "*.tar.gz"
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Checksums and the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum *.tar.gz > SHA256SUMS
+          gh release create "${{ github.ref_name }}" *.tar.gz SHA256SUMS --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" --notes "Install: cargo install cargo-cardiac. See https://lab.strangequery.com/carbide/"
