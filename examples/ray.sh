@@ -14,6 +14,8 @@
 #           side once in 120
 #   OUT     the picture's file (ray.ppm)
 #   BURN    another burn
+#   VERBOSE 1 to say each machine's run on standard error: its cards before it starts, then what it output and how
+#           many instructions it took; and at the end, how many runs and instructions the frame took in all
 set -e
 cd "$(dirname "$0")"
 BURN=${BURN:-burn}
@@ -29,7 +31,20 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 run() {   # MACHINE CARD...: runs the machine's deck on those cards and gives what it outputs, on one line
   m=$1; shift
-  "$BURN" ray/$m.cqb -- "$@" 2>/dev/null | tr '\n' ' '
+  if [ -z "$VERBOSE" ]; then
+    "$BURN" ray/$m.cqb -- "$@" 2>/dev/null | tr '\n' ' '
+    return
+  fi
+  # burn ends by saying how the program stopped and after how many instructions, all its phases together
+  printf '%-8s %s' "$m" "$(cards "$@")" >&2
+  out=$("$BURN" ray/$m.cqb -- "$@" 2>"$work/said" | tr '\n' ' ')
+  n=$(sed -n 's/.* after \([0-9]*\) instructions.*/\1/p' "$work/said" | tail -1)
+  printf ' -> %s (%s instructions)\n' "$(cards $out)" "${n:-?}" >&2
+  echo "${n:-0}" >> "$work/counts"
+  printf '%s' "$out"
+}
+cards() {   # CARD...: the cards, the first eight and how many more when there are more than ten
+  if [ $# -le 10 ]; then echo "$*"; else echo "$1 $2 $3 $4 $5 $6 $7 $8 ... ($# cards)"; fi
 }
 
 # The frame: sway is dealt the frame's line of the sine table and works out the ball's x; hop works out its height
@@ -77,3 +92,7 @@ awk -v out="$OUT" 'BEGIN {
 rm -f "${OUT%.ppm}.png"
 if command -v sips >/dev/null; then sips -s format png "$OUT" --out "${OUT%.ppm}.png" >/dev/null 2>&1 || true; fi
 echo "ray.sh: wrote $OUT (frame $FRAME, every ray on CARDIAC)"
+if [ -n "$VERBOSE" ]; then
+  awk '{ n++; total += $1 } END { printf "ray.sh: %d runs of the machines, %d CARDIAC instructions\n", n, total }' \
+    "$work/counts" >&2
+fi
