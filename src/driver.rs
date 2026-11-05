@@ -156,7 +156,7 @@ fn installed() -> Option<PathBuf> {
 }
 
 /// Where the releases are: each one's driver for a platform is cardiac-driver-TARGET.tar.gz in its release.
-const RELEASES: &str = "https://github.com/StrangeQuery/rust-cardiac/releases/download";
+const RELEASES: &str = "https://github.com/StrangeQuery/cargo-cardiac/releases/download";
 
 /// Download this version's driver for this platform into `installed`, with curl and tar (both come with macOS,
 /// Windows 10 and later, and every Linux), and give where it is. Unpacked beside its place and moved there whole,
@@ -204,7 +204,7 @@ fn download() -> Result<PathBuf, String> {
 /// Why there is no driver, and how to build one.
 pub fn missing() -> String {
     format!(
-        "no CARDIAC driver ({NAME}), which compiles every program: build it in rust-cardiac's repository with \
+        "no CARDIAC driver ({NAME}), which compiles every program: build it in cargo-cardiac's repository with \
          `cd driver && cargo build --release` (rustup installs the nightly it needs, {TOOLCHAIN}, with its \
          rustc-dev component, from driver/rust-toolchain.toml), then put it beside cargo-cardiac or name it with \
          CARDIAC_DRIVER"

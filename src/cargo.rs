@@ -55,7 +55,7 @@ fn cargo() -> String {
 pub fn packages(manifest: Option<&str>, package_name: Option<&str>) -> Result<Vec<Package>, String> {
     let cargo = cargo();
     // offline first: a program's package needs nothing from the network (its own dependencies, if it has any, are
-    // already in cargo's cache once it has been built), and in rust-cardiac's own workspace cargo would otherwise
+    // already in cargo's cache once it has been built), and in cargo-cardiac's own workspace cargo would otherwise
     // fetch the tool's dependencies just to resolve the graph. Online only if that fails.
     let metadata = |offline: bool| -> Result<std::process::Output, String> {
         let mut cmd = Command::new(&cargo);

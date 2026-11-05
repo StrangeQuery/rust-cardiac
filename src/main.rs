@@ -41,7 +41,7 @@ Settings, as cargo and rustc take them:
   A package is built with a Cargo profile: dev, release with --release, or the one --profile names, as
   [profile.NAME] in the workspace's Cargo.toml sets it. A single file has no Cargo.toml, so it takes
   rustc's flags, with rustc's defaults: opt-level 0, and overflow checks on at opt-level 0, off above.
-  The opt-level is rustc's, and it also sets how hard rust-cardiac's own passes work: none at 0, all of
+  The opt-level is rustc's, and it also sets how hard cargo-cardiac's own passes work: none at 0, all of
   them at 1 and up. At 0 few programs fit in CARDIAC's memory.
 
 Phases:
@@ -60,7 +60,7 @@ How much it says:
                     with its kind in \"reason\", as cargo's: compiling, compiled, note, error.
                     --message-format=human, the default, is lines for a person
 
-For developing rust-cardiac:
+For developing cargo-cardiac:
   {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] FILE.rs
           [-- INPUT...]
   {t} test [--manifest-path PATH] [-p NAME] [--release | --profile NAME] --bin NAME [-- INPUT...]
@@ -415,7 +415,7 @@ fn chosen<'a>(pkgs: &'a [Package], bins: &[String]) -> Vec<(&'a Package, &'a Tar
             p.problem.clone()
         };
         if let Some(why) = why {
-            die(format!("{}'s binaries can't be compiled for CARDIAC: {why}.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in rust-cardiac's repository, or name one with --manifest-path.", p.name));
+            die(format!("{}'s binaries can't be compiled for CARDIAC: {why}.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in cargo-cardiac's repository, or name one with --manifest-path.", p.name));
         }
     }
     for b in bins {

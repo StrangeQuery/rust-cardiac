@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
 
-# rust-cardiac
+# cargo-cardiac
 
 Rust compiled to CARDIAC.
 
@@ -162,7 +162,7 @@ colour code in the picture is CARDIAC's.
 ## What Rust is supported
 
 rustc does all of the front end: parsing, type checking, the borrow checker. A program it rejects never reaches
-CARDIAC, and you get Rust's own errors. rust-cardiac compiles what rustc writes out. In short:
+CARDIAC, and you get Rust's own errors. cargo-cardiac compiles what rustc writes out. In short:
 
 - **Works well:** `i16` (a card's -999..=999), `u8`, `usize`, `bool`; `+`, `-` and comparisons, `*` by a constant,
   `/` and `%` by a power of ten; `if`, `while`, `loop`, `match` on integers, `for` over a range; fixed-size arrays,
@@ -310,7 +310,7 @@ and `cargo build` builds natively. `cargo cardiac` is what builds for CARDIAC, w
 
 ## How it works
 
-    Rust --rustc (the CARDIAC driver)--> MIR --rust-cardiac, in rustc--> CARDIAC assembly --assembler--> deck
+    Rust --rustc (the CARDIAC driver)--> MIR --cargo-cardiac, in rustc--> CARDIAC assembly --assembler--> deck
 
 `cargo cardiac build` reads the package with `cargo metadata`, then runs `cargo check` on it with the profile, in a
 target directory of its own, with the CARDIAC driver as cargo's rustc. The driver is rustc with a CARDIAC backend:
@@ -356,7 +356,7 @@ is lowered as rustc wrote it.
 Cells, for the programs in `tests/programs`. "Literal lowering" is MIR at opt-level 0, overflow checks on, with the
 optimizer off; `cargo cardiac build` is opt-level 2, overflow checks off.
 
-## Developing rust-cardiac
+## Developing cargo-cardiac
 
 [CONTRIBUTING.md](CONTRIBUTING.md) says how to build and test the compiler, and how to send us a pull request.
 

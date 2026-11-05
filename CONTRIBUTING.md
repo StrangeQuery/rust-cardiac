@@ -1,4 +1,4 @@
-# Building and testing rust-cardiac
+# Building and testing cargo-cardiac
 
 This is how we build the compiler from source, how we test it, and how to send us a change. If you only want to
 compile programs for CARDIAC, you don't need any of this: `cargo install cargo-cardiac` is enough (see the README).
@@ -19,8 +19,8 @@ There are two programs. `cargo-cardiac` is the command. The driver, in `driver/`
 does the compiling, inside rustc's own process. `driver/` is a workspace of its own because it builds on the
 pinned nightly.
 
-    git clone https://github.com/StrangeQuery/rust-cardiac
-    cd rust-cardiac
+    git clone https://github.com/StrangeQuery/cargo-cardiac
+    cd cargo-cardiac
     cargo build --release                       # target/release/cargo-cardiac
     (cd driver && cargo build --release)        # driver/target/release/cardiac-driver
 
@@ -94,4 +94,4 @@ rest of the repository.
 ## Talking to us
 
 Questions, ideas and half-finished thoughts are welcome on [Discord](https://discord.gg/VsqKEdBYzJ). Bugs and
-proposals go in [the issues](https://github.com/StrangeQuery/rust-cardiac/issues).
+proposals go in [the issues](https://github.com/StrangeQuery/cargo-cardiac/issues).

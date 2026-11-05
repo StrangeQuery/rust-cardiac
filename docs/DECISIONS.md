@@ -1,7 +1,7 @@
 # Decision log
 
 Newest first. Each entry is the decision, why, and what it costs. (The project was called Ferritin until it was
-released on its own as rust-cardiac.)
+released on its own as rust-cardiac, and is now cargo-cardiac.)
 
 ## 2026-11-05 · Listings use the source's names
 
@@ -772,7 +772,7 @@ Superseded in part by "A loader binds resources, not a linker" (2026-10-19): `ca
   - A `const` array: also loaded with the program at no cost in code, but its values are fixed when the program is
     built. `carried()` is for values that change from run to run.
 - **Cost.** It is not in the manual: on the paper machine, the operator writes the table's pairs on input cards
-  after the bootstrap and the program, ahead of the jump to its start. `# carried` is a line of rust-cardiac's
+  after the bootstrap and the program, ahead of the jump to its start. `# carried` is a line of cargo-cardiac's
   `.tape` format, not of CARDIAC. Natively, `carried()` must come before the first `inp()`.
 - **See also.** README.md, "Tapes are code, resources and hand-offs".
 
@@ -898,7 +898,7 @@ Superseded in part by "A loader binds resources, not a linker" (2026-10-19): `ca
   gives rustc (`compile::program::CFG`).
 - **Why.** A program is a Cargo package, and `cargo install cargo-cardiac` then `cargo cardiac build` is what a
   Rust programmer expects. One binary is one name to keep from clashing with others.
-- **Run in the wrong package.** Run in a package whose binaries can't be CARDIAC programs (rust-cardiac's own, or
+- **Run in the wrong package.** Run in a package whose binaries can't be CARDIAC programs (cargo-cardiac's own, or
   one that needs a proc-macro crate), it stops and says to run it where the programs are, such as `examples/`.
 
 ## 2026-10-18 · Arrays of `bool`
@@ -1377,7 +1377,7 @@ filled from the input.
 ## 2026-10-12 · Take MIR from stable rustc; compile it ourselves
 
 - **Decision.** rustc does parsing, types, the borrow checker and its own optimisation, and writes out MIR, its
-  simplified form of the program (`--emit=mir`). rust-cardiac compiles that text.
+  simplified form of the program (`--emit=mir`). cargo-cardiac compiles that text.
 - **Why.** No nightly toolchain, no LLVM backend for a decimal machine, and every front-end guarantee Rust makes
   still holds.
 - **Cost.** The MIR text format is unstable ("intended for human consumers only"), and only the crate being

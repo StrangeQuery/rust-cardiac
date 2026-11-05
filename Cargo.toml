@@ -73,5 +73,5 @@ exclude = ["tests/programs/crates"]
 
 # the repository's address and the project's page, for both published crates
 [workspace.package]
-repository = "https://github.com/StrangeQuery/rust-cardiac"
+repository = "https://github.com/StrangeQuery/cargo-cardiac"
 homepage = "https://lab.strangequery.com/cargo-cardiac/"

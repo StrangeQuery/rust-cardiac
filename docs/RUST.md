@@ -1,4 +1,4 @@
-# The Rust that rust-cardiac compiles
+# The Rust that cargo-cardiac compiles
 
 What compiles for CARDIAC and what doesn't, in three groups: what works well, what works but costs more than it
 looks, and what is refused. Every entry was checked by compiling a small program at opt-level 2 with overflow
@@ -9,7 +9,7 @@ checks on (cargo's `dev` profile) and running it both ways: on the CARDIAC emula
 
 **rustc does the whole front end:** parsing, type checking, trait resolution, the borrow checker, constant
 evaluation. A program rustc rejects never reaches CARDIAC, and its errors are Rust's own
-(`tests/programs/borrow_error.rs` stops at E0499). rust-cardiac compiles the MIR rustc writes for the program
+(`tests/programs/borrow_error.rs` stops at E0499). cargo-cardiac compiles the MIR rustc writes for the program
 that's left: so anything rustc folds away first (a `const fn`, a closure called where it's made, a small generic
 function it inlines) costs nothing and needs no support.
 

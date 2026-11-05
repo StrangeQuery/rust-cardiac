@@ -1,11 +1,11 @@
-<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/cargo-cardiac/HEAD/assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
 
 # cardiac
 
 The built-ins of a Rust program for CARDIAC, for
-[rust-cardiac](https://github.com/StrangeQuery/rust-cardiac).
+[cargo-cardiac](https://github.com/StrangeQuery/cargo-cardiac).
 
-<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/cargo-cardiac/HEAD/assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
 
 ```rust
 use cardiac::*;
@@ -32,4 +32,4 @@ print the same numbers.
 | `assume(cond)` (unsafe) | `core::hint::assert_unchecked`: no code; checked with debug assertions on | `assert!`              |
 | `Flag`               | a flag as -1 (false) or 0 (true): tested by its sign | the same `i16`                              |
 
-A panic prints -999 first, the value CARDIAC's panic routine outputs. See the rust-cardiac README for the rest.
+A panic prints -999 first, the value CARDIAC's panic routine outputs. See the cargo-cardiac README for the rest.

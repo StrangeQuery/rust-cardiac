@@ -1,4 +1,4 @@
-//! rust-cardiac: Rust for CARDIAC. The compiler (`compile`) takes the MIR that rustc writes and lowers it to CARDIAC
+//! cargo-cardiac: Rust for CARDIAC. The compiler (`compile`) takes the MIR that rustc writes and lowers it to CARDIAC
 //! assembly, which its own assembler (`asm`) turns into cells; `cargo cardiac build` drives it. CARDIAC's side is
 //! HEARTBURN's, cardiaq's library: the machine (`cardiac`), decks (`tape`, with the deck of a compiled program added
 //! here) and listings in Brian Stuart's six columns (`listing`), re-exported under the names they have there. Panic

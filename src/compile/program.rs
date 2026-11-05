@@ -87,7 +87,7 @@ pub fn hint(e: String, opt_level: OptLevel) -> String {
         return e;
     }
     format!(
-        "{e}\nnote: this is opt-level 0, where rustc's MIR is unoptimized and rust-cardiac's passes are off; most \
+        "{e}\nnote: this is opt-level 0, where rustc's MIR is unoptimized and cargo-cardiac's passes are off; most \
          programs need opt-level 1 or more (`opt-level` in the Cargo profile, or -C opt-level=N for a single file)"
     )
 }
