@@ -1,28 +1,29 @@
 #!/bin/sh
 # Ray-traces a mirror ball over a red and cream checkerboard on CARDIAC: a 96 x 48 picture, ray.ppm (and ray.png,
-# where sips is there to make it), of one frame of the ball bouncing and swaying while the floor scrolls under it.
+# where sips is there to make it), of the ball at one of 120 places along its path,
+# swaying from side to side and bouncing while the floor scrolls under it.
 #
 # This script is the host. It deals each machine in ray/ its cards, passes what one outputs on to the next, looks
 # each colour code up in a fixed palette, as a display does, and writes the picture. Everything that shows is worked
 # out on CARDIAC: burn runs the ray/ decks for the ball's place, for every row of sky and floor, and for every pixel
-# of the ball, about 600 rays a frame.
+# of the ball, about 600 rays a picture.
 #
 #     cargo cardiac build && sh ray.sh
 #
 # The settings, all optional:
-#   FRAME   which frame of the 120 to draw, 0 to 119 (0). The ball bounces every 24 frames and sways from side to
-#           side once in 120
+#   FRAME   which of the 120 places along the ball's path to draw, 0 to 119 (0). Along it the ball bounces every
+#           24 places and sways from side to side once
 #   OUT     the picture's file (ray.ppm)
 #   BURN    another burn
 #   VERBOSE 1 to say each machine's run on standard error: its cards before it starts, then what it output and how
-#           many instructions it took; and at the end, how many runs and instructions the frame took in all
+#           many instructions it took; and at the end, how many runs and instructions the picture took in all
 set -e
 cd "$(dirname "$0")"
 BURN=${BURN:-burn}
 FRAME=${FRAME:-0}
 OUT=${OUT:-ray.ppm}
-case $FRAME in *[!0-9]*|"") echo "ray.sh: FRAME is a frame number, 0 to 119"; exit 2;; esac
-[ "$FRAME" -le 119 ] || { echo "ray.sh: FRAME is a frame number, 0 to 119"; exit 2; }
+case $FRAME in *[!0-9]*|"") echo "ray.sh: FRAME is a place on the ball's path, 0 to 119"; exit 2;; esac
+[ "$FRAME" -le 119 ] || { echo "ray.sh: FRAME is a place on the ball's path, 0 to 119"; exit 2; }
 command -v "$BURN" >/dev/null || { echo "ray.sh: needs burn, from cardiaq: put it on the PATH, or set BURN"; exit 1; }
 for m in sky zrow floor span norm bounce hit compose sway hop; do
   [ -f ray/$m.cqb ] || { echo "ray.sh: build it first: cargo cardiac build"; exit 1; }
@@ -47,8 +48,8 @@ cards() {   # CARD...: the cards, the first eight and how many more when there a
   if [ $# -le 10 ]; then echo "$*"; else echo "$1 $2 $3 $4 $5 $6 $7 $8 ... ($# cards)"; fi
 }
 
-# The frame: sway is dealt the frame's line of the sine table and works out the ball's x; hop works out its height
-# and the floor's scroll from the frame number.
+# Where the ball is: sway is dealt FRAME's line of the sine table and works out the ball's x; hop works out its
+# height and the floor's scroll from FRAME.
 sine=$(grep -v '^#' ray/sine120.txt | sed -n "$((FRAME + 1))p")
 bx=$(run sway $sine)
 set -- $(run hop $FRAME)
@@ -91,7 +92,7 @@ awk -v out="$OUT" 'BEGIN {
 { for (i = 1; i <= NF; i++) print pal[$i + 1] > out }' "$work/codes"
 rm -f "${OUT%.ppm}.png"
 if command -v sips >/dev/null; then sips -s format png "$OUT" --out "${OUT%.ppm}.png" >/dev/null 2>&1 || true; fi
-echo "ray.sh: wrote $OUT (frame $FRAME, every ray on CARDIAC)"
+echo "ray.sh: wrote $OUT (FRAME=$FRAME, every ray on CARDIAC)"
 if [ -n "$VERBOSE" ]; then
   awk '{ n++; total += $1 } END { printf "ray.sh: %d runs of the machines, %d CARDIAC instructions\n", n, total }' \
     "$work/counts" >&2
