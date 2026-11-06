@@ -35,3 +35,15 @@
   1000 does.
 - **Cost.** A listing says `98_usize` where the source says `'b'`. `char::from_u32`, `from_digit`, `to_digit`,
   `is_ascii_digit` at opt-level 1 and the like stay refused (calls, or `u32`).
+
+## 2026-11-05 · `i8`: a cell from -128 to 127
+
+- **Decision.** An `i8` is one cell, as an `i16` is, its range -128..=127: a local, a parameter, an array's element,
+  and an overflow-checked op's pair, checked against that range. With overflow checks off its `+` and `-` (and `-x`)
+  wrap, as a `u8`'s do: the plain op, then 256 added or taken away until the value is back in range (`wrap_i8`),
+  unless the range pass shows it already is. `as i8` keeps the value mod 256 from any integer type, `i8 as u8` adds
+  256 to a negative one, `i8 as usize` is a usize past a card for a negative one, as an `i16`'s is.
+- **Not supported.** An `i8`'s wrapping `*` (checks off), which can pass what the accumulator holds; an `i8` in a
+  struct or an enum; `i8`'s methods.
+- **Cost.** About 12 cells for each `as i8` and each wrapping op. Dividing two `i8`s checks `-128 / -1`, which an
+  `i16`'s needn't (no card holds `i16::MIN`).

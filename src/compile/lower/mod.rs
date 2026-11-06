@@ -342,10 +342,10 @@ impl<'a> Lowering<'a> {
             // above 999), or a reference or raw pointer, which is a cell address 00-99. An array's element is one of
             // them too, but a usize past a card: only a local holds one (`ranges::huge_usizes`), and storing one
             // anywhere else panics.
-            let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16));
-            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
+            let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16));
+            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
             let one_cell = match ty {
-                Ty::Int(IntTy::U8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
+                Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
                 Ty::Ref { lifetime: None, to, .. } => {
                     card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
                 }
@@ -783,7 +783,7 @@ impl<'a> Lowering<'a> {
 fn overflow_pair(ty: &Ty) -> Option<IntTy> {
     match ty {
         Ty::Tuple(ts) if ts.len() == 2 && ts[1] == Ty::Bool => match ts[0] {
-            Ty::Int(w @ (IntTy::U8 | IntTy::I16 | IntTy::Usize)) => Some(w),
+            Ty::Int(w @ (IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize)) => Some(w),
             _ => None,
         },
         _ => None,

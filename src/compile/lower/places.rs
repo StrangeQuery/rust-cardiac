@@ -55,6 +55,7 @@ impl Value {
 pub(super) fn range_of(ty: IntTy) -> Option<(i64, i64)> {
     match ty {
         IntTy::U8 => Some((0, 255)),
+        IntTy::I8 => Some((-128, 127)),
         IntTy::Usize => Some((0, 999)),
         IntTy::I16 => Some((-999, 999)),
         _ => None,
@@ -212,7 +213,7 @@ impl<'a> Lowering<'a> {
             match c {
                 Const::Int {
                     value,
-                    ty: ty @ (IntTy::U8 | IntTy::Usize | IntTy::I16),
+                    ty: ty @ (IntTy::U8 | IntTy::I8 | IntTy::Usize | IntTy::I16),
                 } => {
                     let v = *value as i64;
                     let (lo, hi) = range_of(*ty).unwrap();

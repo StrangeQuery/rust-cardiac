@@ -32,6 +32,7 @@ type Edges = HashMap<BasicBlock, Facts>;
 pub fn type_range(ty: &Ty) -> Option<Range> {
     match ty {
         Ty::Int(IntTy::U8) => Some([0, 255]),
+        Ty::Int(IntTy::I8) => Some([-128, 127]),
         Ty::Int(IntTy::Usize) => Some([0, 999]),
         Ty::Int(IntTy::I16) => Some([-999, 999]),
         Ty::Bool => Some([0, 1]),
@@ -44,6 +45,7 @@ pub fn type_range(ty: &Ty) -> Option<Range> {
 fn native_range(ty: &Ty) -> Option<Range> {
     match ty {
         Ty::Int(IntTy::U8) => Some([0, 255]),
+        Ty::Int(IntTy::I8) => Some([-128, 127]),
         Ty::Int(IntTy::Usize) => Some([0, i64::MAX]),
         Ty::Int(IntTy::I16) => Some([i16::MIN as i64, i16::MAX as i64]),
         _ => None,
@@ -259,7 +261,7 @@ impl Pass<'_> {
     /// The range of an operand, if known: a constant of a card's type, or a whole local.
     fn val(&self, facts: &Facts, o: &Operand) -> Option<Range> {
         if let Some((v, t)) = o.int() {
-            return matches!(t, IntTy::U8 | IntTy::Usize | IntTy::I16).then_some([clamp(v), clamp(v)]);
+            return matches!(t, IntTy::U8 | IntTy::I8 | IntTy::Usize | IntTy::I16).then_some([clamp(v), clamp(v)]);
         }
         let x = o.local()?;
         facts
@@ -1113,9 +1115,9 @@ pub fn mark_wrapping(blocks: &mut [Block], locals: &HashMap<Local, Ty>) {
             continue;
         }
         *op = match (t, *op) {
-            (Some(Ty::Int(IntTy::U8)), BinOp::Add) => BinOp::AddWrapping,
-            (Some(Ty::Int(IntTy::U8 | IntTy::Usize)), BinOp::Sub) => BinOp::SubWrapping,
-            (Some(Ty::Int(IntTy::U8)), BinOp::Mul) => BinOp::MulWrapping,
+            (Some(Ty::Int(IntTy::U8 | IntTy::I8)), BinOp::Add) => BinOp::AddWrapping,
+            (Some(Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::Usize)), BinOp::Sub) => BinOp::SubWrapping,
+            (Some(Ty::Int(IntTy::U8 | IntTy::I8)), BinOp::Mul) => BinOp::MulWrapping,
             (_, op) => op,
         };
     }
@@ -1157,7 +1159,7 @@ pub fn huge_usizes(
                 Rvalue::Cast(o, Ty::Int(IntTy::Usize), CastKind::IntToInt) => {
                     is_huge(o)
                         || o.place()
-                            .is_some_and(|p| place_ty(locals, p) == Some(Ty::Int(IntTy::I16)))
+                            .is_some_and(|p| matches!(place_ty(locals, p), Some(Ty::Int(IntTy::I16 | IntTy::I8))))
                 }
                 Rvalue::BinaryOp(BinOp::SubWrapping, ..) => wraps.is_none_or(|w| w.contains(&x)),
                 Rvalue::BinaryOp(BinOp::Add | BinOp::Sub | BinOp::AddWrapping, a, c) => is_huge(a) || is_huge(c),
