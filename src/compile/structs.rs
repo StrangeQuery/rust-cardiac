@@ -714,7 +714,9 @@ impl Shapes {
     /// Field k of struct s is of type t: a scalar, a struct, or an array of scalars.
     fn set(&mut self, fname: &str, s: &str, k: u32, t: &Ty) -> Result<(), Fail> {
         let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+        // (a raw pointer to a card's value is its address, one cell: a slice iterator's two pointers)
         let fine = scalar(t)
+            || matches!(t, Ty::Ptr { to, .. } if matches!(**to, Ty::Int(IntTy::I16 | IntTy::U8)))
             || matches!(t, Ty::Array(e, ArrayLen::Known(_)) if scalar(e))
             || self.strukt(t).is_some_and(|inner| inner != s);
         // (a type the pass never followed, a reference or a generic path, is left as it was)

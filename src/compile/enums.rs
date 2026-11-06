@@ -511,6 +511,13 @@ impl Enums<'_> {
             let e = self.scalar(e).ok_or(None)?;
             return Ok(Kind::Cell(Ty::Array(Box::new(e), n.clone())));
         }
+        // a reference or a raw pointer to a card's value: its address, one cell (`Option<&i16>`, what a slice's
+        // iterator returns)
+        if let Ty::Ref { to, .. } | Ty::Ptr { to, .. } = t {
+            if matches!(**to, Ty::Int(IntTy::I16 | IntTy::U8)) {
+                return Ok(Kind::Cell(t.clone()));
+            }
+        }
         // a tuple of scalars: the struct the struct pass makes of one, `tuple__i16_i16`
         if let Ty::Tuple(ts) = t {
             let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);

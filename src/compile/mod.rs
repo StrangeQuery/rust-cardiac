@@ -37,6 +37,7 @@ pub mod preconditions;
 pub mod program;
 pub mod ranges;
 pub mod runtime;
+pub mod slices;
 pub mod stack;
 pub mod structs;
 pub mod tails;
@@ -549,6 +550,8 @@ fn compile(
         ranges::mark_wrapping(&mut f.body.blocks, &types);
     }
     for n in &names {
+        // slices of arrays as arrays, and the pointers of their iterators as raw pointers, for the passes below
+        slices::known_lengths(fns.get_mut(n).unwrap());
         forloops::lower_for_loops(fns.get_mut(n).unwrap());
         // a range's contains(): its tests, while the range is a struct the struct pass will take apart
         methods::inline_range_contains(fns.get_mut(n).unwrap());
@@ -582,6 +585,10 @@ fn compile(
     }
     let known = enums::data_enums(&mut fns, enums, no_niche)?;
     structs::scalarize_structs(&mut fns, &file, known)?;
+    // the pointers into an array that a slice iterator leaves, once taken out of its struct: indexes
+    for n in &names {
+        slices::pointers_as_indexes(fns.get_mut(n).unwrap());
+    }
     // abs, min and their kin, which rustc calls at opt-level 1 and s: the code it inlines at 2
     for n in &names {
         methods::inline_methods(fns.get_mut(n).unwrap());

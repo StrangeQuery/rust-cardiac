@@ -344,7 +344,7 @@ impl<'a> Lowering<'a> {
                 Ty::Ref { lifetime: None, to, .. } => {
                     card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
                 }
-                Ty::Ptr { to, .. } => card(to),
+                Ty::Ptr { to, .. } => card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e)),
                 _ => false,
             };
             if one_cell {
