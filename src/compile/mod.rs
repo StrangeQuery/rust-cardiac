@@ -629,10 +629,13 @@ fn compile(
             .blocks
             .iter()
             .filter(|b| promise_call(&b.terminator, &promisers).is_none());
+        // (a call with no way back is one too, of a function that returns `!`, but not of a panic)
         let called = called.filter_map(|b| match &b.terminator {
-            ir::Terminator::Call {
-                func, target: Some(_), ..
-            } if func.qself.is_none() && matches!(func.segments.as_slice(), [ir::Segment::Name { args: None, .. }]) => {
+            ir::Terminator::Call { func, target, .. }
+                if func.qself.is_none()
+                    && matches!(func.segments.as_slice(), [ir::Segment::Name { args: None, .. }])
+                    && (target.is_some() || !lower::calls::never_returns(func)) =>
+            {
                 Some(func.name().to_string())
             }
             _ => None,

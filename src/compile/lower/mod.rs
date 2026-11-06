@@ -322,8 +322,8 @@ impl<'a> Lowering<'a> {
             huge: HashSet::new(),
         };
         for (&local, ty) in locals.iter() {
-            if *ty == Ty::Unit {
-                continue; // unit values need no cell
+            if *ty == Ty::Unit || *ty == Ty::Never {
+                continue; // unit values need no cell, nor does `!`, which has none
             }
             // an overflow-checked pair's type says how its op is checked, wherever its cells are
             if let Some(width) = overflow_pair(ty) {
@@ -563,9 +563,13 @@ impl<'a> Lowering<'a> {
         self.fused_flags.clear();
         let entry = BasicBlock(0);
         let bb0_targeted = self.blocks.iter().any(|b| b.terminator.names(entry));
+        // a function that returns `!` has no way back to keep
+        let returns = self.func != "main" && self.callees.sigs.get(&self.func).is_none_or(|s| s.ret != Ty::Never);
         if self.func != "main" {
+            self.define(&Sym::Entry(self.func.clone()));
+        }
+        if returns {
             let f = self.func.clone();
-            self.define(&Sym::Entry(f.clone()));
             self.emit_c(
                 Op::Cla,
                 Operand::CELL_99,
@@ -709,7 +713,7 @@ impl<'a> Lowering<'a> {
                     .map_err(|e| self.at(e, t.to_string().trim_end_matches(';')))?;
             }
         }
-        if self.func != "main" {
+        if returns {
             let exit = Sym::Exit(self.func.clone());
             let mut exit = Line::data_cell(&exit.to_string(), Arg::Num("0".into()));
             exit.note("becomes JMP back to the caller");
