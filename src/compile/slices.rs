@@ -9,6 +9,7 @@
 //!   `&raw const (*p)`, `&(*p)` and `&mut (*p)` of a pointer p are p
 //!   `slice::Iter<'_, T>` and `slice::IterMut<'_, T>` are a plain struct of their two pointers, `ptr` and
 //!     `end_or_len` (its `PhantomData` field goes), which the struct pass takes apart
+//!   `copy t[1..4]`, the elements a rest pattern binds (`[x, rest @ ..]`), is the array `[t[1], t[2], t[3]]`
 //! A slice whose length isn't known here (a parameter, say) is left as it is, and refused.
 use std::collections::{HashMap, HashSet};
 
@@ -236,6 +237,21 @@ pub fn known_lengths(f: &mut Function) {
                     if a == b {
                         *op = if *op == BinOp::Eq { BinOp::Ge } else { BinOp::Lt };
                     }
+                }
+            }
+            // a copy of an array's elements from..to (a rest pattern's), as the array of them
+            if let Rvalue::Use(Operand::Copy(p) | Operand::Move(p)) = &*r {
+                if let ([Projection::Subslice { from, to }], Some(a)) = (p.projection.as_slice(), p.base_local()) {
+                    let element = |k: u64| {
+                        Operand::Copy(Place {
+                            base: PlaceBase::Local(a),
+                            projection: vec![Projection::ConstantIndex {
+                                offset: k,
+                                min_length: *to,
+                            }],
+                        })
+                    };
+                    *r = Rvalue::Array((*from..*to).map(element).collect());
                 }
             }
             if let Rvalue::Variant(p, args) = &*r {

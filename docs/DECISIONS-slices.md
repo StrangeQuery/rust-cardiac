@@ -73,3 +73,14 @@
 - **Cost.** `for i in (a..b).step_by(k)` is 57 cells where `while i < b { ..; i += k }` is 15 to 26: the first
   item's flag, k - 1 kept, and the split test. The while loop's `i += k` past a card is an overflow, which
   `step_by` never makes.
+
+## 2026-11-06 · A rest pattern's subarray; a slice's `swap` and `reverse` where rustc calls them
+
+- **Decision.** `xs[1..4]` is a projection of the IR (`Projection::Subslice`, an array's, read from the driver and
+  the text), and `copy xs[1..4]`, which a rest pattern binds (`let [x, rest @ ..] = t`), is the array of those
+  elements (`slices`); any other use of one is refused. A slice's `swap(i, j)` (each index checked against the
+  length, as Rust does) and `reverse()`, which rustc calls at opt-level 1, are written out over the array; at
+  opt-level 2 rustc inlines them into raw slices built from parts and `copy_nonoverlapping`, which the IR doesn't
+  model, and they stay refused.
+- **Why.** A rest binding is a few element copies; swap and reverse are the obvious loop.
+- **Cost.** The rest binding's elements are copied into cells of their own.

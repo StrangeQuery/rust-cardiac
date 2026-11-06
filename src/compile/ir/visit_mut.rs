@@ -159,6 +159,7 @@ pub fn walk_place<V: VisitMut + ?Sized>(v: &mut V, p: &mut Place) {
             | Projection::Index(_)
             | Projection::IndexPlus(..)
             | Projection::ConstantIndex { .. }
+            | Projection::Subslice { .. }
             | Projection::Downcast(_) => {}
         }
     }

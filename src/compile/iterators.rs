@@ -1293,7 +1293,8 @@ fn slice_at(f: &Function, defs: &HashMap<Local, Vec<At>>, o: &Operand) -> Option
 }
 
 /// A slice's `contains` and `fill` (rustc's `slice_contains` and `spec_fill` at opt-level 2), as loops over its
-/// elements.
+/// elements; and its `swap` and `reverse` where rustc calls them (opt-level 1; at 2 it inlines them into raw
+/// slices and copies, which are refused).
 pub fn slice_methods(f: &mut Function) {
     let mut fresh = Fresh::of(f);
     for bi in 0..f.body.blocks.len() {
@@ -1319,6 +1320,10 @@ pub fn slice_methods(f: &mut Function) {
             _ => None,
         };
         let defs = definitions(f);
+        if impl_of_slice && matches!(func.name(), "swap" | "reverse") {
+            swap_or_reverse(f, &mut fresh, &defs, bi, func.name(), &args, ret);
+            continue;
+        }
         let Some((s, other)) = contains.or(fill) else { continue };
         let Some((a, from, to)) = slice_at(f, &defs, s) else {
             continue;
@@ -1816,4 +1821,100 @@ pub fn step_by(f: &mut Function) {
     }
     f.body.decls.append(&mut fresh.decls);
     f.body.blocks.append(&mut fresh.blocks);
+}
+
+/// The element at a run-time index of a slice from the start of its array.
+fn at_index(a: &Place, i: Local) -> Place {
+    let mut e = a.clone();
+    e.projection.push(Projection::Index(i));
+    e
+}
+
+/// `s.swap(i, j)`: both indexes checked against the length, as Rust does, then the two elements exchanged; and
+/// `s.reverse()`: the elements exchanged from both ends inwards. For a slice from its array's start.
+fn swap_or_reverse(
+    f: &mut Function,
+    fresh: &mut Fresh,
+    defs: &HashMap<Local, Vec<At>>,
+    bi: usize,
+    method: &str,
+    args: &[Operand],
+    ret: BasicBlock,
+) {
+    let Some(s) = args.first() else { return };
+    let Some((a, 0, n)) = slice_at(f, defs, s) else { return };
+    let elem = {
+        let base = a.base_local();
+        let ty = f.params.iter().find(|(p, _)| Some(*p) == base).map(|(_, t)| t).or_else(|| {
+            f.body.decls.iter().find(|d| Some(d.local) == base).map(|d| &d.ty)
+        });
+        match ty {
+            Some(Ty::Array(e, _)) => (**e).clone(),
+            Some(Ty::Ref { to, .. }) => match &**to {
+                Ty::Array(e, _) => (**e).clone(),
+                _ => return,
+            },
+            _ => return,
+        }
+    };
+    let (x, y) = (fresh.local(elem.clone()), fresh.local(elem));
+    // the two elements, i and j, exchanged
+    let exchange = |i: Local, j: Local| {
+        vec![
+            assign(x, Rvalue::Use(Operand::Copy(at_index(&a, i)))),
+            assign(y, Rvalue::Use(Operand::Copy(at_index(&a, j)))),
+            Statement::Assign(at_index(&a, i), Rvalue::Use(copy_of(y))),
+            Statement::Assign(at_index(&a, j), Rvalue::Use(copy_of(x))),
+        ]
+    };
+    let (i, j) = (fresh.local(Ty::Int(IntTy::Usize)), fresh.local(Ty::Int(IntTy::Usize)));
+    match (method, args) {
+        ("swap", [_, ia, ja]) => {
+            let checked = |fresh: &mut Fresh, k: Local, then: BasicBlock| {
+                let c = fresh.local(Ty::Bool);
+                let name = fresh.name();
+                fresh.block(
+                    name,
+                    vec![assign(c, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(k), usize_const(n)))],
+                    Terminator::Assert {
+                        cond: Operand::Move(Place::local(c)),
+                        expected: true,
+                        msg: "index out of bounds: the length is {} but the index is {}".into(),
+                        msg_args: vec![usize_const(n), copy_of(k)],
+                        target: then,
+                        unwind: Unwind::Continue,
+                    },
+                );
+                name
+            };
+            let swap = fresh.name();
+            fresh.block(swap, exchange(i, j), Terminator::Goto(ret));
+            let second = checked(fresh, j, swap);
+            let first = checked(fresh, i, second);
+            let b = &mut f.body.blocks[bi];
+            b.statements.push(assign(i, Rvalue::Use(ia.clone())));
+            b.statements.push(assign(j, Rvalue::Use(ja.clone())));
+            b.terminator = Terminator::Goto(first);
+        }
+        ("reverse", [_]) if n >= 2 => {
+            // i up from the start and j down from the end, while i < j
+            let (head, body) = (fresh.name(), fresh.name());
+            let c = fresh.local(Ty::Bool);
+            fresh.block(
+                head,
+                vec![assign(c, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(i), copy_of(j)))],
+                branch(c, ret, body),
+            );
+            let mut step = exchange(i, j);
+            step.push(assign(i, Rvalue::BinaryOp(ir::BinOp::Add, copy_of(i), usize_const(1))));
+            step.push(assign(j, Rvalue::BinaryOp(ir::BinOp::Sub, copy_of(j), usize_const(1))));
+            fresh.block(body, step, Terminator::Goto(head));
+            let b = &mut f.body.blocks[bi];
+            b.statements.push(assign(i, Rvalue::Use(usize_const(0))));
+            b.statements.push(assign(j, Rvalue::Use(usize_const(n - 1))));
+            b.terminator = Terminator::Goto(head);
+        }
+        ("reverse", [_]) => f.body.blocks[bi].terminator = Terminator::Goto(ret),
+        _ => {}
+    }
 }

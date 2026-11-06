@@ -494,9 +494,15 @@ impl Parser<'_> {
                 place.projection.push(Projection::IndexPlace(Box::new(index)));
             } else if matches!(self.peek(), Some(Tok::Int { .. })) {
                 let offset = self.number()? as u64;
-                self.keyword("of")?;
-                let min_length = self.number()? as u64;
-                place.projection.push(Projection::ConstantIndex { offset, min_length });
+                if self.eat_punct(".") {
+                    self.punct(".")?;
+                    let to = self.number()? as u64;
+                    place.projection.push(Projection::Subslice { from: offset, to });
+                } else {
+                    self.keyword("of")?;
+                    let min_length = self.number()? as u64;
+                    place.projection.push(Projection::ConstantIndex { offset, min_length });
+                }
             } else {
                 let i = self.local()?;
                 if self.eat_punct("+") {
