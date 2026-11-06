@@ -84,3 +84,11 @@
   function's start (a block of its own that the entry goes to). The parameters' cells hold the next round's values,
   as the callee's would; nothing else of the caller is read after the call. Not where a parameter or an argument is
   a reference or a pointer, which could point into the cells reused. Other recursion still needs a stack.
+
+## 2026-11-06 · A wrapping `*` is refused where the product can pass the accumulator
+
+- **Decision.** A `u8`'s or an `i8`'s wrapping `*` (with overflow checks off, or `wrapping_mul` inlined) that the
+  range pass hasn't shown stays in its type's range is the plain multiply and then the wrap, only when one side is
+  a constant from -39 to 39, so the product is at most 9999, what the accumulator holds. Any other is refused.
+- **Why.** Two `u8`s' product reaches 65025, and the multiply kept what was left of it: `200u8.wrapping_mul(200)`
+  was 0, not 64 (cargo-cardiac-support#142).

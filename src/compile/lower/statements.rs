@@ -221,9 +221,10 @@ impl<'a> Lowering<'a> {
                 let b = self.mat(b);
                 let plain = crate::compile::ranges::unwrapped(*op);
                 let ty = self.place_ty(dest);
-                if ty == Some(Ty::Int(IntTy::I8)) && plain == BinOp::Mul {
-                    // (two i8s' product can pass what the accumulator holds)
-                    fail!("an i8's * that can leave -128..=127 is not supported (it wraps): {src}")
+                // a product the accumulator holds (9999 at most): a u8's or an i8's by a constant to 39
+                let held = |o: &ir::Operand| o.int().is_some_and(|(k, _)| (-39..=39).contains(&k));
+                if plain == BinOp::Mul && !(held(x) || held(y)) {
+                    fail!("a wrapping * of two values that can pass what the accumulator holds is not supported: {src}")
                 }
                 self.arith_acc(plain, a, b, None, src)?;
                 if ty == Some(Ty::Int(IntTy::I8)) {
