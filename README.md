@@ -326,7 +326,7 @@ The default is `deck,map`. `-q` says only errors, `-v` also says where the cells
 Each message about a program has a code, as rustc's errors do: `error[RCE0013]` for an error, `warning[RCW0001]`
 for a warning and `note[RCI0001]` for a note. The message is one line; `cargo cardiac explain CODE` says what it
 means on CARDIAC and what to write instead, as `rustc --explain` does, and so does the code's page in
-[the message codes](https://lab.strangequery.com/rust-cardiac/codes/). In JSON the code is the message's `code`.
+[the message codes](https://lab.strangequery.com/rust-cardiac/messages/). In JSON the code is the message's `code`.
 
 The target is `cardiac-unknown-none`, a notional triple: rustc doesn't know it, so there is no `--target` to give,
 and `cargo build` builds natively. `cargo cardiac` is what builds for CARDIAC, with the CARDIAC driver as rustc.
