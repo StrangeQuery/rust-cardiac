@@ -509,9 +509,10 @@ impl<'a> Lowering<'a> {
         let v = self.operand(&ir::Operand::Place(p.clone()))?;
         self.load(&v)?;
         let huge = self.is_huge(&ir::Operand::Copy(p.clone()));
-        if to == Some(IntTy::U8) && from == Some(IntTy::Usize) {
-            // `as u8` keeps the value mod 256, as Rust does: a usize past a card, 2^64 - k held as -k, has -k's
-            if huge {
+        if to == Some(IntTy::U8) && matches!(from, Some(IntTy::Usize | IntTy::I16)) {
+            // `as u8` keeps the value mod 256, as Rust does: a negative i16 is 256 more, and a usize past a card,
+            // 2^64 - k held as -k, has -k's
+            if huge || from == Some(IntTy::I16) {
                 let (up, back, ok) = (self.fresh("cast"), self.fresh("cast"), self.fresh("d"));
                 let k = self.konst(256);
                 self.define(&up);
@@ -536,8 +537,6 @@ impl<'a> Lowering<'a> {
             if !dest.as_local().is_some_and(|l| self.huge.contains(&l)) {
                 self.past_a_card("as usize: a usize past a card");
             }
-        } else if to == Some(IntTy::U8) && from == Some(IntTy::I16) {
-            fail!("i16 as u8 is not supported (it wraps): {src}")
         } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I16)) {
             fail!("unsupported cast: {src}")
         }
