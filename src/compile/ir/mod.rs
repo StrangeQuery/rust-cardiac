@@ -369,10 +369,13 @@ pub enum BinOp {
     AddWrapping,
     SubWrapping,
     MulWrapping,
+    /// Rust's three-way compare, `Cmp(a, b)`: the `Ordering` of a and b, as rustc inlines `a.cmp(&b)`. The front
+    /// end makes it two tests (`ordering::three_way_compares`).
+    Cmp,
 }
 
 impl BinOp {
-    pub const ALL: [BinOp; 28] = [
+    pub const ALL: [BinOp; 29] = [
         BinOp::Add,
         BinOp::Sub,
         BinOp::Mul,
@@ -401,6 +404,7 @@ impl BinOp {
         BinOp::AddWrapping,
         BinOp::SubWrapping,
         BinOp::MulWrapping,
+        BinOp::Cmp,
     ];
 
     pub fn name(self) -> &'static str {
@@ -433,6 +437,7 @@ impl BinOp {
             BinOp::AddWrapping => "AddWrapping",
             BinOp::SubWrapping => "SubWrapping",
             BinOp::MulWrapping => "MulWrapping",
+            BinOp::Cmp => "Cmp",
         }
     }
 

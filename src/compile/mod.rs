@@ -31,6 +31,7 @@ pub mod lower;
 pub mod machine;
 pub mod methods;
 pub mod names;
+pub mod ordering;
 pub mod peephole;
 pub mod phases;
 pub mod preconditions;

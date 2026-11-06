@@ -4,8 +4,8 @@
 //! (`min`, `max` and `clamp` it calls at every level.) Each call becomes here what rustc would have inlined: the
 //! same tests and arithmetic, as blocks of the caller's own, so every pass after sees them as it sees the program's
 //! own code (the range pass knows `x.abs()` is 0 or more, say, and a check on it can go). What rustc inlines at
-//! opt-level 2 into something refused stays refused there: `signum` becomes a three-way compare (`Cmp`), and a
-//! u8's `abs_diff` a subtraction in i32.
+//! opt-level 2 into something refused stays refused there: a u8's `abs_diff` becomes a subtraction in i32. (`signum`
+//! becomes a three-way compare, `Cmp`, which `ordering` makes two tests.)
 //!
 //! What a card can't hold needs no code: no card holds `i16::MIN`, so `abs` and `%` have no overflow to check, and
 //! none of these methods depends on the build's overflow checks. A check that is a panic in Rust whatever the
@@ -146,15 +146,33 @@ fn contains_call(func: &Path) -> Option<(bool, IntTy)> {
 }
 
 /// The blocks and locals a function gains as its calls to the methods become code.
-struct Gains<'a> {
-    blocks: Vec<Block>,
+pub(super) struct Gains<'a> {
+    pub(super) blocks: Vec<Block>,
     decls: &'a mut Vec<Decl>,
     next_local: u32,
     next_block: u32,
 }
 
-impl Gains<'_> {
-    fn local(&mut self, ty: Ty) -> Local {
+impl<'a> Gains<'a> {
+    /// For a function with these parameters and blocks: each new local and block is numbered past its own.
+    pub(super) fn new(params: &[(Local, Ty)], blocks: &[Block], decls: &'a mut Vec<Decl>) -> Gains<'a> {
+        let next_local = params
+            .iter()
+            .map(|(l, _)| l.0)
+            .chain(decls.iter().map(|d| d.local.0))
+            .filter(|l| *l != Local::UNIT.0)
+            .max()
+            .map_or(0, |l| l + 1);
+        let next_block = blocks.iter().map(|b| b.name.0).max().map_or(0, |b| b + 1);
+        Gains {
+            blocks: vec![],
+            decls,
+            next_local,
+            next_block,
+        }
+    }
+
+    pub(super) fn local(&mut self, ty: Ty) -> Local {
         let l = Local(self.next_local);
         self.next_local += 1;
         self.decls.push(Decl {
@@ -165,7 +183,7 @@ impl Gains<'_> {
         l
     }
 
-    fn block(&mut self, statements: Vec<Statement>, terminator: Terminator) -> BasicBlock {
+    pub(super) fn block(&mut self, statements: Vec<Statement>, terminator: Terminator) -> BasicBlock {
         let name = BasicBlock(self.next_block);
         self.next_block += 1;
         self.blocks.push(Block {
@@ -177,7 +195,7 @@ impl Gains<'_> {
     }
 
     /// `t = Op(a, b)` and a switch on it: the statement for the block that ends in the switch.
-    fn test(
+    pub(super) fn test(
         &mut self,
         op: BinOp,
         a: &Operand,
@@ -197,7 +215,7 @@ impl Gains<'_> {
     }
 
     /// A block that sets the call's destination and goes back to where the call went on to.
-    fn set(&mut self, dest: &Place, v: Rvalue, back: BasicBlock) -> BasicBlock {
+    pub(super) fn set(&mut self, dest: &Place, v: Rvalue, back: BasicBlock) -> BasicBlock {
         self.block(vec![Statement::Assign(dest.clone(), v)], Terminator::Goto(back))
     }
 
@@ -362,21 +380,7 @@ impl Gains<'_> {
 
 /// Every call in `f` to one of the methods becomes the code rustc would have inlined for it.
 pub fn inline_methods(f: &mut Function) {
-    let next_local = f
-        .params
-        .iter()
-        .map(|(l, _)| l.0)
-        .chain(f.body.decls.iter().map(|d| d.local.0))
-        .filter(|l| *l != Local::UNIT.0)
-        .max()
-        .map_or(0, |l| l + 1);
-    let next_block = f.body.blocks.iter().map(|b| b.name.0).max().map_or(0, |b| b + 1);
-    let mut gains = Gains {
-        blocks: vec![],
-        decls: &mut f.body.decls,
-        next_local,
-        next_block,
-    };
+    let mut gains = Gains::new(&f.params, &f.body.blocks, &mut f.body.decls);
     for b in f.body.blocks.iter_mut() {
         let Terminator::Call {
             dest,
@@ -413,24 +417,10 @@ pub fn inline_methods(f: &mut Function) {
 /// `end`) and before the struct pass takes it apart. Both arguments are borrows, `&range` and `&x`, each made once
 /// and read only by the call; the code reads what they borrow, and they go.
 pub fn inline_range_contains(f: &mut Function) {
-    let next_local = f
-        .params
-        .iter()
-        .map(|(l, _)| l.0)
-        .chain(f.body.decls.iter().map(|d| d.local.0))
-        .filter(|l| *l != Local::UNIT.0)
-        .max()
-        .map_or(0, |l| l + 1);
-    let next_block = f.body.blocks.iter().map(|b| b.name.0).max().map_or(0, |b| b + 1);
     let all_blocks = f.body.blocks.clone();
     let all_statements: Vec<Statement> = all_blocks.iter().flat_map(|b| b.statements.clone()).collect();
     let mut dropped: Vec<Local> = vec![];
-    let mut gains = Gains {
-        blocks: vec![],
-        decls: &mut f.body.decls,
-        next_local,
-        next_block,
-    };
+    let mut gains = Gains::new(&f.params, &f.body.blocks, &mut f.body.decls);
     for b in f.body.blocks.iter_mut() {
         let Terminator::Call {
             dest,

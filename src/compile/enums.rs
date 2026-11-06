@@ -21,8 +21,8 @@ use std::collections::{HashMap, HashSet};
 use super::ir::visit_mut::{walk_const, walk_rvalue, walk_terminator, walk_ty, VisitMut};
 use super::ir::Locals;
 use super::ir::{
-    ArrayLen, BasicBlock, BinOp, Const, File, GenericArg, IntTy, Local, Operand, Path, Place, Projection, Rvalue,
-    Segment, Statement, Terminator, Ty,
+    ArrayLen, BasicBlock, BinOp, CastKind, Const, File, GenericArg, IntTy, Item, Local, Operand, Path, Place,
+    Projection, Rvalue, Segment, Statement, Terminator, Ty,
 };
 use super::structs::{Field, Function};
 use super::util::Ordered;
@@ -185,6 +185,8 @@ pub fn c_like_enums(file: &mut File, defs: &[EnumDef]) -> Result<(), Fail> {
     if numbers.of.is_empty() {
         return Ok(());
     }
+    bare_variants(file, &numbers);
+    discriminants_in_cells(file, &numbers);
     struct Rewrite<'a>(&'a Numbers);
     impl VisitMut for Rewrite<'_> {
         fn visit_ty(&mut self, t: &mut Ty) {
@@ -233,6 +235,122 @@ pub fn c_like_enums(file: &mut File, defs: &[EnumDef]) -> Result<(), Fail> {
     }
     file.visit(&mut Rewrite(&numbers));
     Ok(())
+}
+
+/// A variant named alone, `const Less`, as rustc prints one in code it inlined from another crate (core's
+/// `Ordering::reverse`): the variant of the enum it is set to or compared with, by that place's type.
+fn bare_variants(file: &mut File, numbers: &Numbers) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let types = super::front::local_types(&f.params, &f.body.decls);
+        let full = |p: &Place, c: &mut Operand| {
+            let Operand::Constant(Const::Path(v)) = c else { return };
+            let Some(Ty::Path(e)) = super::front::place_ty(&types, p) else {
+                return;
+            };
+            let [Segment::Name { name, args: None }] = v.segments.as_slice() else {
+                return;
+            };
+            let mut named = e.clone();
+            named.segments.push(Segment::Name {
+                name: name.clone(),
+                args: None,
+            });
+            if v.qself.is_none() && numbers.variant(&named).is_some() {
+                *v = named;
+            }
+        };
+        for b in f.body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                match s {
+                    Statement::Assign(d, Rvalue::Use(c)) => full(d, c),
+                    Statement::Assign(_, Rvalue::BinaryOp(_, x, y)) => {
+                        if let Some(p) = x.place().cloned() {
+                            full(&p, y);
+                        }
+                        if let Some(p) = y.place().cloned() {
+                            full(&p, x);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// A local holding a C-like enum's discriminant in a type the backend doesn't have (an i8: `Ordering` is
+/// `#[repr(i8)]`) is an i16, as the enum itself is, and so is each constant it is compared with. Only where it is
+/// set by `discriminant` alone and read only to compare, switch on or cast: those give the same answer in either
+/// type for every variant's number, where arithmetic in the narrow type could overflow where an i16 doesn't.
+fn discriminants_in_cells(file: &mut File, numbers: &Numbers) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let types = super::front::local_types(&f.params, &f.body.decls);
+        let of_enum = |p: &Place| matches!(super::front::place_ty(&types, p), Some(Ty::Path(e)) if numbers.is_enum(&e));
+        let narrow: Vec<(Local, IntTy)> = f
+            .body
+            .decls
+            .iter()
+            .filter_map(|d| match d.ty {
+                Ty::Int(t @ (IntTy::I8 | IntTy::U16 | IntTy::U32 | IntTy::I64 | IntTy::U64)) => Some((d.local, t)),
+                _ => None,
+            })
+            .collect();
+        let whole = |o: &Operand, l: Local| matches!(o, Operand::Copy(p) | Operand::Move(p) if p.as_local() == Some(l));
+        let mut cells = vec![];
+        for (l, t) in narrow {
+            let mut allowed = 0;
+            for b in &f.body.blocks {
+                for s in &b.statements {
+                    allowed += match s {
+                        Statement::Assign(d, Rvalue::Discriminant(p)) if d.as_local() == Some(l) && of_enum(p) => 1,
+                        Statement::Assign(_, Rvalue::BinaryOp(op, x, y)) if comparison(*op) => {
+                            [x, y].iter().filter(|o| whole(o, l)).count()
+                        }
+                        Statement::Assign(_, Rvalue::Cast(o, _, CastKind::IntToInt)) if whole(o, l) => 1,
+                        Statement::StorageLive(x) | Statement::StorageDead(x) if *x == l => 1,
+                        _ => 0,
+                    };
+                }
+                if let Terminator::SwitchInt { discr, .. } = &b.terminator {
+                    allowed += whole(discr, l) as usize;
+                }
+            }
+            if allowed == super::ir::occurrences(&f.body.blocks, l) {
+                cells.push((l, t));
+            }
+        }
+        for (l, t) in &cells {
+            for d in f.body.decls.iter_mut().filter(|d| d.local == *l) {
+                d.ty = Ty::Int(IntTy::I16);
+            }
+            for b in f.body.blocks.iter_mut() {
+                for s in b.statements.iter_mut() {
+                    let Statement::Assign(_, Rvalue::BinaryOp(op, x, y)) = s else {
+                        continue;
+                    };
+                    if !comparison(*op) || !(whole(x, *l) || whole(y, *l)) {
+                        continue;
+                    }
+                    for o in [x, y] {
+                        if let Operand::Constant(Const::Int { ty, .. }) = o {
+                            if ty == t {
+                                *ty = IntTy::I16;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn comparison(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+    )
 }
 
 /// What a variant's field takes: a cell of its type, the cells of an enum with data (its layout's, by index), or

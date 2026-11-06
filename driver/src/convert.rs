@@ -490,8 +490,8 @@ impl<'tcx> Convert<'tcx> {
                 let (a, b) = (self.operand(a, locals)?, self.operand(b, locals)?);
                 match bin_op(*op) {
                     Some(op) => ir::Rvalue::BinaryOp(op, a, b),
-                    // an operation the IR has no name for (`Cmp`, `ShlUnchecked`): the parser reads `Cmp(a, b)` as
-                    // a variant built, `Cmp` with two fields
+                    // an operation the IR has no name for (`ShlUnchecked`): the parser reads `ShlUnchecked(a, b)`
+                    // as a variant built, with two fields
                     None => ir::Rvalue::Variant(name_path(&format!("{op:?}")), vec![a, b]),
                 }
             }
@@ -509,7 +509,7 @@ impl<'tcx> Convert<'tcx> {
                 match op {
                     pmir::UnOp::Neg => ir::Rvalue::UnaryOp(ir::UnOp::Neg, a),
                     pmir::UnOp::Not => ir::Rvalue::UnaryOp(ir::UnOp::Not, a),
-                    // as for `Cmp`: a variant built, to the parser
+                    // as for `ShlUnchecked`: a variant built, to the parser
                     pmir::UnOp::PtrMetadata => ir::Rvalue::Variant(name_path("PtrMetadata"), vec![a]),
                 }
             }
@@ -885,7 +885,7 @@ fn int_const(bits: u128, ty: ir::IntTy) -> Option<ir::Const> {
     Some(ir::Const::Int { value, ty })
 }
 
-/// A path of one name, `Cmp`.
+/// A path of one name, `ShlUnchecked`.
 fn name_path(name: &str) -> ir::Path {
     ir::Path {
         qself: None,
@@ -919,7 +919,8 @@ fn bin_op(op: pmir::BinOp) -> Option<ir::BinOp> {
         B::Ge => ir::BinOp::Ge,
         B::Gt => ir::BinOp::Gt,
         B::Offset => ir::BinOp::Offset,
-        B::ShlUnchecked | B::ShrUnchecked | B::Cmp => return None,
+        B::Cmp => ir::BinOp::Cmp,
+        B::ShlUnchecked | B::ShrUnchecked => return None,
     })
 }
 
