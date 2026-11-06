@@ -21,13 +21,15 @@
 //! `unwrap()` and `expect()` on the failing variant call what core's do, `core::option::unwrap_failed` and its
 //! kin, which never return and say Rust's message. `map` with a closure that captures nothing calls the
 //! closure's own function (`main::{closure#0}`, read as `main_closure0`) on the good variant's value, and builds the
-//! good variant of what it returns; a closure that captures stays a call, and is refused.
+//! good variant of what it returns; a closure that captures stays a call, and is refused. `map_or`, `map_or_else`,
+//! `or_else` and `filter`, which rustc calls even at opt-level 2 (their bodies are past its inliner's threshold),
+//! call their closures the same way.
 use std::collections::HashMap;
 
 use super::enums::{variant_number, EnumDef};
 use super::ir::{
-    BasicBlock, BinOp, Block, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection, Rvalue, Segment,
-    Statement, Terminator, Ty,
+    BasicBlock, BinOp, Block, BorrowKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection,
+    Rvalue, Segment, Statement, Terminator, Ty,
 };
 use super::structs::Function;
 
@@ -113,11 +115,13 @@ struct Inlined {
 }
 
 /// One way out of a test: its statements, then a jump on, or the panic call (its path and arguments), or a call
-/// (its path, arguments and result) after which `after` runs and the way goes on.
+/// (its path, arguments and result) after which `after` runs and the way goes on, or with `then`, the call's
+/// result (a bool) is tested and one set of statements or the other runs.
 struct Way {
     statements: Vec<Statement>,
     panic: Option<(Path, Vec<Operand>)>,
     call: Option<(Path, Vec<Operand>, Local, Vec<Statement>)>,
+    then: Option<(Vec<Statement>, Vec<Statement>)>,
 }
 
 fn way(statements: Vec<Statement>) -> Way {
@@ -125,6 +129,7 @@ fn way(statements: Vec<Statement>) -> Way {
         statements,
         panic: None,
         call: None,
+        then: None,
     }
 }
 
@@ -300,6 +305,7 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                                     statements: vec![],
                                     panic: Some(panic),
                                     call: None,
+                                    then: None,
                                 },
                             )
                         }
@@ -379,10 +385,110 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                             r,
                             vec![build(&dest_ty, good, vec![moved(Place::local(r))])?],
                         )),
+                        then: None,
                     };
                     Inlined {
                         before: vec![s],
                         test: Some((d, good_n, good_way, way(vec![other]))),
+                    }
+                }
+                // filter(p), p a closure that captures nothing: on Some, p on a reference to its value, and Some
+                // of the value where it holds, else None; None as it is
+                "filter" if option => {
+                    let x = x?;
+                    let [_, Operand::Constant(Const::Unit)] = args.as_slice() else {
+                        return None;
+                    };
+                    let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
+                        return None;
+                    };
+                    let [GenericArg::Ty(Ty::Other(closure))] = g.args.as_slice() else {
+                        return None;
+                    };
+                    let callee = closures.get(closure)?;
+                    let value = field(&x, good, &t);
+                    let to = fresh(
+                        Ty::Ref {
+                            lifetime: None,
+                            mutable: false,
+                            to: Box::new(t.clone()),
+                        },
+                        &mut new_decls,
+                    );
+                    let holds = fresh(Ty::Bool, &mut new_decls);
+                    let none = || build(&dest_ty, bad, vec![]);
+                    let good_way = Way {
+                        statements: vec![Statement::Assign(
+                            Place::local(to),
+                            Rvalue::Ref(BorrowKind::Shared, value.clone()),
+                        )],
+                        panic: None,
+                        call: Some((core_path(&[callee]), vec![moved(Place::local(to))], holds, vec![])),
+                        then: Some((vec![build(&dest_ty, good, vec![moved(value)])?], vec![none()?])),
+                    };
+                    let (d, s) = discr(&mut new_decls)?;
+                    Inlined {
+                        before: vec![s],
+                        test: Some((d, good_n, good_way, way(vec![none()?]))),
+                    }
+                }
+                // map_or(default, f), map_or_else(d, f) and or_else(f), each closure one that captures nothing: on
+                // the good variant, map_or's and map_or_else's value through f, or_else's variant as it is; on the
+                // other, map_or's default, or the closure d (f for or_else) on nothing (Option) or the error (Result)
+                "map_or" | "map_or_else" | "or_else" => {
+                    let x = x?;
+                    let closures_given = if method == "map_or_else" { 2 } else { 1 };
+                    let (value, given) = args.split_at(args.len() - closures_given);
+                    if value.len() != if method == "map_or" { 2 } else { 1 }
+                        || !given.iter().all(|a| matches!(a, Operand::Constant(Const::Unit)))
+                    {
+                        return None;
+                    }
+                    let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
+                        return None;
+                    };
+                    // the closures' types, the method's last type arguments, d's before f's
+                    let tys: Vec<&Ty> = g
+                        .args
+                        .iter()
+                        .filter_map(|a| match a {
+                            GenericArg::Ty(t) => Some(t),
+                            _ => None,
+                        })
+                        .collect();
+                    let (d, f) = (*tys.get(tys.len().checked_sub(closures_given)?)?, *tys.last()?);
+                    let result = dest_ty.clone()?;
+                    let mut through = |closure: &Ty, args: Vec<Operand>| -> Option<Way> {
+                        let Ty::Other(closure) = closure else { return None };
+                        let callee = closures.get(closure)?;
+                        let r = fresh(result.clone(), &mut new_decls);
+                        Some(Way {
+                            statements: vec![],
+                            panic: None,
+                            call: Some((
+                                core_path(&[callee]),
+                                args,
+                                r,
+                                vec![set(Rvalue::Use(moved(Place::local(r))))],
+                            )),
+                            then: None,
+                        })
+                    };
+                    let good_v = moved(field(&x, good, &t));
+                    let on_bad = if option {
+                        vec![]
+                    } else {
+                        vec![moved(field(&x, bad, e.as_ref()?))]
+                    };
+                    let (good_way, bad_way) = match method {
+                        "map_or" => (through(f, vec![good_v])?, way(vec![set(Rvalue::Use(value[1].clone()))])),
+                        "map_or_else" => (through(f, vec![good_v])?, through(d, on_bad)?),
+                        _ => (way(vec![build(&dest_ty, good, vec![good_v])?]), through(f, on_bad)?),
+                    };
+                    let (d, s) = discr(&mut new_decls)?;
+                    Inlined {
+                        before: vec![s],
+                        test: Some((d, good_n, good_way, bad_way)),
                     }
                 }
                 // the residual as the function's own failing variant: None, or Err with the residual's E
@@ -417,10 +523,31 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                 (None, Some((func, args, r, after))) => {
                     let back = BasicBlock(next_block);
                     next_block += 1;
+                    let terminator = match w.then {
+                        None => Terminator::Goto(ret),
+                        Some((yes, no)) => {
+                            let mut on = |statements: Vec<Statement>| {
+                                let name = BasicBlock(next_block);
+                                next_block += 1;
+                                extra.push(Block {
+                                    name,
+                                    statements,
+                                    terminator: Terminator::Goto(ret),
+                                });
+                                name
+                            };
+                            let (yes, no) = (on(yes), on(no));
+                            Terminator::SwitchInt {
+                                discr: Operand::Move(Place::local(r)),
+                                arms: vec![(0, no)],
+                                otherwise: Some(yes),
+                            }
+                        }
+                    };
                     extra.push(Block {
                         name: back,
                         statements: after,
-                        terminator: Terminator::Goto(ret),
+                        terminator,
                     });
                     Terminator::Call {
                         dest: Place::local(r),
