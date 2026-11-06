@@ -13,7 +13,7 @@ rust-cardiac, and cargo-cardiac is what you install.)
   expensive operation) needs as much explaining as a refusal. The message stays one line; the explanation (what it
   means on CARDIAC, why, what to write instead, an example) is Markdown in the code's entry of one table,
   `src/codes.rs`, which `cargo cardiac explain CODE` prints, as `rustc --explain` does, and which the website's
-  pages, `/rust-cardiac/codes/` and `/rust-cardiac/codes/CODE/`, are made from (`cargo cardiac explain --json`,
+  pages, `/rust-cardiac/messages/` and `/rust-cardiac/messages/CODE/`, are made from (`cargo cardiac explain --json`,
   committed in the site's repository). Each message is a constructor in its code's entry, so a message can't be made
   without one: the compiler's `Fail` is a `codes::Diag` (its code, its line, its notes), not a `String`, and travels
   from the driver to `cargo cardiac` as JSON. A code is what went wrong, not where: 48 codes cover about 170 places.

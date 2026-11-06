@@ -1,7 +1,7 @@
 //! What cargo-cardiac says about a program, each message with a code, as rustc's errors have: `error[RCE0002]` for
 //! an error or a refusal, `warning[RCW0001]` for a warning and `note[RCI0001]` for information. The message is one
 //! line; what it means on CARDIAC, why, and what to write instead is the code's explanation, which `cargo cardiac
-//! explain CODE` prints and the website has a page of (`/rust-cardiac/codes/CODE/`). The table below is the only
+//! explain CODE` prints and the website has a page of (`/rust-cardiac/messages/CODE/`). The table below is the only
 //! place either is written: every message about a program is made by one of its constructors, and the website's
 //! pages are made from `cargo cardiac explain --json`. A usage error (a bad flag) and the tool's own failures (no
 //! driver, a file it can't write) are no code's: `Diag::tool`, said as a plain `error:`.
@@ -177,7 +177,7 @@ impl Display for Diag {
 }
 
 /// Where the codes are explained on the web: an index, and a page for each, PAGE/CODE/.
-pub const PAGE: &str = "https://lab.strangequery.com/rust-cardiac/codes/";
+pub const PAGE: &str = "https://lab.strangequery.com/rust-cardiac/messages/";
 
 /// The code of this name, in any case: `rce0002` is RCE0002.
 pub fn find(id: &str) -> Option<&'static Code> {
