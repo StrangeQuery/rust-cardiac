@@ -42,6 +42,9 @@ Usage:
       beside it: a program that panics says why, and exits 101, as `cargo run` does. The input is the
       numbers after --, or standard input. A package with more than one program runs the one --bin names.
       Its build's messages go to standard error, so standard output is the program's alone.
+  {t} view [build's options] [--bin NAME] [-- INPUT...]
+      Build the program as run does, and open it in Cardigan, the CARDIAC IDE, in your browser: stopped at the
+      start, the input in its reader, to step through. The program goes in the address, which stays on this machine.
   {t} debug [OPTION]... FILE [INPUT]...
       Debug a listing (NAME.cq) or a deck, or profile it with --profile: ekg, with ekg's options.
       `{t} debug --help` says them.
@@ -661,6 +664,18 @@ fn main() {
 /// `cargo cardiac run`: build the one program asked for, then run its deck on burn, the map beside it.
 fn run(a: &Args) -> ExitCode {
     QUIET_STDOUT.store(true, Ordering::Relaxed);
+    let b = built_one(a, "run", Emit::default());
+    let mut args = vec![b.deck_file.clone()];
+    if let Some(input) = &a.input {
+        args.push("--".into());
+        args.extend(input.iter().cloned());
+    }
+    heartburn::tools::burn::main(&format!("cargo {TOOL} run"), args)
+}
+
+/// The one program `run` or `view` is about, built with `emit`: the package's binary target (`--bin` names one when
+/// there are several), or the single FILE.rs.
+fn built_one(a: &Args, command: &str, emit: Emit) -> Built {
     let built = if a.files.is_empty() {
         let pkgs = packages(a.manifest.as_deref(), a.package.as_deref()).unwrap_or_else(|e| die(e));
         let programs = chosen(&pkgs, &a.bins);
@@ -669,13 +684,13 @@ fn run(a: &Args) -> ExitCode {
                 std::slice::from_ref(*p),
                 &[t.name.clone()],
                 a.profile.as_deref(),
-                Emit::default(),
+                emit,
             ),
-            [] => die("no program to run: the package has no binary target".into()),
+            [] => die(format!("no program to {command}: the package has no binary target")),
             more => {
                 let names: Vec<&str> = more.iter().map(|(_, t)| t.name.as_str()).collect();
                 bad_usage(&format!(
-                    "run runs one program, and there are {}: {}. Name one with --bin",
+                    "{command} takes one program, and there are {}: {}. Name one with --bin",
                     names.len(),
                     names.join(", ")
                 ))
@@ -683,19 +698,62 @@ fn run(a: &Args) -> ExitCode {
         }
     } else {
         if a.files.len() > 1 {
-            bad_usage("run takes one FILE.rs; its input goes after --")
+            bad_usage(&format!("{command} takes one FILE.rs; its input goes after --"))
         }
-        vec![build_single(&a.files[0], &a.rustc, a.auto_overlay, Emit::default())]
+        vec![build_single(&a.files[0], &a.rustc, a.auto_overlay, emit)]
     };
-    let Some(b) = built.first() else {
-        die("nothing was built to run".into())
-    };
-    let mut args = vec![b.deck_file.clone()];
-    if let Some(input) = &a.input {
-        args.push("--".into());
-        args.extend(input.iter().cloned());
+    built.into_iter().next().unwrap_or_else(|| die(format!("nothing was built to {command}")))
+}
+
+/// Where `view` opens a program: Cardigan, the CARDIAC IDE in a browser. CARDIGAN_URL says another (a local copy).
+const CARDIGAN: &str = "https://lab.strangequery.com/cardigan/ide/";
+
+/// Build the program and open it in Cardigan, stopped at the start with its input in the reader: the address carries
+/// the listing (a program in phases, each phase's deck), as the site's own buttons hand Cardigan a program. It all
+/// goes after the address's #, which a browser never sends, so the program stays on this machine.
+fn view(a: &Args) -> ExitCode {
+    let emit = Emit { deck: true, listing: true, map: true, asm: false };
+    let b = built_one(a, "view", emit);
+    let deck = Path::new(&b.deck_file);
+    let name = deck.file_stem().and_then(|s| s.to_str()).unwrap_or("program").to_string();
+    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_else(|e| die(format!("{}: {e}", p.display())));
+    let mut q = vec![("name", name)];
+    if b.code.len() == 1 {
+        q.push(("cq", read(&deck.with_extension("cq"))));
+    } else {
+        for n in 1..=b.code.len() {
+            q.push(("cqb", read(&heartburn::tape::Tape::phase_path(deck, n))));
+        }
     }
-    heartburn::tools::burn::main(&format!("cargo {TOOL} run"), args)
+    if let Some(input) = &a.input {
+        q.push(("in", input.join(" ")));
+    }
+    let base = std::env::var("CARDIGAN_URL").unwrap_or_else(|_| CARDIGAN.to_string());
+    let fragment: Vec<String> = q.iter().map(|(k, v)| format!("{k}={}", percent(v))).collect();
+    let url = format!("{base}#{}", fragment.join("&"));
+    eprintln!("     Opening {} in Cardigan", b.file);
+    let opener = if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(&url).status()
+    } else if cfg!(windows) {
+        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(&url).status()
+    } else {
+        std::process::Command::new("xdg-open").arg(&url).status()
+    };
+    if !opener.is_ok_and(|s| s.success()) {
+        eprintln!("note: no browser opened; the address is below");
+    }
+    println!("{url}");
+    ExitCode::SUCCESS
+}
+
+/// `s` for the address: letters, digits and `-_.~` as they are, every other byte as %XX.
+fn percent(s: &str) -> String {
+    s.bytes()
+        .map(|c| match c {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (c as char).to_string(),
+            _ => format!("%{c:02X}"),
+        })
+        .collect()
 }
 
 /// Compile a single file with these flags, as `mode` asks: what the driver made of it.
@@ -786,6 +844,7 @@ fn main() -> ExitCode {
             build(&pkgs(), &a.bins, profile, a.emit);
         }
         "run" => return run(&a),
+        "view" => return view(&a),
         "test" => {
             if a.files.len() > 1 {
                 bad_usage("test takes one FILE.rs; its input goes after --")
