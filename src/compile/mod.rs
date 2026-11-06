@@ -557,6 +557,8 @@ fn compile(
         iterators::array_into_iter(fns.get_mut(n).unwrap());
         iterators::enumerate_slices(fns.get_mut(n).unwrap());
         iterators::slice_methods(fns.get_mut(n).unwrap());
+        iterators::array_eq(fns.get_mut(n).unwrap());
+        iterators::step_by(fns.get_mut(n).unwrap());
         forloops::lower_for_loops(fns.get_mut(n).unwrap());
         // a range's contains(): its tests, while the range is a struct the struct pass will take apart
         methods::inline_range_contains(fns.get_mut(n).unwrap());

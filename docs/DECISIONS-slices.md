@@ -56,3 +56,20 @@
   elements, where the index loop is 25). `fold` whose result passes a card panics or keeps three digits as the
   index loop does; the support row array_iter_fold's input (3 -1 4 1 to 2941) passes one, so it reads as a
   difference now where it was refused.
+
+## 2026-11-06 · `==` of two arrays element by element; `step_by` as core's struct, its `nth()` worked out
+
+- **Decision.** `iterators::array_eq`: `<[T; N] as PartialEq>::eq` (and `ne`), which rustc calls at opt-level 1,
+  and the compare of both arrays' bytes as one integer it makes at 2 (`copy t as u64 (Transmute)`), are the
+  elements compared one after another, out at the first that differs. At opt-level 2 only for arrays assigned once
+  and never written, since the integer copy is taken where rustc put it. `iterators::step_by`: `StepBy::new(r, k)`
+  (and `step_by`) checks k isn't 0, as core does, and builds core's struct (the range, k - 1, and whether the
+  first item is still to come) as a plain one; what rustc inlines of its `next()` stays, and the range's
+  `spec_nth(n)` it calls is worked out in place: the start moved on by n where that is short of the end. Neither
+  the sum nor the distance to the end fits a card in every case, so the test is split by the start's sign: from
+  0 or more the distance fits, from below 0 the sum does.
+- **Why.** `==` of arrays is the obvious loop; `step_by` is a loop that steps by k, and rustc's inlined `next()`
+  is already code the compiler writes.
+- **Cost.** `for i in (a..b).step_by(k)` is 57 cells where `while i < b { ..; i += k }` is 15 to 26: the first
+  item's flag, k - 1 kept, and the split test. The while loop's `i += k` past a card is an overflow, which
+  `step_by` never makes.

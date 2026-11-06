@@ -1400,3 +1400,420 @@ pub fn slice_methods(f: &mut Function) {
     f.body.decls.append(&mut fresh.decls);
     f.body.blocks.append(&mut fresh.blocks);
 }
+
+/// `a == b` (or `!=`) as one element after another, each an `==` and a test, ending at the first that differs.
+/// The blocks from `first`; each way out sets `dest` and goes on to `then`.
+fn equal_elements(
+    fresh: &mut Fresh,
+    pairs: &[(Place, Place)],
+    elem: &Ty,
+    dest: Place,
+    negate: bool,
+    then: BasicBlock,
+) -> BasicBlock {
+    let (yes, no) = (fresh.name(), fresh.name());
+    let set = |b: bool| Statement::Assign(dest.clone(), Rvalue::Use(Operand::Constant(Const::Bool(b != negate))));
+    fresh.block(yes, vec![set(true)], Terminator::Goto(then));
+    fresh.block(no, vec![set(false)], Terminator::Goto(then));
+    let mut next = yes;
+    for (a, b) in pairs.iter().rev() {
+        let (x, y, e) = (
+            fresh.local(elem.clone()),
+            fresh.local(elem.clone()),
+            fresh.local(Ty::Bool),
+        );
+        let name = fresh.name();
+        fresh.block(
+            name,
+            vec![
+                assign(x, Rvalue::Use(Operand::Copy(a.clone()))),
+                assign(y, Rvalue::Use(Operand::Copy(b.clone()))),
+                assign(e, Rvalue::BinaryOp(ir::BinOp::Eq, copy_of(x), copy_of(y))),
+            ],
+            branch(e, no, next),
+        );
+        next = name;
+    }
+    next
+}
+
+/// The elements of two arrays of n, pair by pair (each array where `element_pointer` found it, from its start).
+fn element_pairs(a: &Place, b: &Place, n: u64) -> Vec<(Place, Place)> {
+    let at = |p: &Place, k: u64| {
+        let mut e = p.clone();
+        e.projection.push(Projection::ConstantIndex {
+            offset: k,
+            min_length: n,
+        });
+        e
+    };
+    (0..n).map(|k| (at(a, k), at(b, k))).collect()
+}
+
+/// `==` and `!=` of two arrays of a cell's type: rustc's call of `<[T; N] as PartialEq>::eq` (opt-level 1), or its
+/// compare of both arrays' bytes as one integer (`copy a as u64 (Transmute)`, at 2), as the elements compared one
+/// after another. At opt-level 2 only for arrays assigned once and never written, as the copy in the integer is
+/// taken where it is.
+pub fn array_eq(f: &mut Function) {
+    let mut fresh = Fresh::of(f);
+    let element = |t: Option<&Ty>| match t {
+        Some(Ty::Array(e, ArrayLen::Known(n))) if matches!(**e, Ty::Int(IntTy::I16 | IntTy::U8) | Ty::Bool) => {
+            Some(((**e).clone(), *n))
+        }
+        _ => None,
+    };
+    let types = |f: &Function| {
+        let mut t: HashMap<Local, Ty> = f.params.iter().cloned().collect();
+        t.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+        t
+    };
+    // rustc's call, at opt-level 1
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let Some(q) = &func.qself else { continue };
+        let partial_eq = q.as_trait.as_ref().is_some_and(|t| names(t) == Some(vec!["PartialEq"]));
+        let negate = match func.name() {
+            "eq" => false,
+            "ne" => true,
+            _ => continue,
+        };
+        let (Some((elem, n)), true, [x, y]) = (element(Some(&q.ty)), partial_eq, args.as_slice()) else {
+            continue;
+        };
+        let defs = definitions(f);
+        let (Some((a, 0)), Some((b, 0))) = (element_pointer(f, &defs, x), element_pointer(f, &defs, y)) else {
+            continue;
+        };
+        let first = equal_elements(&mut fresh, &element_pairs(&a, &b, n), &elem, dest, negate, ret);
+        f.body.blocks[bi].terminator = Terminator::Goto(first);
+    }
+    // the integer compare, at opt-level 2
+    loop {
+        let t = types(f);
+        let defs = definitions(f);
+        let bytes = |o: &Operand| -> Option<(Local, Local, (usize, usize))> {
+            let x = o.local()?;
+            if !matches!(
+                t.get(&x),
+                Some(Ty::Int(IntTy::U16 | IntTy::U32 | IntTy::U64 | IntTy::U128))
+            ) || ir::occurrences(&f.body.blocks, x) != 2
+            {
+                return None;
+            }
+            let [At::Line(bi, si)] = defs.get(&x)?.as_slice() else {
+                return None;
+            };
+            let Statement::Assign(_, Rvalue::Cast(a, _, CastKind::Transmute)) = &f.body.blocks[*bi].statements[*si]
+            else {
+                return None;
+            };
+            let a = a.local()?;
+            let [d] = defs.get(&a)?.as_slice() else { return None };
+            (element(t.get(&a)).is_some() && writes(f, a, *d) == 0).then_some((x, a, (*bi, *si)))
+        };
+        let found = f.body.blocks.iter().enumerate().find_map(|(bi, b)| {
+            b.statements.iter().enumerate().find_map(|(si, s)| match s {
+                Statement::Assign(d, Rvalue::BinaryOp(op @ (ir::BinOp::Eq | ir::BinOp::Ne), x, y)) => {
+                    let (x, y) = (bytes(x)?, bytes(y)?);
+                    (t.get(&x.1) == t.get(&y.1)).then(|| (bi, si, d.clone(), *op == ir::BinOp::Ne, x, y))
+                }
+                _ => None,
+            })
+        });
+        let Some((bi, si, dest, negate, (_, a, ca), (_, b, cb))) = found else {
+            break;
+        };
+        let (elem, n) = element(t.get(&a)).expect("an array, as found");
+        for (ci, cj) in [ca, cb] {
+            f.body.blocks[ci].statements[cj] = Statement::Nop;
+        }
+        // the block cut at the compare: what follows it, on to the block's own end
+        let then = fresh.name();
+        let blk = &mut f.body.blocks[bi];
+        let rest = blk.statements.split_off(si + 1);
+        blk.statements.pop();
+        let end = std::mem::replace(&mut blk.terminator, Terminator::Unreachable);
+        fresh.block(then, rest, end);
+        let first = equal_elements(
+            &mut fresh,
+            &element_pairs(&Place::local(a), &Place::local(b), n),
+            &elem,
+            dest,
+            negate,
+            then,
+        );
+        f.body.blocks[bi].terminator = Terminator::Goto(first);
+        // (the new blocks join the body now: the next compare may be in one of them)
+        f.body.blocks.append(&mut fresh.blocks);
+    }
+    for b in f.body.blocks.iter_mut() {
+        b.statements.retain(|s| *s != Statement::Nop);
+    }
+    f.body.decls.append(&mut fresh.decls);
+    f.body.blocks.append(&mut fresh.blocks);
+    let blocks = &f.body.blocks;
+    f.body.decls.retain(|d| {
+        !matches!(d.ty, Ty::Int(IntTy::U16 | IntTy::U32 | IntTy::U64 | IntTy::U128))
+            || ir::occurrences(blocks, d.local) > 0
+    });
+}
+
+/// `core::ops::Range<T>`, or the struct the for-loop pass makes of one (`Range_i16`), for T a card's type: T.
+fn card_range(t: &Ty) -> Option<IntTy> {
+    let Ty::Path(p) = t else { return None };
+    let card = |t: &Ty| match t {
+        Ty::Int(t @ (IntTy::I16 | IntTy::U8 | IntTy::Usize)) => Some(*t),
+        _ => None,
+    };
+    if p.qself.is_none() && names(p)? == ["core", "ops", "Range"] {
+        return match last_args(p).as_slice() {
+            [GenericArg::Ty(t)] => card(t),
+            _ => None,
+        };
+    }
+    match p.is_plain().then(|| p.name())? {
+        "Range_i16" => Some(IntTy::I16),
+        "Range_u8" => Some(IntTy::U8),
+        "Range_usize" => Some(IntTy::Usize),
+        _ => None,
+    }
+}
+
+/// `core::iter::StepBy<R>` for R a range of a card's type: the card's type.
+fn step_by_ty(t: &Ty) -> Option<IntTy> {
+    let Ty::Path(p) = t else { return None };
+    let [GenericArg::Ty(r)] = last_args(p).as_slice() else {
+        return None;
+    };
+    (p.qself.is_none() && names(p)? == ["core", "iter", "StepBy"]).then(|| card_range(r))?
+}
+
+fn range_struct(t: IntTy) -> Ty {
+    Ty::Path(path(&[&format!("Range_{t}")], vec![]))
+}
+
+fn step_by_struct(t: IntTy) -> Ty {
+    Ty::Path(path(&[&format!("StepBy_{t}")], vec![]))
+}
+
+/// `(a..b).step_by(k)`: core's `StepBy` of a range, a plain struct of the range, k - 1 and whether the first item
+/// is still to come, as core has it, which the struct pass takes apart. `StepBy::new` checks k isn't 0 and builds
+/// it; what rustc inlines of its `next()` is left as it is, but for the `nth()` of the range it calls, which is
+/// worked out here: the start moved on by n if that is short of the end, as an `i16` past a card can't hold the
+/// sum, the test is split by the start's sign (from 0 or more, the distance to the end fits a card; from below 0,
+/// the sum does).
+pub fn step_by(f: &mut Function) {
+    let steps: Vec<(Local, IntTy)> = f
+        .body
+        .decls
+        .iter()
+        .filter_map(|d| step_by_ty(&d.ty).map(|t| (d.local, t)))
+        .collect();
+    if steps.is_empty() {
+        return;
+    }
+    let mut fresh = Fresh::of(f);
+    let is_step = |l: Local| steps.iter().find(|(s, _)| *s == l).map(|(_, t)| *t);
+    let mut made_any = false;
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let Some(d) = dest.as_local() else { continue };
+        let Some(t) = is_step(d) else { continue };
+        // `StepBy::<R>::new(r, k)` (opt-level 2), or `<R as Iterator>::step_by(r, k)` (1)
+        let new = func.name() == "new" && names(&func).is_some_and(|n| n.len() >= 2 && n[n.len() - 2] == "StepBy");
+        let method = func.name() == "step_by" && func.qself.as_ref().is_some_and(|q| card_range(&q.ty) == Some(t));
+        let ([r, k], true) = (args.as_slice(), new || method) else {
+            continue;
+        };
+        let c = fresh.local(Ty::Bool);
+        let m = fresh.local(Ty::Int(IntTy::Usize));
+        let build = fresh.name();
+        let take = |o: &Operand| match o {
+            Operand::Move(p) => Operand::Copy(p.clone()),
+            o => o.clone(),
+        };
+        fresh.block(
+            build,
+            vec![
+                assign(m, Rvalue::BinaryOp(ir::BinOp::Sub, take(k), usize_const(1))),
+                Statement::Assign(
+                    dest.clone(),
+                    Rvalue::Struct(
+                        path(&[&format!("StepBy_{t}")], vec![]),
+                        vec![
+                            ("iter".into(), r.clone()),
+                            ("step_minus_one".into(), Operand::Move(Place::local(m))),
+                            ("first_take".into(), Operand::Constant(Const::Bool(true))),
+                        ],
+                    ),
+                ),
+            ],
+            Terminator::Goto(ret),
+        );
+        let b = &mut f.body.blocks[bi];
+        b.statements
+            .push(assign(c, Rvalue::BinaryOp(ir::BinOp::Ne, take(k), usize_const(0))));
+        b.terminator = Terminator::Assert {
+            cond: Operand::Move(Place::local(c)),
+            expected: true,
+            msg: "assertion failed: step != 0".into(),
+            msg_args: vec![],
+            target: build,
+            unwind: Unwind::Continue,
+        };
+        made_any = true;
+    }
+    if !made_any {
+        return;
+    }
+    // the range's nth(), on the StepBy's range
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let ("spec_nth", [Operand::Move(r), n]) = (func.name(), args.as_slice()) else {
+            continue;
+        };
+        let Some(r) = r.as_local() else { continue };
+        let Some(range) = f.body.blocks[bi].statements.iter().find_map(|s| match s {
+            Statement::Assign(d, Rvalue::Ref(BorrowKind::Mut, p)) if d.as_local() == Some(r) => Some(p.clone()),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let (Some(s), [Projection::Field(0, _)]) = (range.base_local(), range.projection.as_slice()) else {
+            continue;
+        };
+        let Some(t) = is_step(s) else { continue };
+        if ir::occurrences(&f.body.blocks, r) != 2 {
+            continue;
+        }
+        let mut range = range.clone();
+        range.projection = vec![Projection::Field(0, range_struct(t))];
+        let field = |k: u32| {
+            let mut p = range.clone();
+            p.projection.push(Projection::Field(k, Ty::Int(t)));
+            p
+        };
+        let card = Ty::Int(t);
+        let (st, en, nn, plus) = (
+            fresh.local(card.clone()),
+            fresh.local(card.clone()),
+            fresh.local(card.clone()),
+            fresh.local(card.clone()),
+        );
+        let (c0, c1, c2) = (fresh.local(Ty::Bool), fresh.local(Ty::Bool), fresh.local(Ty::Bool));
+        let (none, some, pos, neg, pos_some) = (fresh.name(), fresh.name(), fresh.name(), fresh.name(), fresh.name());
+        let one = Operand::Constant(Const::Int { value: 1, ty: t });
+        let zero = Operand::Constant(Const::Int { value: 0, ty: t });
+        fresh.block(
+            none,
+            vec![
+                Statement::Assign(field(0), Rvalue::Use(copy_of(en))),
+                Statement::Assign(dest.clone(), variant(&card, None)),
+            ],
+            Terminator::Goto(ret),
+        );
+        fresh.block(
+            some,
+            vec![
+                Statement::Assign(field(0), Rvalue::BinaryOp(ir::BinOp::Add, copy_of(plus), one)),
+                Statement::Assign(dest.clone(), variant(&card, Some(copy_of(plus)))),
+            ],
+            Terminator::Goto(ret),
+        );
+        // from 0 or more: n against the distance to the end
+        let gap = fresh.local(card.clone());
+        fresh.block(
+            pos,
+            vec![
+                assign(gap, Rvalue::BinaryOp(ir::BinOp::Sub, copy_of(en), copy_of(st))),
+                assign(c1, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(nn), copy_of(gap))),
+            ],
+            branch(c1, none, pos_some),
+        );
+        fresh.block(
+            pos_some,
+            vec![assign(plus, Rvalue::BinaryOp(ir::BinOp::Add, copy_of(st), copy_of(nn)))],
+            Terminator::Goto(some),
+        );
+        // from below 0: the sum, against the end
+        fresh.block(
+            neg,
+            vec![
+                assign(plus, Rvalue::BinaryOp(ir::BinOp::Add, copy_of(st), copy_of(nn))),
+                assign(c2, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(plus), copy_of(en))),
+            ],
+            branch(c2, none, some),
+        );
+        let signed = fresh.name();
+        let below = fresh.local(Ty::Bool);
+        fresh.block(
+            signed,
+            vec![assign(below, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(st), zero))],
+            branch(below, pos, neg),
+        );
+        let n_card = if t == IntTy::Usize {
+            Rvalue::Use(n.clone())
+        } else {
+            Rvalue::Cast(n.clone(), card.clone(), CastKind::IntToInt)
+        };
+        let b = &mut f.body.blocks[bi];
+        b.statements.retain(|s| s.def() != Some(r));
+        b.statements.extend([
+            assign(st, Rvalue::Use(Operand::Copy(field(0)))),
+            assign(en, Rvalue::Use(Operand::Copy(field(1)))),
+            assign(nn, n_card),
+            assign(c0, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(st), copy_of(en))),
+        ]);
+        b.terminator = branch(c0, none, if t == IntTy::I16 { signed } else { pos });
+    }
+    // the types: StepBy and the range inside it as the plain structs, wherever a StepBy's fields are named
+    for d in f.body.decls.iter_mut() {
+        if let Some(t) = step_by_ty(&d.ty) {
+            d.ty = step_by_struct(t);
+        }
+    }
+    for b in f.body.blocks.iter_mut() {
+        let mut fix = |p: &mut Place| {
+            if let (Some(t), Some(Projection::Field(0, ft))) =
+                (p.base_local().and_then(is_step), p.projection.first_mut())
+            {
+                if card_range(ft).is_some() {
+                    *ft = range_struct(t);
+                }
+            }
+        };
+        for s in b.statements.iter_mut() {
+            s.places_mut(&mut fix);
+        }
+        b.terminator.places_mut(&mut fix);
+    }
+    f.body.decls.append(&mut fresh.decls);
+    f.body.blocks.append(&mut fresh.blocks);
+}
