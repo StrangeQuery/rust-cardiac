@@ -134,12 +134,20 @@ fn indexing(p: &Projection) -> bool {
 pub fn scalarize_structs(
     fns: &mut Ordered<String, Function>,
     file: &File,
-    known: Vec<(String, Vec<Field>)>,
+    mut known: Vec<(String, Vec<Field>)>,
     structs: &[StructDef],
 ) -> Result<(), Fail> {
     // the structs: their fields in declaration order, from the aggregates that build them
     instances_as_structs(fns, structs);
     shared_scalar_refs_by_value(fns);
+    // the tuples, as structs: an enum's fields that are tuples (`Option<(i16, i16)>`'s), and the functions'
+    let mut tuples = vec![];
+    for f in known.iter_mut().flat_map(|(_, fields)| fields.iter_mut()) {
+        if let Some(s) = tuple_struct(&f.ty, &mut tuples) {
+            f.ty = s;
+        }
+    }
+    tuples_as_structs(fns, &mut tuples);
     let mut layouts: HashMap<String, Vec<Field>> = known.into_iter().collect();
     // a unit struct is no cells, and its value (`const Flag`) none: unless a struct or a const of the same name
     // has some, as the pass knows structs by name
@@ -156,7 +164,7 @@ pub fn scalarize_structs(
             layouts.entry(s.name.clone()).or_default();
         }
     }
-    layouts.extend(tuples_as_structs(fns));
+    layouts.extend(tuples);
     let mut learn = |p: &Path, names: Vec<&String>| {
         if !plain_path(p) {
             return;
@@ -625,8 +633,7 @@ fn shared_scalar_refs_by_value(fns: &mut Ordered<String, Function>) {
 /// an array of them, which is then one array per leaf, as an array of structs is. An overflow-checked op's pair
 /// (`AddWithOverflow`'s `(i16, bool)`) stays a tuple: the passes after know it so. Returns the structs, each with
 /// its fields.
-fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Field>)> {
-    let mut made: Vec<(String, Vec<Field>)> = vec![];
+fn tuples_as_structs(fns: &mut Ordered<String, Function>, made: &mut Vec<(String, Vec<Field>)>) {
     let names: Vec<String> = fns.keys().cloned().collect();
     for n in &names {
         let f = fns.get_mut(n).unwrap();
@@ -646,7 +653,7 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
             .collect();
         let mut retype = |l: Local, t: &mut Ty| {
             if !pairs.contains(&l) {
-                if let Some(s) = tuple_struct(t, &mut made) {
+                if let Some(s) = tuple_struct(t, made) {
                     *t = s;
                 }
             }
@@ -662,7 +669,7 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
         let mut fields = |p: &mut Place| {
             for q in p.projection.iter_mut() {
                 if let Projection::Field(_, t) = q {
-                    if let Some(s) = tuple_struct(t, &mut made) {
+                    if let Some(s) = tuple_struct(t, made) {
                         *t = s;
                     }
                 }
@@ -687,7 +694,7 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
             };
             match r {
                 Rvalue::Tuple(ops) => {
-                    let Some(fs) = struct_fields(&t, &made) else { continue };
+                    let Some(fs) = struct_fields(&t, made) else { continue };
                     if ops.len() != fs.len() {
                         continue;
                     }
@@ -695,28 +702,27 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
                         .iter()
                         .zip(fs)
                         .enumerate()
-                        .map(|(k, (o, f))| (k.to_string(), tuple_const(o, &f.ty, &made)))
+                        .map(|(k, (o, f))| (k.to_string(), tuple_const(o, &f.ty, made)))
                         .collect();
                     let Ty::Path(p) = &t else { unreachable!() };
                     *r = Rvalue::Struct(p.clone(), built);
                 }
-                Rvalue::Use(o) => *o = tuple_const(o, &t, &made),
-                Rvalue::Repeat(o, _) if element.is_some() => *o = tuple_const(o, element.unwrap(), &made),
+                Rvalue::Use(o) => *o = tuple_const(o, &t, made),
+                Rvalue::Repeat(o, _) if element.is_some() => *o = tuple_const(o, element.unwrap(), made),
                 Rvalue::Array(os) if element.is_some() => {
                     for o in os {
-                        *o = tuple_const(o, element.unwrap(), &made);
+                        *o = tuple_const(o, element.unwrap(), made);
                     }
                 }
                 _ => {}
             }
         }
     }
-    made
 }
 
 /// The struct a tuple type is (one of scalars, or of such tuples), an array of them, or a reference to either:
 /// that type with the struct in the tuple's place, the struct made the first time it is met.
-fn tuple_struct(t: &Ty, made: &mut Vec<(String, Vec<Field>)>) -> Option<Ty> {
+pub(super) fn tuple_struct(t: &Ty, made: &mut Vec<(String, Vec<Field>)>) -> Option<Ty> {
     match t {
         Ty::Tuple(ts) => {
             let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);

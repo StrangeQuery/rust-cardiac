@@ -642,19 +642,9 @@ impl Enums<'_> {
                 return Ok(Kind::Cell(t.clone()));
             }
         }
-        // a tuple of scalars: the struct the struct pass makes of one, `tuple__i16_i16`
-        if let Ty::Tuple(ts) = t {
-            let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
-            if ts.len() >= 2 && ts.iter().all(scalar) {
-                let name = format!(
-                    "tuple__{}",
-                    ts.iter().map(|t| t.to_string()).collect::<Vec<_>>().join("_")
-                );
-                return Ok(Kind::Cell(Ty::Path(Path {
-                    qself: None,
-                    segments: vec![Segment::Name { name, args: None }],
-                })));
-            }
+        // a tuple of scalars, or of such tuples: a struct the struct pass makes of it (`structs::tuple_struct`)
+        if matches!(t, Ty::Tuple(_)) && super::structs::tuple_struct(t, &mut vec![]).is_some() {
+            return Ok(Kind::Cell(t.clone()));
         }
         let Ty::Path(p) = t else { return Err(None) };
         let Some((i, d)) = def_of(self.defs, p) else {

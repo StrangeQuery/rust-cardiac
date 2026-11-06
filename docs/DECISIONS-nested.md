@@ -57,3 +57,18 @@
 - **Evidence.** char_to_digit and char_from_digit match at every setting. Every byte 0..=255 through `to_digit`
   with radix 2, 8, 10, 16 and 36, and every n from -40 to 40 (and 500, 999, -999) through `from_digit` with the
   same radixes, match native Rust at the four settings; so does a digit unwrapped and one compared with `Some(3)`.
+
+## 2026-11-06 · A tuple in an enum is the struct the struct pass makes of it; `Option::zip` is written here
+
+- **Decision.** The enum pass keeps a variant's field that is a tuple of scalars (or of such tuples) as the tuple,
+  and the struct pass makes it its struct (`structs::tuple_struct`), as it makes the functions' tuples, so that
+  `Option<(i16, i16)>` is a tag and the pair's two cells. The enum pass had named the struct itself, which the
+  struct pass then never made. `a.zip(b)`, which rustc calls at every opt-level, is core's `match (a, b) {
+  (Some(x), Some(y)) => Some((x, y)), _ => None }`: each discriminant tested, and `Some` of the pair built
+  (`enum_methods::zips`). A function whose parameter is an `Option` or a `Result` of such a tuple is read.
+- **Why.** Each piece was there: tuples as structs, structs in enums, and the tests of a discriminant.
+- **Cost.** None to other programs: the compiler's tests, the examples and the matrix's option, result and enum
+  rows are unchanged.
+- **Evidence.** option_zip matches at every setting (44 and 69 cells). Probes matching native Rust at the four
+  settings: a zip of an `Option<i16>` and an `Option<bool>` matched on both, `Option<(i16, i16)>` returned from a
+  function and `Option<(i16, u8)>` passed to one, and an `Option<((i16, i16), bool)>`.

@@ -150,6 +150,7 @@ fn core_path(words: &[&str]) -> Path {
 /// inlined. `defs` are the enums' definitions as `enums::normalized` gives them; `closures`, each closure's
 /// function by the closure's type (as rustc writes it).
 pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMap<String, String>) {
+    zips(f, defs);
     let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
     types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
     types.insert(Local(0), f.ret.clone());
@@ -599,6 +600,115 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
     }
     f.body.blocks.extend(extra);
     f.body.decls.extend(decls);
+}
+
+/// `a.zip(b)` of two `Option`s, which rustc calls at every opt-level: core's `match (a, b) { (Some(x), Some(y)) =>
+/// Some((x, y)), _ => None }`, a test of each discriminant, `Some` of the pair built where both are `Some`.
+fn zips(f: &mut Function, defs: &[EnumDef]) {
+    let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
+    types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+    types.insert(Local(0), f.ret.clone());
+    let mut next_local = types
+        .keys()
+        .map(|l| l.0)
+        .filter(|&l| l != Local::UNIT.0)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1;
+    let mut extra = vec![];
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = &f.body.blocks[bi].terminator
+        else {
+            continue;
+        };
+        if called(func) != Some("zip") {
+            continue;
+        }
+        let [a, b] = args.as_slice() else { continue };
+        let (Some(a), Some(b)) = (a.place().and_then(Place::as_local), b.place().and_then(Place::as_local)) else {
+            continue;
+        };
+        let (Some(at), Some(bt), Some(pair_ty)) = (
+            types.get(&a),
+            types.get(&b),
+            dest.as_local().and_then(|d| types.get(&d)),
+        ) else {
+            continue;
+        };
+        let (Some(x), Some(y), Some(pair)) = (ty_args(at).pop(), ty_args(bt).pop(), ty_args(pair_ty).pop()) else {
+            continue;
+        };
+        let numbers = (variant_number(defs, at, "Some"), variant_number(defs, bt, "Some"));
+        let (Some(a_some), Some(b_some)) = numbers else {
+            continue;
+        };
+        let (Some(some), Some(none)) = (variant_path(pair_ty, "Some"), variant_path(pair_ty, "None")) else {
+            continue;
+        };
+        let (dest, ret) = (dest.clone(), *ret);
+        let mut local = |ty: Ty| {
+            let l = Local(next_local);
+            next_local += 1;
+            f.body.decls.push(Decl {
+                local: l,
+                mutable: true,
+                ty,
+            });
+            l
+        };
+        let (da, db, t) = (local(Ty::Int(IntTy::I16)), local(Ty::Int(IntTy::I16)), local(pair));
+        let mut block = |statements: Vec<Statement>, terminator: Terminator| {
+            let name = BasicBlock(next_block);
+            next_block += 1;
+            extra.push(Block {
+                name,
+                statements,
+                terminator,
+            });
+            name
+        };
+        let nothing = block(
+            vec![Statement::Assign(dest.clone(), Rvalue::Variant(none, vec![]))],
+            Terminator::Goto(ret),
+        );
+        let built = vec![
+            Statement::Assign(
+                Place::local(t),
+                Rvalue::Tuple(vec![
+                    Operand::Move(field(&Place::local(a), "Some", &x)),
+                    Operand::Move(field(&Place::local(b), "Some", &y)),
+                ]),
+            ),
+            Statement::Assign(dest, Rvalue::Variant(some, vec![Operand::Move(Place::local(t))])),
+        ];
+        let both = block(built, Terminator::Goto(ret));
+        let test = |d: Local, n: i128, yes: BasicBlock| Terminator::SwitchInt {
+            discr: Operand::Move(Place::local(d)),
+            arms: vec![(n, yes)],
+            otherwise: Some(nothing),
+        };
+        let second = block(
+            vec![Statement::Assign(
+                Place::local(db),
+                Rvalue::Discriminant(Place::local(b)),
+            )],
+            test(db, b_some, both),
+        );
+        let first = &mut f.body.blocks[bi];
+        first.statements.push(Statement::Assign(
+            Place::local(da),
+            Rvalue::Discriminant(Place::local(a)),
+        ));
+        first.terminator = test(da, a_some, second);
+    }
+    f.body.blocks.extend(extra);
 }
 
 /// `a.checked_add(b)`, `checked_sub` and `checked_mul` on an i16, which rustc calls at opt-level 1 and s
