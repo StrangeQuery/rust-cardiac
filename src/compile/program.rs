@@ -104,6 +104,8 @@ pub struct Rustc {
     pub debug_assertions: Option<bool>,
     /// The flags, `-C NAME=VALUE` each.
     pub flags: Vec<String>,
+    /// `--edition`, if given: 2021 when not.
+    pub edition: Option<String>,
 }
 
 impl Default for Rustc {
@@ -112,6 +114,7 @@ impl Default for Rustc {
             opt_level: OptLevel::No,
             debug_assertions: None,
             flags: vec![],
+            edition: None,
         }
     }
 }

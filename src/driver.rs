@@ -504,7 +504,7 @@ pub fn single(file: &str, rustc: &Rustc, settings: &Settings) -> Result<Option<R
     let mut cmd = driver.rustc();
     cmd.args([
         "--edition",
-        "2021",
+        rustc.edition.as_deref().unwrap_or("2021"),
         "--crate-type",
         "lib",
         "--cfg",

@@ -34,9 +34,11 @@ Usage:
   {t} build --emit LIST ...
       What build writes, as rustc's --emit: any of deck, listing, map and asm (deck,map when not given).
       listing is the program in Brian Stuart's six columns, NAME.cq (NAME.2.cq, ...), which asm assembles.
-  {t} build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
+  {t} build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay]
+            [--edition YEAR] FILE.rs...
       The same for single files that use no other crate, not even cardiac: such a file defines the
-      built-ins it calls itself, as stubs (`#[inline(never)] pub fn out(_v: i16) {{}}`).
+      built-ins it calls itself, as stubs (`#[inline(never)] pub fn out(_v: i16) {{}}`). It is Rust's
+      2021 edition unless --edition names another, as rustc's does.
   {t} run [build's options] [--bin NAME] [-- INPUT...]
       Build the program as build does, then run its deck, each phase's deck in turn, with its panic map
       beside it: a program that panics says why, and exits 101, as `cargo run` does. The input is the
@@ -83,8 +85,8 @@ How much build and run say:
                     --message-format=human, the default, is lines for a person
 
 For developing cargo-cardiac:
-  {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] FILE.rs
-          [-- INPUT...]
+  {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--edition YEAR]
+          FILE.rs [-- INPUT...]
   {t} test [--manifest-path PATH] [-p NAME] [--release | --profile NAME] --bin NAME [-- INPUT...]
       Compile a program as the compiler's tests do, write its .mir and .asm beside it, run it from
       main_bb0 on the input, and print its cards on one line.
@@ -290,12 +292,23 @@ struct Args {
     rest: Vec<String>,
 }
 
+/// An edition, as rustc names them.
+fn edition(year: String) -> String {
+    if !["2015", "2018", "2021", "2024"].contains(&year.as_str()) {
+        bad_usage(&format!("--edition {year}: Rust's editions are 2015, 2018, 2021 and 2024"))
+    }
+    year
+}
+
 impl Args {
     /// The profile and the flags are for different things: say so when they are given to the wrong one.
     fn settings_fit(&self) {
         let single = !self.files.is_empty();
         if single && self.profile.is_some() {
             bad_usage("--release and --profile choose a Cargo profile, and a single file has none: give it rustc's flags, -C opt-level=N, -C overflow-checks=on|off and -C debug-assertions=on|off")
+        }
+        if !single && self.rustc.edition.is_some() {
+            bad_usage("--edition is for a single file; a package's edition is the one its Cargo.toml says")
         }
         if !single && !self.rustc.flags.is_empty() {
             bad_usage("-C sets rustc's flags for a single file; a package's settings come from its Cargo profile ([profile.NAME] in Cargo.toml), chosen with --release or --profile NAME")
@@ -388,6 +401,14 @@ fn args() -> Args {
             }
             "--release" if compiles => profile(&mut r, "release"),
             "--auto-overlay" if compiles => r.auto_overlay = true,
+            "--edition" if compiles => {
+                i += 1;
+                let year = a.get(i).cloned().unwrap_or_else(|| bad_usage("--edition needs a year, 2024 say"));
+                r.rustc.edition = Some(edition(year));
+            }
+            s if compiles && s.starts_with("--edition=") => {
+                r.rustc.edition = Some(edition(s["--edition=".len()..].into()))
+            }
             "--emit" if r.command == "build" => {
                 i += 1;
                 let list = a
