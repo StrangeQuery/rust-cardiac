@@ -179,7 +179,13 @@ pub fn walk_const<V: VisitMut + ?Sized>(v: &mut V, c: &mut Const) {
             }
         }
         // (a promoted's path names the function it was promoted from, as the item's does: not a value's path)
-        Const::Int { .. } | Const::Bool(_) | Const::Char(_) | Const::Unit | Const::Str(_) | Const::Promoted(..) => {}
+        Const::Int { .. }
+        | Const::Bool(_)
+        | Const::Char(_)
+        | Const::Unit
+        | Const::Str(_)
+        | Const::Bytes(_)
+        | Const::Promoted(..) => {}
     }
 }
 

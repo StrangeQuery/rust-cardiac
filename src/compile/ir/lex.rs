@@ -12,6 +12,8 @@ pub enum Tok {
     Lifetime(String),
     /// A char literal, `'b'`, `'\n'`, `'\u{e9}'`, as rustc writes one (its `Debug`).
     Char(char),
+    /// A byte string literal's bytes: `b"CARD"`, `b"\x80\n"`.
+    Bytes(Vec<u8>),
     /// Punctuation: `( ) [ ] { } < > , ; : :: = -> & * ! . + - @ #`
     Punct(&'static str),
     /// A closure's type, as rustc writes it, whatever its file's path holds: `{closure@src/main.rs:10:25: 10:28}`
@@ -47,6 +49,10 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, usize> {
             };
             i += end + 1;
             Tok::Closure(text[start..i].to_string())
+        } else if b[i..].starts_with(b"b\"") {
+            let (bytes, len) = byte_string(&b[i + 1..]).ok_or(start)?;
+            i += 1 + len;
+            Tok::Bytes(bytes)
         } else if c.is_ascii_alphabetic() || c == b'_' {
             while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
                 i += 1;
@@ -99,6 +105,38 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, usize> {
         out.push(Token { tok, start, end: i });
     }
     Ok(out)
+}
+
+/// A byte string's bytes, from `text` that starts at its opening quote, and the bytes the literal takes: its
+/// escapes as rustc writes them (`\x80`, `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'`).
+fn byte_string(text: &[u8]) -> Option<(Vec<u8>, usize)> {
+    let mut out = vec![];
+    let mut i = 1;
+    loop {
+        match *text.get(i)? {
+            b'"' => return Some((out, i + 1)),
+            b'\\' => {
+                let (v, n) = match *text.get(i + 1)? {
+                    b'n' => (b'\n', 2),
+                    b't' => (b'\t', 2),
+                    b'r' => (b'\r', 2),
+                    b'0' => (0, 2),
+                    c @ (b'\\' | b'"' | b'\'') => (c, 2),
+                    b'x' => (
+                        u8::from_str_radix(std::str::from_utf8(text.get(i + 2..i + 4)?).ok()?, 16).ok()?,
+                        4,
+                    ),
+                    _ => return None,
+                };
+                out.push(v);
+                i += n;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
 }
 
 /// A char literal at the start of `text` (which starts with its quote): the char, and the bytes it takes. A

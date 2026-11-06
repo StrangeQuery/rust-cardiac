@@ -47,3 +47,11 @@
   struct or an enum; `i8`'s methods.
 - **Cost.** About 12 cells for each `as i8` and each wrapping op. Dividing two `i8`s checks `-128 / -1`, which an
   `i16`'s needn't (no card holds `i16::MIN`).
+
+## 2026-11-05 · A byte string is an array of its bytes, built where it is used
+
+- **Decision.** The IR reads a byte string constant (`b"CARD"`, `Const::Bytes`, escapes as rustc writes them). The
+  front end makes each use a `[u8; N]` of the bytes, in a local of the function's own at the start of the block,
+  and its borrow, as a promoted constant is built.
+- **Cost.** N cells a use, and in a function other than main's opening blocks N stores.
+

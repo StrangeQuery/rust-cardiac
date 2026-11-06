@@ -46,6 +46,7 @@ pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>);
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
+    byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
@@ -229,6 +230,75 @@ fn promoted_consts(file: &mut File) {
                 }
                 setup.extend(statements);
                 *o = Operand::Move(Place::local(to[&Local(0)]));
+            }
+            if !setup.is_empty() {
+                setup.append(&mut b.statements);
+                b.statements = setup;
+            }
+        }
+        f.body.decls.extend(decls);
+    }
+}
+
+/// Each byte string a function uses, `const b"CARD"`: a reference to an array of the bytes, which is built in the
+/// function, at the start of the block that uses it, in a local of its own (a `[u8; N]` of constants, as a
+/// promoted's value is), and borrowed there.
+fn byte_strings(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut next = f
+            .params
+            .iter()
+            .map(|(l, _)| l.0)
+            .chain(f.body.decls.iter().map(|d| d.local.0))
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let mut decls = vec![];
+        for b in f.body.blocks.iter_mut() {
+            let mut setup = vec![];
+            let mut operands: Vec<&mut Operand> = b.statements.iter_mut().flat_map(|s| s.operands_mut()).collect();
+            operands.extend(b.terminator.operands_mut());
+            for o in operands {
+                // (`b""` too has no array literal: `[]` isn't MIR's)
+                let Operand::Constant(Const::Bytes(bytes)) = &*o else {
+                    continue;
+                };
+                if bytes.is_empty() {
+                    continue;
+                }
+                let array_ty = Ty::Array(Box::new(Ty::Int(IntTy::U8)), ArrayLen::Known(bytes.len() as u64));
+                let (array, borrow) = (Local(next), Local(next + 1));
+                next += 2;
+                decls.push(super::ir::Decl {
+                    local: array,
+                    mutable: false,
+                    ty: array_ty.clone(),
+                });
+                decls.push(super::ir::Decl {
+                    local: borrow,
+                    mutable: false,
+                    ty: Ty::Ref {
+                        lifetime: None,
+                        mutable: false,
+                        to: Box::new(array_ty),
+                    },
+                });
+                let byte = |v: &u8| {
+                    Operand::Constant(Const::Int {
+                        value: *v as i128,
+                        ty: IntTy::U8,
+                    })
+                };
+                setup.push(Statement::Assign(
+                    Place::local(array),
+                    Rvalue::Array(bytes.iter().map(byte).collect()),
+                ));
+                setup.push(Statement::Assign(
+                    Place::local(borrow),
+                    Rvalue::Ref(super::ir::BorrowKind::Shared, Place::local(array)),
+                ));
+                *o = Operand::Move(Place::local(borrow));
             }
             if !setup.is_empty() {
                 setup.append(&mut b.statements);

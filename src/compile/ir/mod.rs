@@ -316,6 +316,8 @@ pub enum Const {
     Unit,
     /// A string literal, as written (escapes and all).
     Str(String),
+    /// A byte string literal, `b"CARD"`: a reference to an array of its bytes.
+    Bytes(Vec<u8>),
     /// A named constant: `N`, `tables::SQUARES`, `i16::MIN`.
     Path(Path),
     /// A struct's value, field by field: `core::ops::Range::<i16> {{ start: 1_i16, end: 5_i16 }}`.
@@ -333,7 +335,7 @@ impl Const {
         match self {
             Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
-            Const::Unit | Const::Str(_) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
+            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
         }
     }
 }
@@ -827,6 +829,7 @@ impl fmt::Display for Const {
             Const::Char(c) => write!(f, "{c:?}"),
             Const::Unit => f.write_str("()"),
             Const::Str(s) => write!(f, "\"{s}\""),
+            Const::Bytes(bs) => write!(f, "b\"{}\"", bs.escape_ascii()),
             Const::Path(p) => write!(f, "{p}"),
             Const::Adt(p, fields) => {
                 write!(f, "{p} {{{{ ")?;

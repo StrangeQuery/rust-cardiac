@@ -558,6 +558,11 @@ impl Parser<'_> {
             self.pos += 1;
             return Ok(Const::Str(s));
         }
+        if let Some(Tok::Bytes(bs)) = self.peek() {
+            let bs = bs.clone();
+            self.pos += 1;
+            return Ok(Const::Bytes(bs));
+        }
         if let Some(&Tok::Char(c)) = self.peek() {
             self.pos += 1;
             return Ok(Const::Char(c));
