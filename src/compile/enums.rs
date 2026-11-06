@@ -931,6 +931,11 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
         Rvalue::Use(Operand::Constant(Const::Variant(p, cs))) => {
             Rvalue::Variant(p.clone(), cs.iter().cloned().map(Operand::Constant).collect())
         }
+        // a variant with named fields built, `Shape::Rect { w: copy _2, h: copy _3 }`: the same, its fields in the
+        // order they are declared (as rustc gives them, and as the cells are laid out)
+        Rvalue::Struct(p, fs) if enums.variant(p).is_some() => {
+            Rvalue::Variant(p.clone(), fs.iter().map(|(_, o)| o.clone()).collect())
+        }
         rv => rv.clone(),
     };
     let mut sign_reads = vec![];
