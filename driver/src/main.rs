@@ -71,6 +71,12 @@ impl rustc_driver::Callbacks for Driver {
                 trimmed::provide(providers);
                 inline::provide(providers);
             });
+        } else if self.cardiac {
+            // opt-level 2 and 3: rustc's inliner, but for the calls the compiler writes at every level
+            config.override_queries = Some(|_session, providers| {
+                trimmed::provide(providers);
+                inline::provide_written(providers);
+            });
         }
         let source = match &config.input {
             Input::File(path) => std::fs::canonicalize(path).ok(),

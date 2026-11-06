@@ -4,6 +4,18 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · `i16::ilog10` stays a call at every opt-level, and the compiler writes it
+
+- **Decision.** The driver keeps `i16::ilog10` a call at opt-level 2 and 3 too (`inline::provide_written`,
+  `WRITTEN_AT_EVERY_LEVEL`), as it keeps the methods the compiler writes at 1 and s; `methods` writes it as it
+  does there: a panic below 1, then tests against 10 and 100.
+- **Why.** What rustc inlines is core's `int_log10::less_than_5`: four additions of u32 constants (393206,
+  524188, 916504, 514288), two ands, an xor and a shift, a trick on the bits of a number below 100000. No card
+  holds the constants, and reading the trick back as compares would be pattern matching on core's code for a
+  method the compiler already writes.
+- **Cost.** None found: the row is 33 cells at every setting, as at opt-level 1. `checked_ilog10` and a u8's
+  `ilog10` stay refused (an `Option<u32>`, a `NonZero<u8>`).
+
 ## 2026-11-06 · `div_euclid` is one divide: `(a + 1) / b` less b's sign for a below 0
 
 - **Decision.** `methods`: where rustc calls `i16::div_euclid`, it is `a / b` for a not below 0, and for a below
