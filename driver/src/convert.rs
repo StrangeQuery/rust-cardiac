@@ -400,6 +400,8 @@ impl<'tcx> Convert<'tcx> {
                 ty: k.ty.clone(),
             }],
             debug: vec![],
+            // a constant's value, made here: nothing of it was inlined
+            inlined: vec![],
             blocks: vec![ir::Block {
                 name: ir::BasicBlock(0),
                 statements: vec![ir::Statement::Assign(
