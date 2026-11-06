@@ -693,6 +693,10 @@ impl Parser<'_> {
     // ---- rvalues ----
 
     fn rvalue(&mut self) -> Parsed<Rvalue> {
+        // `no_retag copy _1`: a copy rustc marks for Miri's aliasing model alone, and a copy here
+        if self.eat_ident("no_retag") {
+            return Ok(Rvalue::Use(self.operand()?));
+        }
         if self.eat_punct("&") {
             let kind = if self.eat_ident("raw") {
                 if self.eat_ident("mut") {

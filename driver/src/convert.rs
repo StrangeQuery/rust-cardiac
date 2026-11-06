@@ -610,9 +610,8 @@ impl<'tcx> Convert<'tcx> {
     ) -> Option<ir::Rvalue> {
         use pmir::Rvalue as R;
         Some(match r {
-            // without a retag it prints `no_retag copy _1`, which the parser doesn't read
-            R::Use(o, pmir::WithRetag::Yes) => ir::Rvalue::Use(self.operand(o, locals)?),
-            R::Use(_, pmir::WithRetag::No) => return None,
+            // a copy without a retag (`no_retag copy _1`) is a copy: retags are for Miri's aliasing model alone
+            R::Use(o, _) => ir::Rvalue::Use(self.operand(o, locals)?),
             R::Repeat(o, n) => ir::Rvalue::Repeat(self.operand(o, locals)?, n.eval_target_usize().ok()?),
             R::Ref(_, kind, p) => {
                 let kind = match kind {
