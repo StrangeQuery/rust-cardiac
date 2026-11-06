@@ -5,7 +5,7 @@ use cargo_cardiac::compile::enums::{EnumDef, Variant};
 use cargo_cardiac::compile::ir;
 use cargo_cardiac::compile::structs::StructDef;
 use rustc_middle::ty::print::NoTrimmedGuard;
-use rustc_middle::ty::{self as mty, TyCtxt};
+use rustc_middle::ty::{self as mty, TyCtxt, TypeVisitableExt};
 use rustc_public::rustc_internal::{internal, stable};
 use rustc_public::ty::{AdtDef, GenericArgKind, GenericArgs, IntTy, RigidTy, Ty, TyKind, UintTy, VariantIdx};
 use rustc_public::CrateDef;
@@ -35,11 +35,15 @@ pub fn enums(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<EnumDef> {
             .enumerate()
             .map(|(i, w)| if i == 0 && !in_crate && w == "std" { "core" } else { w }.to_string())
             .collect();
+        // an enum generic over its fields, as a generic function has it (`Maybe<T>`, in the constructor `Maybe::Just`)
+        // is no layout: only its instances are
+        let generic = |t: &Ty| internal(tcx, *t).has_param();
         let Some(args_ty) = args
             .0
             .iter()
             .filter_map(|a| match a {
-                GenericArgKind::Type(t) => Some(ir_ty(tcx, *t)),
+                GenericArgKind::Type(t) if !generic(t) => Some(ir_ty(tcx, *t)),
+                GenericArgKind::Type(_) => Some(None),
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()
