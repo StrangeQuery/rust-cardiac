@@ -960,8 +960,12 @@ fn compile(
         }
         let mut pooled = HashSet::new();
         if optimize {
+            // (not a local whose address is taken: it is read through the address, where the pool's cell may hold
+            // another's value by then)
+            let addressed = blocks::addressed_locals(&blocks);
             for (&l, ty) in locals.iter() {
-                if l == ir::Local(0) || named.contains(&l) || params.contains(&l) || array_like(ty) {
+                let fixed = named.contains(&l) || params.contains(&l) || addressed.contains(&l);
+                if l == ir::Local(0) || fixed || array_like(ty) {
                     continue;
                 }
                 let homes: Vec<&ir::Block> = blocks.iter().filter(|b| b.lines().any(|x| x.mentions(l))).collect();
