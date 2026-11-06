@@ -13,6 +13,7 @@
 //! A local that is neither keeps its type, which the lowering refuses.
 use std::collections::HashMap;
 
+use super::bits;
 use super::front::local_types;
 use super::ir::{
     occurrences, BinOp, Body, Const, File, IntTy, Item, Local, Operand, Place, Projection, Rvalue, Statement,
@@ -73,9 +74,19 @@ fn width(t: IntTy) -> u32 {
 
 /// Every function's u16 and u32 locals that can be cells are i16s.
 pub fn wide_locals(file: &mut File) {
+    // the program's own functions, which a bare intrinsic's name may be (`bits`)
+    let own: Vec<String> = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Fn(f) => Some(f.path.segments.last()?.clone()),
+            _ => None,
+        })
+        .collect();
+    let defined = |name: &str| own.iter().any(|n| n == name);
     for item in &mut file.items {
         if let Item::Fn(f) = item {
-            wide_in(&f.params, &mut f.body);
+            wide_in(&f.params, &mut f.body, &defined);
         }
     }
 }
@@ -88,7 +99,7 @@ fn read(o: &Operand) -> Option<Local> {
     }
 }
 
-fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
+fn wide_in(params: &[(Local, Ty)], body: &mut Body, defined: &impl Fn(&str) -> bool) {
     let types = local_types(params, &body.decls);
     // not a parameter or the result, which a caller passes or reads as the type
     let wide: Vec<Local> = body
@@ -129,16 +140,14 @@ fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
             }
             if let Terminator::Call { dest, func, .. } = &b.terminator {
                 if let Some(x) = dest.as_local().filter(|x| wide.contains(x)) {
-                    join(
-                        x,
-                        super::methods::exact_result(func).map_or(Held::Refused, |[lo, hi]| Held::Exact(lo, hi)),
-                    );
+                    let bounds = super::methods::exact_result(func).or_else(|| bits::exact_result(func, defined));
+                    join(x, bounds.map_or(Held::Refused, |[lo, hi]| Held::Exact(lo, hi)));
                 }
             }
         }
         // what each use needs; a use of any other kind and it keeps its type
         for &w in &wide {
-            let (seen, needs) = uses(body, w, &types);
+            let (seen, needs) = uses(body, w, &types, defined);
             let h = held.get(&w).copied();
             let refused = seen != occurrences(&body.blocks, w) || (needs == Needs::Exact && h == Some(Held::Modular));
             if refused {
@@ -211,7 +220,7 @@ fn value(rv: &Rvalue, types: &HashMap<Local, Ty>, held: &HashMap<Local, Held>) -
 }
 
 /// How many times the function names `w` in a way this file knows, and what the strictest of those needs it to hold.
-fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
+fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>, defined: &impl Fn(&str) -> bool) -> (usize, Needs) {
     let mut seen = 0;
     let mut needs = Needs::Either;
     let mut need = |n: Needs| {
@@ -251,6 +260,8 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
                         {
                             need(Needs::Exact)
                         }
+                        // a shift by it, which takes it modulo the bits, 2^16 or fewer
+                        Rvalue::BinaryOp(BinOp::Shl | BinOp::Shr, a, c) if is(c) && !is(a) => need(Needs::Either),
                         // against a constant on a card, the cell tells: see `unsigned_compare`
                         Rvalue::BinaryOp(op, a, c) if compare_to_constant(*op, a, c).is_some() && (is(a) || is(c)) => {
                             need(Needs::Either)
@@ -275,6 +286,12 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
         match &b.terminator {
             Terminator::SwitchInt { discr, .. } if is(discr) => need(Needs::Exact),
             Terminator::Call { dest, .. } if dest.as_local() == Some(w) => need(Needs::Either),
+            // a bit method's intrinsic reads the bits, which the value modulo the type's size has
+            Terminator::Call { func, args, .. } if bits::reads_bits(func, defined) => {
+                for _ in args.iter().filter(|a| is(a)) {
+                    need(Needs::Either);
+                }
+            }
             _ => {}
         }
     }
@@ -469,7 +486,7 @@ mod tests {
     #[test]
     fn a_difference_of_casts_read_as_an_i16_is_checked() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         assert!(matches!(
             b.blocks[0].statements[2],
@@ -481,7 +498,7 @@ mod tests {
     #[test]
     fn a_value_known_only_modulo_its_size_is_compared_with_a_constant_as_a_usize() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _7 = Lt(copy _3, const 5_u16);");
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert_eq!(ty(&b, 3), Ty::Int(IntTy::I16));
         assert!(matches!(
             &b.blocks[0].statements[1],
@@ -497,7 +514,7 @@ mod tests {
     fn two_values_known_only_modulo_their_size_are_not_compared() {
         let mut b =
             body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _7 = Lt(copy _3, copy _4);");
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert_eq!(ty(&b, 3), Ty::Int(IntTy::U16));
     }
 
@@ -506,7 +523,7 @@ mod tests {
         let mut b = ir::parse_body(
             "let mut _0: ();\n let _1: u8;\n let _2: u8;\n let mut _3: u16;\n let mut _4: u16;\n let mut _5: u16;\n let mut _6: u8;\n bb0: {\n _3 = copy _1 as u16 (IntToInt);\n _4 = copy _2 as u16 (IntToInt);\n _5 = Add(move _3, move _4);\n _3 = Div(move _5, const 2_u16);\n _6 = move _3 as u8 (IntToInt);\n return;\n }\n",
         );
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         // nothing to check: at most 510
         assert!(matches!(b.blocks[0].terminator, Terminator::Return));

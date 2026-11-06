@@ -1,3 +1,24 @@
+## 2026-11-06 · The bit methods are the intrinsics rustc leaves, written as walks over the bits
+
+- **Decision.** `count_ones`, `leading_zeros`, `trailing_zeros`, which rustc leaves as calls of the intrinsics
+  `ctpop`, `ctlz` (`ctlz_nonzero`) and `cttz` on a u8, a u16 (an i16's) or a usize, and `rotate_left` and
+  `rotate_right` of a u8 by a constant, are code of the caller's own (`bits`): the low ten bits of the cell walked
+  from the top as `runtime::bitwise` walks them, until all that is left is 0. A cell below 0 stands for a value
+  whose high bits are 1, a u16's (`wide`) or a usize's past a card: its ones are the bits less those of -1 - c, its
+  leading zeros none, its trailing zeros those of -c. The u32 they return is a cell, as `wide` makes one of a count
+  known to be on a card. A u8's rotation by one is 2v, less 255 past 255, done k times. `T::MAX >> n` by a variable,
+  which `next_power_of_two` makes, is 0 doubled and 1 added (bits - n) times, checked for a usize, whose
+  `usize::MAX >> 0` is usize::MAX. `is_power_of_two` is rustc's own code, `count_ones() == 1`. `wide` lets a shift by
+  a u32 and a bit intrinsic read a value held modulo its size, which has the bits they read.
+- **Why.** The counts are small and on a card; only the bits behind them aren't decimal, and the walk needs no
+  more than adds.
+- **Cost.** About 20 to 40 cells a call (the walk is written where it is called), and up to ten passes. Left refused: a
+  usize's `leading_zeros` (rustc casts it to u64), rotations of an i16, by a variable, and `swap_bytes`, which on an
+  i16 is past a card for most values (256 becomes 1, but 100 becomes 25600).
+- **Evidence.** Every value on a card for the i16 methods, every u8 for the u8 ones (rotations by 0, 1, 3, 5, 7
+  and 9), every value on a card cast to a usize, those below 0 too, against native Rust at all four settings. The
+  support matrix's rows for them match at every setting but `swap_bytes_i16`.
+
 ## 2026-11-06 · Without overflow checks, the checks of core's inlined code are not made
 
 - **Decision.** In a build without overflow checks, the driver makes an `assert` of an overflow of `+`, `-`, `*`, a
