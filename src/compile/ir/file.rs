@@ -99,8 +99,9 @@ impl fmt::Display for ItemPath {
 }
 
 impl FnItem {
-    /// Whether a parameter's type holds a tuple (other than one of numbers and bools) or `()`, or the return type is
-    /// one the IR does not model and that contains a brace. The compiler does not read such a function (yet).
+    /// Whether a parameter's type holds a tuple (other than one of numbers and bools, or a reference to one) or is
+    /// `()`, or the return type is one the IR does not model and that contains a brace. The compiler does not read
+    /// such a function (yet). A `()` in a type's arguments (`Option<()>`) takes no cell, as an enum's field.
     pub fn unread(&self) -> bool {
         fn tuple(t: &Ty) -> bool {
             match t {
@@ -117,9 +118,10 @@ impl FnItem {
                 .as_ref()
                 .is_some_and(|q| tuple(&q.ty) || q.as_trait.as_ref().is_some_and(path_tuple));
             q || p.segments.iter().any(|s| match s {
-                Segment::Name { args: Some(a), .. } => {
-                    a.args.iter().any(|a| matches!(a, GenericArg::Ty(t) if tuple(t)))
-                }
+                Segment::Name { args: Some(a), .. } => a
+                    .args
+                    .iter()
+                    .any(|a| matches!(a, GenericArg::Ty(t) if *t != Ty::Unit && tuple(t))),
                 Segment::Impl(t) => tuple(t),
                 Segment::Name { args: None, .. } => false,
             })
