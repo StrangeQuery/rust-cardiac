@@ -192,7 +192,7 @@ done
 for f in add_times_count skip_cards_count; do
   ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/$f.rs || exit 1
 done
-for want in "0:0 151" "1:-9 152" "9:-81 160" "10:-90 152" "37:-333 161" "99:-891 169"; do
+for want in "0:0 147" "1:-9 148" "9:-81 156" "10:-90 148" "37:-333 157" "99:-891 165"; do
   n=${want%%:*}
   got=$("$BURN" tests/programs/add_times_count.cqb -- -9 $n 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "${want#*:} " ] && echo "MATCH  add_times(-9, $n): $got" || { echo "DIFFER add_times(-9, $n): $got, not ${want#*:}"; exit 1; }

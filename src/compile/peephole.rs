@@ -392,13 +392,17 @@ fn already_held(before: &[Line], ins: Instr) -> bool {
     false
 }
 
-/// Rule 2b alone, after the compiled stack has shared cells.
+/// Rule 2b alone, after the compiled stack has shared cells; then rule 12, for the load of a copy that went (a
+/// call's result, `CLA f_0` then `STO x`, once x is f_0's cell, read again by nothing before the next load).
 pub fn drop_self_copies(lines: &[Line]) -> Vec<Line> {
     let mut out: Vec<Line> = Vec::with_capacity(lines.len());
     for l in lines {
         if !instr(l).is_some_and(|ins| already_stored(&out, ins)) {
             out.push(l.clone());
         }
+    }
+    if drop_unused_loads(&mut out) {
+        sweep(&mut out);
     }
     out
 }
