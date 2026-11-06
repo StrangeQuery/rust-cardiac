@@ -1,3 +1,36 @@
+## 2026-11-06 · A function that calls itself has a stack of its own, as deep as the memory left over
+
+- **Decision.** `call_stack::software_stacks`, after the passes that take structs and enums apart and before the
+  call graph is checked: a function that calls itself other than at its end (`n + sum(n - 1)`) calls itself no
+  more. Each such call is a check that the stack has room, the locals still read after the call (by liveness,
+  the result left out) pushed, each onto an array `[T; depth]` at the stack's count, the arguments into the
+  parameters, the count one more, and a jump to the function's start; each return, when the count isn't 0, is the
+  count one less, the result copied into the call's place, the locals popped, and on after the call. Where it calls
+  itself in more than one place, a `[u8; depth]` says which place to go back to. The calls share the arrays: a
+  call's first local of a type is on the first array of that type, and so on. A call with no room panics, `stack
+  overflow`, before it writes anything. The depth is what memory holds: the program is compiled with stacks one
+  call deep, then again with the cells left over shared out among the arrays (one cell a call each), one call less
+  until it fits. A function with nothing to push keeps only the count, which may go to 999.
+- **Why.** CARDIAC has no stack and each function's cells are fixed, so the call inside writes over what its
+  caller still reads. A loop with an explicit stack is code every pass after it already compiles well (the
+  arrays are indexed reads and writes, through built addresses), and the rest of the program is unchanged. Rust
+  panics on a stack it overflows too, only much deeper.
+- **Refused, as recursion is.** A function with a reference or a pointer among its locals or parameters, or a local
+  whose address is taken (either could point into the cells being reused); one that returns a struct (a result in
+  cells of its own) or reads one's; a local still read after the call that isn't a one-cell number or a bool;
+  recursion through more than one function, unless every call in it is at its end (the entry before).
+- **Cost.** About 30 cells of code for one place it calls itself, and a cell a call for each local it pushes.
+  `sum` (support row fn_recursion_direct) is 59 cells with a stack one call deep, so its stack is 37 calls deep at
+  opt-level 2 (26 with overflow checks at opt-level 1). Fibonacci (two calls, a stack of each `n` and the first
+  result and one of where to go back) is 104 cells with a stack one call deep: too big. Programs that don't call
+  themselves are unchanged and compiled once, as before.
+- **Evidence.** fn_recursion_direct matches at every setting. Probes matching native Rust at the four settings,
+  where the recursion fits the stack: `sum` called twice with its argument read after; `down(n)` printing on the
+  way down and up (a `()` result, nothing pushed); Ackermann (a call whose argument is a call: two places); a
+  struct parameter; a u8 recursion; a local computed before the call printed after it. Deeper inputs panic with
+  `stack overflow`. A `&mut` parameter, a struct result and an `Option` result are refused. The test program of
+  recursion refused (`tests/programs/recursive.rs`) now compiles, so it is recursion through two functions.
+
 ## 2026-11-06 · Functions that call one another at their ends are one function, with a start for each
 
 - **Decision.** In the front end, before a function's call of itself at its end is a loop, `cycles::mutual_tail_calls`
