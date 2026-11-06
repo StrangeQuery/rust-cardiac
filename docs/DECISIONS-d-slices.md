@@ -48,3 +48,12 @@
   reference to a card's value (`&&i16`, what `find`'s closure takes) is one cell, its address, read through twice.
 - **Why.** Each is the loop `for i in 0..N`; the result is `Option<&T>`, which the enum pass already holds.
 - **Cost.** None found. `find` on a closure that captures, and these on a slice of run-time length, stay refused.
+
+## 2026-11-06 · A function that returns a slice returns its length in a cell of its own
+
+- **Decision.** `run_time_lengths`: a function whose result is a slice keeps the slice's length in a usize of its
+  own beside its result, one of its `results` (as a struct's fields are), and each call of it reads the length
+  from that cell on the way back (`@f.n`, as the caller reads a struct's). A function whose result's length
+  can't be followed is refused.
+- **Why.** `fn tail(s: &[i16], k: usize) -> &[i16] { &s[k..] }` was refused; a `&str` a function returns is one.
+- **Cost.** A cell in the callee, and a copy at each call.

@@ -369,13 +369,39 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
         .filter(|(_, at)| !at.is_empty())
         .collect();
     let names: Vec<String> = fns.keys().cloned().collect();
+    // a function that returns a slice returns its length in a cell of its own too, which the caller reads after
+    // the call, as it reads a struct's
+    let mut returns: HashMap<String, Local> = HashMap::new();
+    for name in &names {
+        let f = fns.get_mut(name).unwrap();
+        if !is_slice(&f.ret) {
+            continue;
+        }
+        let n = f.params.iter().map(|(l, _)| l.0).chain(f.body.decls.iter().map(|d| d.local.0)).max().unwrap_or(0);
+        let n = Local(n + 1);
+        f.body.decls.push(ir::Decl {
+            local: n,
+            mutable: true,
+            ty: Ty::Int(IntTy::Usize),
+        });
+        f.results.push(n);
+        f.body.debug.push(ir::Debug {
+            name: "result_len".into(),
+            value: n.to_string(),
+        });
+        returns.insert(name.clone(), n);
+    }
     for name in &names {
         let f = fns.get_mut(name).unwrap();
         let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
         types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+        types.insert(Local(0), f.ret.clone());
         let mut next = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
         let mut decls = vec![];
         let mut lengths: HashMap<Local, Operand> = HashMap::new();
+        if let Some(n) = returns.get(name) {
+            lengths.insert(Local(0), Operand::Copy(Place::local(*n)));
+        }
         let mut params = vec![];
         for (l, t) in &f.params {
             params.push((*l, t.clone()));
@@ -399,6 +425,9 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
         // each slice local defined only by whole assignments (a write through it, `(*s)[i] = x`, is none), each of
         // which tells its length, has a length local, set at each of them
         let through = |d: &Place| d.projection.first() == Some(&Projection::Deref);
+        // (None: a definition that tells no length; a call's result, of a function that returns its length, tells
+        // it)
+        let returned = Rvalue::Use(Operand::Constant(Const::Unit));
         let mut defs: HashMap<Local, Vec<Option<&Rvalue>>> = HashMap::new();
         for b in &f.body.blocks {
             for s in &b.statements {
@@ -408,14 +437,15 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
                     }
                 }
             }
-            if let Terminator::Call { dest, .. } = &b.terminator {
+            if let Terminator::Call { dest, func, .. } = &b.terminator {
                 if let Some(l) = dest.base_local().filter(|_| !through(dest)) {
-                    defs.entry(l).or_default().push(None);
+                    let told = dest.projection.is_empty() && returns.contains_key(&func.to_string());
+                    defs.entry(l).or_default().push(told.then_some(&returned));
                 }
             }
         }
         for d in &f.body.decls {
-            if is_slice(&d.ty) && defs.contains_key(&d.local) {
+            if is_slice(&d.ty) && defs.contains_key(&d.local) && !lengths.contains_key(&d.local) {
                 let n = fresh(&mut decls);
                 lengths.insert(d.local, Operand::Copy(Place::local(n)));
             }
@@ -425,7 +455,7 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
                 defs.get(l)
                     .into_iter()
                     .flatten()
-                    .all(|r| r.is_some_and(|r| length_from(r, &types, &lengths).is_some()))
+                    .all(|r| r.is_some_and(|r| *r == returned || length_from(r, &types, &lengths).is_some()))
             };
             let untold: Vec<Local> = lengths.keys().filter(|l| !told(l)).copied().collect();
             if untold.is_empty() {
@@ -435,6 +465,11 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
                 lengths.remove(&l);
             }
         }
+        if returns.contains_key(name) && !lengths.contains_key(&Local(0)) {
+            return Err(format!("{name}: it returns a slice whose length isn't known here"));
+        }
+        let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1;
+        let mut back = vec![];
         for b in f.body.blocks.iter_mut() {
             let mut statements = vec![];
             for mut s in std::mem::take(&mut b.statements) {
@@ -454,7 +489,37 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
                 statements.extend(set);
             }
             b.statements = statements;
+            // a slice a call returns: its length read from the callee's cell, on the way back
+            if let Terminator::Call {
+                dest,
+                func,
+                target: Some(t),
+                ..
+            } = &mut b.terminator
+            {
+                let callee = func.to_string();
+                if let (Some(Operand::Copy(n)), Some(theirs)) =
+                    (dest.as_local().and_then(|l| lengths.get(&l)), returns.get(&callee))
+                {
+                    let after = BasicBlock(next_block);
+                    next_block += 1;
+                    let read = Place {
+                        base: PlaceBase::Result {
+                            func: callee,
+                            local: theirs.0,
+                        },
+                        projection: vec![],
+                    };
+                    back.push(Block {
+                        name: after,
+                        statements: vec![Statement::Assign(n.clone(), Rvalue::Use(Operand::Copy(read)))],
+                        terminator: Terminator::Goto(*t),
+                    });
+                    *t = after;
+                }
+            }
         }
+        f.body.blocks.append(&mut back);
         // the length read, and passed (an array pointer's is the length in its type)
         let length_of = |a: Local| {
             let n = types.get(&a).and_then(array_length).map(usize_const);
