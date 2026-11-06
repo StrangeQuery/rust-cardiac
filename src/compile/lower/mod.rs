@@ -339,9 +339,11 @@ impl<'a> Lowering<'a> {
                 continue; // a parameter in the cell it is passed on in
             }
             // One cell holds a u8, an i16 (a card value, panicking past +-999), a bool, a usize (an index, panicking
-            // above 999), or a reference or raw pointer, which is a cell address 00-99.
+            // above 999), or a reference or raw pointer, which is a cell address 00-99. An array's element is one of
+            // them too, but a usize past a card: only a local holds one (`ranges::huge_usizes`), and storing one
+            // anywhere else panics.
             let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16));
-            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16) | Ty::Bool);
+            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
             let one_cell = match ty {
                 Ty::Int(IntTy::U8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
                 Ty::Ref { lifetime: None, to, .. } => {

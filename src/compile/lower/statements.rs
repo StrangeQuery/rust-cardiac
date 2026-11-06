@@ -500,9 +500,10 @@ impl<'a> Lowering<'a> {
             Some(Ty::Int(i)) => Some(*i),
             _ => None,
         };
+        // (an element's type too: a usize array's element as u8 is mod 256)
         let from = match p.projection.as_slice() {
             [Projection::Field(_, t)] => int(Some(t)),
-            _ => int(p.as_local().and_then(|l| self.locals.get(&l))),
+            _ => int(self.place_ty(p).as_ref()),
         };
         let to = int(Some(to));
         let v = self.operand(&ir::Operand::Place(p.clone()))?;
