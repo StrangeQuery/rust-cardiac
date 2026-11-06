@@ -30,6 +30,9 @@ counts down from the number it reads. `cargo cardiac run` builds it for CARDIAC 
 press Enter, and it counts down to 0. Or give it the number on standard input, `echo 5 | cargo cardiac run`, or
 after `--`, `cargo cardiac run -- 5`.
 
+The rest is on [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/): the listing to
+open in Cardigan, panic maps, running a deck from your own Rust program, and what Rust works.
+
 ## CARDIAC
 
 CARDIAC (CARDboard Illustrative Aid to Computation) was a paper computer that Bell Labs gave to schools in 1968.
