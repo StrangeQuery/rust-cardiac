@@ -131,7 +131,24 @@ pub fn drop_inherited_overflow_checks(file: &mut File) {
 }
 
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
-pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
+pub fn front_end(
+    mut file: File,
+    debug_assertions: bool,
+    enums: &[super::enums::EnumDef],
+    structs: &[super::structs::StructDef],
+) -> Result<FrontEnd, Fail> {
+    // the names of the program's own types, which a type of core's trimmed to its name (`Reverse<i16>`) isn't
+    let own: Vec<String> = structs
+        .iter()
+        .filter(|s| s.in_crate)
+        .map(|s| s.name.clone())
+        .chain(
+            enums
+                .iter()
+                .filter(|e| e.in_crate)
+                .filter_map(|e| e.path.last().cloned()),
+        )
+        .collect();
     promoted_consts(&mut file);
     // function pointers as numbers, and trait objects as enums, with calls through them as calls of what they can
     // be (after the promoteds, which may make them)
@@ -145,13 +162,14 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     file.visit(&mut CharIsUsize);
     // a char's to_digit and from_digit, written out (with the `Option<u8>` the first returns)
     objects.extend(super::chars::char_digits(&mut file, enums));
+    super::nonzero::nonzero_is_its_value(&mut file, &own);
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
     // switch arms are read as their switch's type first: a discriminant's is isize
     switch_values(&mut file);
     cold_paths(&mut file);
     // `Cmp` and `Ordering`'s methods, written with its variants, which the C-like pass numbers
-    super::ordering::reverse_is_its_value(&mut file);
+    super::ordering::reverse_is_its_value(&mut file, &own);
     super::ordering::three_way_compares(&mut file);
     tail_calls(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;

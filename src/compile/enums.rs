@@ -543,6 +543,10 @@ impl Enums<'_> {
             Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool => Some(t.clone()),
             // (a char is a usize once the front end has run: `front::CharIsUsize`)
             Ty::Char => Some(Ty::Int(IntTy::Usize)),
+            // (and a NonZero its integer: `nonzero`)
+            Ty::Path(_) if super::nonzero::nonzero(t, false).is_some() => {
+                self.scalar(super::nonzero::nonzero(t, false)?)
+            }
             Ty::Path(p) => def_of(self.defs, p)
                 .filter(|(_, d)| d.c_like() && !d.variants.is_empty())
                 .map(|_| Ty::Int(IntTy::I16)),

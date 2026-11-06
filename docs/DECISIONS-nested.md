@@ -99,3 +99,18 @@
 - **Evidence.** cmp_reverse matches at every setting (28 cells). `cmp`, `>=`, `core::cmp::min`, `max` of two
   `Reverse<i16>`s and `<=` of two `Reverse<u8>`s, for a below, equal to and above b, match native Rust at the four
   settings.
+
+## 2026-11-06 · `NonZero<T>` is its integer, and `Option<NonZero<T>>` an `Option<T>` whose `None` is 0
+
+- **Decision.** `nonzero::nonzero_is_its_value`, in the front end: in a function whose transmutes of a NonZero are
+  the ones rustc writes for `NonZero::new` and `get` (`x as Option<NonZero<T>>`, `n as T`, `x as NonZero<T>`), every
+  `NonZero<T>` of an integer is a T, its transmutes to and from T copies, and `x as Option<NonZero<T>>` is the test
+  Rust's layout makes: `None` where x is 0, else `Some(x)`, an `Option<T>` (the enum's definition normalized to
+  it). A type named alone (`NonZero<T>`, `Reverse<T>`, as rustc trims core's paths) is core's only where the
+  program has no struct or enum of that name, which the front end is now given.
+- **Why.** A NonZero holds its value; only its `Option`'s layout is special, and that is one test.
+- **Cost.** A test of 0 where rustc's transmute is none. Any other transmute of one leaves the function refused.
+- **Evidence.** option_nonzero matches at every setting (16 and 18 cells). Probes matching native Rust at the four
+  settings: a `NonZeroI16` passed to a function and its `get()` doubled, `NonZeroU8::new(..).is_some()`, `unwrap()`
+  (panicking at 0), `map(|n| n.get() + 1)`, and `==` of two `Option<NonZeroI16>`s; a program's own `Reverse<T>`
+  is its own.

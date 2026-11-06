@@ -36,6 +36,7 @@ pub mod machine;
 pub mod methods;
 pub mod names;
 pub mod nested;
+pub mod nonzero;
 pub mod ordering;
 pub mod panic_messages;
 pub mod peephole;
@@ -685,7 +686,7 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums, structs)?;
     let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
         return Err(crate::codes::no_main());
