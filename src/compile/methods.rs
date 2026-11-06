@@ -61,8 +61,9 @@ enum Method {
 /// ones that only compare (`min`, `max`, `clamp`) or can't leave the type's range (`abs_diff`, `saturating_sub` of
 /// an unsigned type). A u8's `saturating_add` and `midpoint` work in an i16, whose cell holds the sum of two u8s.
 /// The rest, on u8 or usize, wrap or saturate where a card does not (at 256, at 2^64). On an i16, `abs_diff` and
-/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`). A u8's
-/// `saturating_mul` is a sum of b a's that stops at 255.
+/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`). An i16's
+/// saturating methods saturate at 32767 and -32768, which no card holds: on a card each is the plain operation,
+/// and past one it panics, as `abs_diff` does. A u8's `saturating_mul` is a sum of b a's that stops at 255.
 fn method(name: &str, ty: IntTy) -> Option<Method> {
     use Method::*;
     let signed = ty == IntTy::I16;
@@ -82,9 +83,9 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
         "max" if signed || unsigned => Max,
         "clamp" if signed || unsigned => Clamp,
         "abs_diff" if signed || unsigned => AbsDiff,
-        "saturating_sub" if unsigned => SaturatingSub,
-        "saturating_add" if ty == IntTy::U8 => SaturatingAdd,
-        "saturating_mul" if ty == IntTy::U8 => SaturatingMul,
+        "saturating_sub" if signed || unsigned => SaturatingSub,
+        "saturating_add" if signed || ty == IntTy::U8 => SaturatingAdd,
+        "saturating_mul" if signed || ty == IntTy::U8 => SaturatingMul,
         "midpoint" if ty == IntTy::U8 => Midpoint,
         "ilog10" if signed => Ilog10,
         "wrapping_div" if signed => WrappingDiv,
@@ -531,6 +532,17 @@ impl<'a> Gains<'a> {
                 let up = self.set(dest, BinaryOp(BinOp::Sub, b.clone(), a.clone()), back);
                 let down = self.set(dest, BinaryOp(BinOp::Sub, a.clone(), b.clone()), back);
                 let (s, t) = self.test(BinOp::Lt, a, b, up, down);
+                (vec![s], t)
+            }
+            // on a card, the operation: Rust's saturates at 32767 and -32768, which no card holds, so past a card
+            // (1000 + 1000, or 999 * 999, which Rust takes to 32767) it panics, in every profile
+            (Method::SaturatingAdd | Method::SaturatingSub | Method::SaturatingMul, [a, b]) if ty == IntTy::I16 => {
+                let op = match m {
+                    Method::SaturatingAdd => BinOp::AddWithOverflow,
+                    Method::SaturatingSub => BinOp::SubWithOverflow,
+                    _ => BinOp::MulWithOverflow,
+                };
+                let (s, t) = self.on_a_card(op, a, b, dest, back);
                 (vec![s], t)
             }
             // b a's added up, stopping at 255: the product of two u8s (up to 65025) is no card, and the sum stays
@@ -1134,6 +1146,11 @@ mod tests {
                 Method::SaturatingAdd,
                 IntTy::U8,
             ),
+            (
+                "core::num::<impl i16>::saturating_add",
+                Method::SaturatingAdd,
+                IntTy::I16,
+            ),
             ("core::num::<impl u8>::saturating_mul", Method::SaturatingMul, IntTy::U8),
             ("core::num::<impl i16>::isqrt", Method::Isqrt, IntTy::I16),
         ];
@@ -1144,7 +1161,7 @@ mod tests {
         for p in [
             "core::num::<impl u8>::abs_diff::<u8>",
             "core::num::<impl usize>::wrapping_add",
-            "core::num::<impl i16>::saturating_add",
+            "core::num::<impl usize>::saturating_mul",
             "core::num::<impl i16>::min",
             "<i16 as PartialOrd>::lt",
             "kit::abs",

@@ -69,3 +69,21 @@
   (`1.pow(-3i16 as u32)`). `checked_pow` by a variable stays refused, and by 7 or more doesn't fit in the cells.
   `saturating_mul` of a u8 takes up to 255 rounds. The four matrix rows match at every setting (isqrt 35 cells,
   pow by a variable 78, checked_pow 79, saturating_mul 69); nothing else changed.
+
+## 2026-11-06 · An i16's saturating `+`, `-` and `*` are the operation on a card, and panic past one
+
+- **Decision.** `saturating_add`, `saturating_sub` and `saturating_mul` on an i16 (the method, or the intrinsic
+  rustc calls at both opt-levels for the first two) are the overflow-checked operation, whose flag on CARDIAC
+  says the value is past a card, and a panic there in every profile: `the value doesn't fit on a card`.
+  `saturating_mul` stays a call at opt-level 2 (`WRITTEN_AT_EVERY_LEVEL`), where rustc inlines a choice between
+  `i16::MIN` and `i16::MAX` as values.
+- **Why.** Rust saturates at 32767 and -32768, which no card holds. Of two values on a card, a sum or a difference
+  is at most 1998 from 0, so Rust's is never saturated, and wherever it is on a card CARDIAC's is the same number;
+  a product Rust saturates (999 * 999) is past a card too. So the answer is Rust's wherever a card holds it, and a
+  panic, never another number, where it doesn't: as for `abs_diff`, `!` and `<<`, whose values past a card panic
+  where Rust's never do.
+- **Considered.** Saturating at the card's own limits, 999 and -999: a wrong answer, as Rust's 600 + 600 is
+  1200. Refusing them, as nothing past a card can match: the rows are on a card, and the past-a-card rule is
+  the one every i16 operation follows.
+- **Cost.** A panic where Rust gives a number past a card (1200, or 32767 for 999 * 999), which Rust never does.
+  The three matrix rows match at every setting (30, 30 and 52 cells).
