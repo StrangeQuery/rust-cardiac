@@ -9,9 +9,7 @@
 //! its checks, `branches` the switches, asserts and compare-and-branch, and `calls` the calls and the built-ins.
 use std::collections::{HashMap, HashSet};
 
-use super::ir::{
-    self, lines_naming, BasicBlock, BinOp, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind,
-};
+use super::ir::{self, lines_naming, BasicBlock, BinOp, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind};
 use super::machine::{Arg, Kind, Line, Op};
 use super::util::Ordered;
 use super::Fail;

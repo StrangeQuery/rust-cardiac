@@ -451,6 +451,8 @@ fn settled_by_the_card(blocks: &mut [ir::Block], types: &HashMap<ir::Local, ir::
         ir::Operand::Constant(ir::Const::Path(p)) if p.is_path(&["i16", "MAX"]) => Some(true),
         _ => None,
     };
+    // every comparison settled, for an assert of one in a later block (a divide's check, asserted again for `%`)
+    let mut all: HashMap<ir::Local, bool> = HashMap::new();
     for b in blocks.iter_mut() {
         // the settled comparisons still in their locals, for an assert of one at the block's end
         let mut settled: HashMap<ir::Local, bool> = HashMap::new();
@@ -509,6 +511,7 @@ fn settled_by_the_card(blocks: &mut [ir::Block], types: &HashMap<ir::Local, ir::
                 *cond = ir::Operand::Constant(ir::Const::Bool(holds));
             }
         }
+        all.extend(settled);
         if let ir::Terminator::SwitchInt {
             discr,
             arms,
@@ -521,6 +524,28 @@ fn settled_by_the_card(blocks: &mut [ir::Block], types: &HashMap<ir::Local, ir::
                 if arms.is_empty() {
                     b.terminator = ir::Terminator::Goto(*otherwise);
                 }
+            }
+        }
+    }
+    // in a later block, where the local is set nowhere else and its address is never taken
+    let mut defs: HashMap<ir::Local, usize> = HashMap::new();
+    for b in blocks.iter() {
+        for line in b.each_line() {
+            if let Some(l) = line.def_use().0 {
+                *defs.entry(l).or_default() += 1;
+            }
+            if let blocks::Line::Statement(ir::Statement::Assign(_, ir::Rvalue::Ref(_, p))) = line {
+                if let Some(l) = p.base_local() {
+                    *defs.entry(l).or_default() += 2;
+                }
+            }
+        }
+    }
+    for b in blocks.iter_mut() {
+        if let ir::Terminator::Assert { cond, .. } = &mut b.terminator {
+            let once = cond.local().filter(|l| defs.get(l) == Some(&1));
+            if let Some(&holds) = once.and_then(|l| all.get(&l)) {
+                *cond = ir::Operand::Constant(ir::Const::Bool(holds));
             }
         }
     }
