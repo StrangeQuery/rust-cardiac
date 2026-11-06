@@ -4,6 +4,16 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · `div_euclid` is one divide: `(a + 1) / b` less b's sign for a below 0
+
+- **Decision.** `methods`: where rustc calls `i16::div_euclid`, it is `a / b` for a not below 0, and for a below
+  0 `(a + 1) / b`, one less for b above 0 and one more for b below. That is Rust's answer for every a below 0, b
+  dividing it or not (`(-7).div_euclid(7)` is -1, and so is -6 / 7 - 1; `(-8).div_euclid(7)` is -2, and so is
+  -7 / 7 - 1), and a + 1 of a number below 0 is on a card. It replaces the quotient and the remainder, the remainder's sign telling the fix.
+- **Why.** The divide routine once, not the divide and remainder routines both: the matrix's row by a variable is
+  88 cells, where it didn't fit in 96 (a `/` by a variable alone is 66), and by a constant 68 where it was 81.
+- **Cost.** Two tests of a's sign where there was one of the remainder's.
+
 ## 2026-11-06 · A core method's i32 compiles where its values are on a card
 
 - **Decision.** `front::widened_in_core` refuses an integer method of core's, of a type other than i32, that rustc

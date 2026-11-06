@@ -402,12 +402,14 @@ impl<'a> Gains<'a> {
                 let (check, assert) = self.nonzero(a, b, ty, REMAINDER_BY_ZERO, rest);
                 (vec![check], assert)
             }
-            // q = a / b, and where a % b is below 0, one less for b above 0, one more below; by a variable, with
-            // `/`'s check (no card holds i16::MIN, so `/` has no overflow to check)
+            // a / b toward zero, and where a % b is below 0, one less for b above 0, one more below. For every a
+            // below 0 that is (a + 1) / b less b's sign (-7 euclid 7 is -1, and so is -6 / 7 - 1; -8 euclid 7 is -2,
+            // and so is -7 / 7 - 1): one divide, where the quotient and the remainder are two. By a variable, with
+            // `/`'s check (no card holds i16::MIN, so `/` has no overflow to check, nor a + 1 of an a below 0)
             (Method::DivEuclid, [a, b]) => {
+                let d = self.local(Ty::Int(ty));
                 let q = self.local(Ty::Int(ty));
-                let r = self.local(Ty::Int(ty));
-                let (qv, rv) = (Operand::Copy(Place::local(q)), Operand::Copy(Place::local(r)));
+                let (dv, qv) = (Operand::Copy(Place::local(d)), Operand::Copy(Place::local(q)));
                 let done = self.set(dest, copy(&qv), back);
                 let mut step = |op: BinOp| {
                     let s = Statement::Assign(Place::local(q), BinaryOp(op, qv.clone(), int(1)));
@@ -422,13 +424,13 @@ impl<'a> Gains<'a> {
                         self.block(vec![s], t)
                     }
                 };
-                let (s, t) = self.test(BinOp::Lt, &rv, &zero, fix, done);
-                let parts = vec![
-                    Statement::Assign(Place::local(q), BinaryOp(BinOp::Div, a.clone(), b.clone())),
-                    Statement::Assign(Place::local(r), BinaryOp(BinOp::Rem, a.clone(), b.clone())),
-                    s,
-                ];
-                let rest = self.block(parts, t);
+                let (s, t) = self.test(BinOp::Lt, a, &zero, fix, done);
+                let quotient = Statement::Assign(Place::local(q), BinaryOp(BinOp::Div, dv.clone(), b.clone()));
+                let divide = self.block(vec![quotient, s], t);
+                let up = Statement::Assign(Place::local(d), BinaryOp(BinOp::Add, dv.clone(), one.clone()));
+                let up = self.block(vec![up], Terminator::Goto(divide));
+                let (s, t) = self.test(BinOp::Lt, a, &zero, up, divide);
+                let rest = self.block(vec![Statement::Assign(Place::local(d), copy(a)), s], t);
                 if b.int().is_some() {
                     return Some((vec![], Terminator::Goto(rest)));
                 }
