@@ -1652,7 +1652,9 @@ fn step_by_ty(t: &Ty) -> Option<IntTy> {
     let [GenericArg::Ty(r)] = last_args(p).as_slice() else {
         return None;
     };
-    (p.qself.is_none() && names(p)? == ["core", "iter", "StepBy"]).then(|| card_range(r))?
+    // (a method's path names it `StepBy<..>`, a local's type `core::iter::StepBy<..>`)
+    let n = names(p)?;
+    (p.qself.is_none() && (n == ["core", "iter", "StepBy"] || n == ["StepBy"])).then(|| card_range(r))?
 }
 
 fn range_struct(t: IntTy) -> Ty {
@@ -1742,6 +1744,78 @@ pub fn step_by(f: &mut Function) {
     if !made_any {
         return;
     }
+    // where rustc calls them (opt-level 1): the StepBy's into_iter(), itself, and its next(), core's: the range's
+    // nth() of 0 the first time, of k - 1 after
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let Some(t) = func.qself.as_ref().and_then(|q| step_by_ty(&q.ty)) else { continue };
+        let [Operand::Move(a)] = args.as_slice() else { continue };
+        let Some(a) = a.as_local() else { continue };
+        if func.name() == "into_iter" && is_step(a).is_some() {
+            let b = &mut f.body.blocks[bi];
+            b.statements.push(Statement::Assign(dest.clone(), Rvalue::Use(Operand::Move(Place::local(a)))));
+            b.terminator = Terminator::Goto(ret);
+            continue;
+        }
+        if func.name() != "next" || ir::occurrences(&f.body.blocks, a) != 2 {
+            continue;
+        }
+        let Some(at) = f.body.blocks[bi].statements.iter().position(|s| {
+            matches!(s, Statement::Assign(r, Rvalue::Ref(BorrowKind::Mut, p)) if r.as_local() == Some(a) && p.projection.is_empty())
+        }) else {
+            continue;
+        };
+        let Statement::Assign(_, Rvalue::Ref(_, it)) = f.body.blocks[bi].statements.remove(at) else { unreachable!() };
+        let Some(s) = it.base_local().filter(|s| is_step(*s).is_some()) else { continue };
+        let field = |k: u32, ty: Ty| Place::field(s, k, ty);
+        let (ft, n, r) = (
+            fresh.local(Ty::Bool),
+            fresh.local(Ty::Int(IntTy::Usize)),
+            fresh.local(Ty::Ref { lifetime: None, mutable: true, to: Box::new(range_struct(t)) }),
+        );
+        let (first, later, call_at) = (fresh.name(), fresh.name(), fresh.name());
+        let nth = Path {
+            qself: Some(Box::new(QSelf {
+                ty: range_struct(t),
+                as_trait: Some(path(&["iter", "range", "RangeIteratorImpl"], vec![])),
+            })),
+            segments: vec![Segment::Name { name: "spec_nth".into(), args: None }],
+        };
+        fresh.block(first, vec![assign(n, Rvalue::Use(usize_const(0)))], Terminator::Goto(call_at));
+        fresh.block(
+            later,
+            vec![assign(n, Rvalue::Use(Operand::Copy(field(1, Ty::Int(IntTy::Usize)))))],
+            Terminator::Goto(call_at),
+        );
+        fresh.block(
+            call_at,
+            vec![assign(r, Rvalue::Ref(BorrowKind::Mut, field(0, range_struct(t))))],
+            Terminator::Call {
+                dest,
+                func: nth,
+                args: vec![Operand::Move(Place::local(r)), Operand::Move(Place::local(n))],
+                target: Some(ret),
+                unwind: Unwind::Continue,
+            },
+        );
+        let b = &mut f.body.blocks[bi];
+        b.statements.extend([
+            assign(ft, Rvalue::Use(Operand::Copy(field(2, Ty::Bool)))),
+            Statement::Assign(field(2, Ty::Bool), Rvalue::Use(Operand::Constant(Const::Bool(false)))),
+        ]);
+        b.terminator = branch(ft, later, first);
+    }
+    // (the blocks just made hold nth() calls of their own)
+    f.body.blocks.append(&mut fresh.blocks);
     // the range's nth(), on the StepBy's range
     for bi in 0..f.body.blocks.len() {
         let Terminator::Call {
