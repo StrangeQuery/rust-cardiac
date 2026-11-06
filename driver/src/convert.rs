@@ -738,6 +738,7 @@ impl<'tcx> Convert<'tcx> {
                 1 => Some(ir::Const::Bool(true)),
                 _ => None,
             }),
+            pty::TyKind::RigidTy(R::Char) => bits().and_then(|b| char::from_u32(b as u32)).map(ir::Const::Char),
             pty::TyKind::RigidTy(R::Tuple(ts)) if ts.is_empty() => Some(ir::Const::Unit),
             _ => None,
         };

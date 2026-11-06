@@ -23,3 +23,15 @@
   rather than unwinds a panic) is read as `unwind continue`: CARDIAC never unwinds, and a panic stops the machine.
 - **Cost.** Natively such a panic aborts, exit code 134, where burn exits 101 as for any panic; the output is the
   same. The panic map can't say otherwise without a message burn reads as an abort.
+
+## 2026-11-05 · A char is a usize that fits on a card
+
+- **Decision.** The IR reads a char constant (`'b'`, `Const::Char`; the lexer a char literal as rustc writes one),
+  and the front end makes every char a usize: its type, and each constant its code point. A char is compared,
+  matched and cast (`as u8` mod 256, `as i16`, `u8 as char`) as a usize is. A literal past a card (`'Ϩ'`, 1000)
+  is refused as any constant past a card is, as Jason decided on cargo-cardiac-support#27.
+- **Why.** Rust has no arithmetic on chars, and a program can make one only from a literal or a `u8`: every char at
+  run time is below 1000, never negative, where a usize lives. What it takes from a usize is what a usize below
+  1000 does.
+- **Cost.** A listing says `98_usize` where the source says `'b'`. `char::from_u32`, `from_digit`, `to_digit`,
+  `is_ascii_digit` at opt-level 1 and the like stay refused (calls, or `u32`).

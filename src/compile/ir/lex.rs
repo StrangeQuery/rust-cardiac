@@ -10,6 +10,8 @@ pub enum Tok {
     Str(String),
     /// `'_`, `'static`
     Lifetime(String),
+    /// A char literal, `'b'`, `'\n'`, `'\u{e9}'`, as rustc writes one (its `Debug`).
+    Char(char),
     /// Punctuation: `( ) [ ] { } < > , ; : :: = -> & * ! . + - @ #`
     Punct(&'static str),
     /// A closure's type, as rustc writes it, whatever its file's path holds: `{closure@src/main.rs:10:25: 10:28}`
@@ -79,6 +81,9 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, usize> {
             }
             i += 1;
             Tok::Str(text[start + 1..i - 1].to_string())
+        } else if let Some((ch, len)) = (c == b'\'').then(|| char_literal(&text[i..])).flatten() {
+            i += len;
+            Tok::Char(ch)
         } else if c == b'\'' {
             i += 1;
             while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
@@ -94,4 +99,33 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, usize> {
         out.push(Token { tok, start, end: i });
     }
     Ok(out)
+}
+
+/// A char literal at the start of `text` (which starts with its quote): the char, and the bytes it takes. A
+/// lifetime, `'a` or `'static`, has no closing quote after its first character.
+fn char_literal(text: &str) -> Option<(char, usize)> {
+    let body = &text[1..];
+    let mut cs = body.chars();
+    let (ch, rest) = match cs.next()? {
+        '\\' => match cs.next()? {
+            'n' => ('\n', cs.as_str()),
+            'r' => ('\r', cs.as_str()),
+            't' => ('\t', cs.as_str()),
+            '0' => ('\0', cs.as_str()),
+            c @ ('\\' | '\'' | '"') => (c, cs.as_str()),
+            'u' => {
+                let hex = cs.as_str().strip_prefix('{')?;
+                let end = hex.find('}')?;
+                (
+                    char::from_u32(u32::from_str_radix(&hex[..end], 16).ok()?)?,
+                    &hex[end + 1..],
+                )
+            }
+            _ => return None,
+        },
+        '\'' => return None,
+        c => (c, cs.as_str()),
+    };
+    let rest = rest.strip_prefix('\'')?;
+    Some((ch, text.len() - rest.len()))
 }

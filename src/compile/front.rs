@@ -46,6 +46,7 @@ pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>);
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
+    file.visit(&mut CharIsUsize);
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
     // switch arms are read as their switch's type first: a discriminant's is isize
@@ -430,6 +431,30 @@ impl VisitMut for TupleStructConsts<'_> {
                 let fields = cs.drain(..).enumerate().map(|(i, c)| (i.to_string(), c)).collect();
                 *c = Const::Adt(p.clone(), fields);
             }
+        }
+        walk_const(self, c)
+    }
+}
+
+/// A char is the number it is, a code point, in a cell as a usize is: never negative, compared as numbers, `as u8`
+/// its low byte (mod 256). Rust has no arithmetic on chars, and every char a program can make (a literal, a `u8`
+/// cast) is below 1000, a literal past a card refused as any constant past one is.
+struct CharIsUsize;
+
+impl VisitMut for CharIsUsize {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if *t == Ty::Char {
+            *t = Ty::Int(IntTy::Usize);
+        }
+        walk_ty(self, t)
+    }
+
+    fn visit_const(&mut self, c: &mut Const) {
+        if let Const::Char(ch) = *c {
+            *c = Const::Int {
+                value: ch as i128,
+                ty: IntTy::Usize,
+            };
         }
         walk_const(self, c)
     }

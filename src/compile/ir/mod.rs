@@ -311,6 +311,8 @@ pub enum Const {
         ty: IntTy,
     },
     Bool(bool),
+    /// A char, `'b'`.
+    Char(char),
     Unit,
     /// A string literal, as written (escapes and all).
     Str(String),
@@ -329,7 +331,7 @@ impl Const {
     /// A constant of one word: an integer, a bool, or a named constant (`N`, `i16::MAX`).
     pub fn is_scalar(&self) -> bool {
         match self {
-            Const::Int { .. } | Const::Bool(_) => true,
+            Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
             Const::Unit | Const::Str(_) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
         }
@@ -822,6 +824,7 @@ impl fmt::Display for Const {
         match self {
             Const::Int { value, ty } => write!(f, "{value}_{ty}"),
             Const::Bool(b) => write!(f, "{b}"),
+            Const::Char(c) => write!(f, "{c:?}"),
             Const::Unit => f.write_str("()"),
             Const::Str(s) => write!(f, "\"{s}\""),
             Const::Path(p) => write!(f, "{p}"),

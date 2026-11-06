@@ -558,6 +558,10 @@ impl Parser<'_> {
             self.pos += 1;
             return Ok(Const::Str(s));
         }
+        if let Some(&Tok::Char(c)) = self.peek() {
+            self.pos += 1;
+            return Ok(Const::Char(c));
+        }
         let path = self.path(true)?;
         // a struct's value: `Path {{ field: value, .. }}`
         if self.is_punct("{") && self.peek_at(1) == Some(&Tok::Punct("{")) {
