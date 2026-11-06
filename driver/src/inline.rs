@@ -26,8 +26,9 @@ use cargo_cardiac::compile::methods;
 const WRONG_INLINED: [(&str, IntTy); 2] = [("midpoint", IntTy::I16), ("saturating_mul", IntTy::I16)];
 
 /// Integer methods the compiler writes itself (`methods::written_here`) whose inlined body works on numbers no
-/// card holds: kept calls at opt-level 2 and 3 too. `ilog10` is bit operations on u32 constants (`393206`).
-const WRITTEN_AT_EVERY_LEVEL: [(&str, IntTy); 1] = [("ilog10", IntTy::I16)];
+/// card holds: kept calls at opt-level 2 and 3 too. `ilog10` is bit operations on u32 constants (`393206`);
+/// `isqrt` calls core's root of a u16.
+const WRITTEN_AT_EVERY_LEVEL: [(&str, IntTy); 2] = [("ilog10", IntTy::I16), ("isqrt", IntTy::I16)];
 
 /// Whether the inliner should run where rustc wouldn't run it: opt-level 1, s or z, unless `-Zinline-mir` says.
 /// (At 0 the MIR is unoptimized and the compiler's passes are off; from 2 rustc runs it already.)

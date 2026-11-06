@@ -53,6 +53,7 @@ enum Method {
     WrappingDiv,
     OverflowingDiv,
     Pow,
+    Isqrt,
 }
 
 /// The types it compiles them for: the card's own number for the signed methods, and every integer type for the
@@ -86,6 +87,7 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
         "wrapping_div" if signed => WrappingDiv,
         "overflowing_div" if signed => OverflowingDiv,
         "pow" if signed => Pow,
+        "isqrt" if signed => Isqrt,
         _ => return None,
     })
 }
@@ -231,14 +233,24 @@ impl<'a> Gains<'a> {
     }
 
     pub(super) fn block(&mut self, statements: Vec<Statement>, terminator: Terminator) -> BasicBlock {
+        let name = self.next_block();
+        self.block_named(name, statements, terminator);
+        name
+    }
+
+    /// A block's name, for a block made later: a loop's head, which the blocks in the loop go back to.
+    fn next_block(&mut self) -> BasicBlock {
         let name = BasicBlock(self.next_block);
         self.next_block += 1;
+        name
+    }
+
+    fn block_named(&mut self, name: BasicBlock, statements: Vec<Statement>, terminator: Terminator) {
         self.blocks.push(Block {
             name,
             statements,
             terminator,
         });
-        name
     }
 
     /// `t = Op(a, b)` and a switch on it: the statement for the block that ends in the switch.
@@ -562,6 +574,46 @@ impl<'a> Gains<'a> {
                     into = r.unwrap_or(into);
                 }
                 (vec![], Terminator::Goto(next))
+            }
+            // a panic below 0, as in Rust; then the odd numbers 1, 3, 5, .. taken away while they last, as many as
+            // the root (their sums are the squares), all on a card
+            (Method::Isqrt, [x]) => {
+                let [rest, odd, root] = [(); 3].map(|_| self.local(Ty::Int(ty)));
+                let [restv, oddv, rootv] = [rest, odd, root].map(|l| Operand::Copy(Place::local(l)));
+                let head = self.next_block();
+                let step = |l: Local, op: BinOp, by: Operand| {
+                    Statement::Assign(Place::local(l), BinaryOp(op, Operand::Copy(Place::local(l)), by))
+                };
+                let body = self.block(
+                    vec![
+                        step(rest, BinOp::Sub, oddv.clone()),
+                        step(odd, BinOp::Add, int(2)),
+                        step(root, BinOp::Add, one.clone()),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let done = self.set(dest, copy(&rootv), back);
+                let (s, t) = self.test(BinOp::Lt, &restv, &oddv, done, body);
+                self.block_named(head, vec![s], t);
+                let start = self.block(
+                    vec![
+                        Statement::Assign(Place::local(rest), copy(x)),
+                        Statement::Assign(Place::local(odd), copy(&one)),
+                        Statement::Assign(Place::local(root), copy(&zero)),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let ok = self.local(Ty::Bool);
+                let check = Statement::Assign(Place::local(ok), BinaryOp(BinOp::Ge, x.clone(), zero.clone()));
+                let assert = Terminator::Assert {
+                    cond: Operand::Move(Place::local(ok)),
+                    expected: true,
+                    msg: "argument of integer square root cannot be negative".into(),
+                    msg_args: vec![],
+                    target: start,
+                    unwind: Unwind::Continue,
+                };
+                (vec![check], assert)
             }
             // a - b, or 0 where that is below 0
             (Method::SaturatingSub, [a, b]) => {
@@ -999,6 +1051,7 @@ mod tests {
                 Method::SaturatingAdd,
                 IntTy::U8,
             ),
+            ("core::num::<impl i16>::isqrt", Method::Isqrt, IntTy::I16),
         ];
         for (p, m, t) in known {
             let f = callee(p);
