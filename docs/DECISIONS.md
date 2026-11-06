@@ -4,47 +4,6 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
-## 2026-11-05 · A slice of a known array is the array; a slice iterator's pointers are indexes
-
-- **Decision.** `slices::known_lengths`, before the for-loop pass: a slice (`&[T]`, `*const [T]`, `NonNull<[T]>`)
-  every definition of which comes, through copies, casts and reborrows, from an array of one known length N is a
-  pointer to `[T; N]`, one cell, its address, and its `PtrMetadata` the constant N; `NonNull<T>` is a `*mut T`; a
-  pointer cast to another kind of pointer, and `&(*p)`, are p; `slice::Iter` and `slice::IterMut` are a plain
-  struct of their two pointers, and their own test `ptr == end` is `ptr >= end` (the pointer never passes the
-  end). A reference or a raw pointer to a card's value may be an enum's field (`Option<&i16>`, with a tag) and a
-  raw pointer a struct's. Then `slices::pointers_as_indexes`, after the struct pass: a family of pointer locals
-  (made from, or compared with, each other) whose every definition is the address of an element of one array, a
-  copy, or a step (`Offset`), and whose only other uses are `*p` and comparisons, is the elements' indexes, and
-  `*p` is `t[p]`. The copies rustc's casts leave among them go, and a loop that copies the index, tests it, then
-  steps it first in the body steps it last instead, so the copy is the index itself, as the for-loop pass does
-  for a range.
-- **Why.** At opt-level 2 rustc inlines `for x in &t`, `t.iter()` and `t.iter_mut()` into pointer arithmetic over
-  a slice; all of it is code the compiler writes once a pointer is an address, but as addresses each element read
-  is built from the pointer, and the end test is an equality. As indexes it is the loop `for i in 0..N` with
-  `t[i]` is.
-- **Cost.** None measured: `for x in &t { out(*x) }` and `iter_mut` take the cells of the same loop written with
-  an index (45 and 37 cells at opt-level 2 without overflow checks), the test programs and examples unchanged. A
-  slice whose length isn't known in the function (a `&[T]` parameter) is still refused, and opt-level 1, where
-  rustc calls `next()`, still refuses these loops.
-
-## 2026-11-05 · `for x in t` and `.enumerate()` over a slice are ranges over the indexes; `drop` is in the IR
-
-- **Decision.** `iterators::array_into_iter`: an `array::IntoIter<T, N>` made from a whole array (rustc's
-  `into_iter()` call at opt-level 1, the structs it inlines at 2) is a `Range<usize>` over its `alive` range,
-  each `next()` the range's, which the for-loop pass lowers, and the item `t[i]`: t itself where nothing writes t
-  again, else a copy taken where the iterator was made, as `IntoIter` takes one. `iterators::enumerate_slices`:
-  an `Enumerate` of a slice iterator into one array is the same range over the slice's indexes, the item `(i -
-  start, &t[i])`. `drop` is a terminator of the IR (`Terminator::Drop`), read from the driver and from the text;
-  the iterator's own drop, which does nothing for elements a cell holds, becomes a `goto`, and any other drop is
-  refused, as before. The cleanup unwinds of the calls in such a function are plain ones: CARDIAC never
-  unwinds, and any other value whose drop did something has a `drop` of its own, which is refused.
-- **Why.** Both are the loop `for i in 0..N` with `t[i]`; written as a range they take its cells (`for x in t`
-  29, as the index loop; `for (i, x) in t.iter().enumerate()` 32, as the index loop), at both opt-levels for
-  `for x in t`.
-- **Cost.** A copy of the array (its cells, and two instructions an element) where the loop's array is written
-  again after the iterator is made. `enumerate` of anything but a slice iterator, and at opt-level 1, is still
-  refused.
-
 ## 2026-11-06 · An iterator's and a slice's methods that rustc calls are the loops they stand for
 
 - **Decision.** `iterators::iterator_methods`: on a slice iterator into one array, or a range of a card's type
@@ -142,6 +101,47 @@ rust-cardiac, and cargo-cardiac is what you install.)
   a constant from -39 to 39, so the product is at most 9999, what the accumulator holds. Any other is refused.
 - **Why.** Two `u8`s' product reaches 65025, and the multiply kept what was left of it: `200u8.wrapping_mul(200)`
   was 0, not 64 (cargo-cardiac-support#142).
+
+## 2026-11-05 · A slice of a known array is the array; a slice iterator's pointers are indexes
+
+- **Decision.** `slices::known_lengths`, before the for-loop pass: a slice (`&[T]`, `*const [T]`, `NonNull<[T]>`)
+  every definition of which comes, through copies, casts and reborrows, from an array of one known length N is a
+  pointer to `[T; N]`, one cell, its address, and its `PtrMetadata` the constant N; `NonNull<T>` is a `*mut T`; a
+  pointer cast to another kind of pointer, and `&(*p)`, are p; `slice::Iter` and `slice::IterMut` are a plain
+  struct of their two pointers, and their own test `ptr == end` is `ptr >= end` (the pointer never passes the
+  end). A reference or a raw pointer to a card's value may be an enum's field (`Option<&i16>`, with a tag) and a
+  raw pointer a struct's. Then `slices::pointers_as_indexes`, after the struct pass: a family of pointer locals
+  (made from, or compared with, each other) whose every definition is the address of an element of one array, a
+  copy, or a step (`Offset`), and whose only other uses are `*p` and comparisons, is the elements' indexes, and
+  `*p` is `t[p]`. The copies rustc's casts leave among them go, and a loop that copies the index, tests it, then
+  steps it first in the body steps it last instead, so the copy is the index itself, as the for-loop pass does
+  for a range.
+- **Why.** At opt-level 2 rustc inlines `for x in &t`, `t.iter()` and `t.iter_mut()` into pointer arithmetic over
+  a slice; all of it is code the compiler writes once a pointer is an address, but as addresses each element read
+  is built from the pointer, and the end test is an equality. As indexes it is the loop `for i in 0..N` with
+  `t[i]` is.
+- **Cost.** None measured: `for x in &t { out(*x) }` and `iter_mut` take the cells of the same loop written with
+  an index (45 and 37 cells at opt-level 2 without overflow checks), the test programs and examples unchanged. A
+  slice whose length isn't known in the function (a `&[T]` parameter) is still refused, and opt-level 1, where
+  rustc calls `next()`, still refuses these loops.
+
+## 2026-11-05 · `for x in t` and `.enumerate()` over a slice are ranges over the indexes; `drop` is in the IR
+
+- **Decision.** `iterators::array_into_iter`: an `array::IntoIter<T, N>` made from a whole array (rustc's
+  `into_iter()` call at opt-level 1, the structs it inlines at 2) is a `Range<usize>` over its `alive` range,
+  each `next()` the range's, which the for-loop pass lowers, and the item `t[i]`: t itself where nothing writes t
+  again, else a copy taken where the iterator was made, as `IntoIter` takes one. `iterators::enumerate_slices`:
+  an `Enumerate` of a slice iterator into one array is the same range over the slice's indexes, the item `(i -
+  start, &t[i])`. `drop` is a terminator of the IR (`Terminator::Drop`), read from the driver and from the text;
+  the iterator's own drop, which does nothing for elements a cell holds, becomes a `goto`, and any other drop is
+  refused, as before. The cleanup unwinds of the calls in such a function are plain ones: CARDIAC never
+  unwinds, and any other value whose drop did something has a `drop` of its own, which is refused.
+- **Why.** Both are the loop `for i in 0..N` with `t[i]`; written as a range they take its cells (`for x in t`
+  29, as the index loop; `for (i, x) in t.iter().enumerate()` 32, as the index loop), at both opt-levels for
+  `for x in t`.
+- **Cost.** A copy of the array (its cells, and two instructions an element) where the loop's array is written
+  again after the iterator is made. `enumerate` of anything but a slice iterator, and at opt-level 1, is still
+  refused.
 
 ## 2026-11-05 · A unit struct is no cells; the driver says which structs have no fields
 
@@ -499,6 +499,163 @@ rust-cardiac, and cargo-cardiac is what you install.)
   one bit operation programs use on a decimal machine (an index that wraps, `x & 3`), and the loop is what `%` by
   a variable costs, without the routine.
 - **Cost.** About x / (m + 1) passes of a three-instruction loop: 250 for `999 & 3`. Two cells more for an i16.
+
+## 2026-10-21 · The overlay convention: a phase stops with the bug on the next tape
+
+- **Decision.** A phase ends with `HRS n`, not `JMP 00`: the machine stops with the bug (the program counter) on n,
+  the number of the tape to load next. The operator puts that tape in the reader, ahead of the input still unread,
+  moves the bug to 00 and presses Run; the loader reads it in. The bug on 00 is a stop for good, as every program
+  already ends (`HRS 0`, the panic routine's too).
+- **Why.** With `JMP 00` the machine never stopped: the loader read the next card at once, so the next tape had to
+  be in the reader already. The emulator put it there the moment the jump ran, an operator who knew the future. On
+  CARDIAC that works only for a deck stacked beforehand, which needs the number of cards each phase reads known in
+  advance; a program like the guessing game, which reads as many cards as the player takes, can't be stacked. A
+  stop is something an operator can see and act on, and naming the tape lets the machine ask for any of them
+  (loading one again is left for later).
+- **Overlay mode belongs to the program.** HRS does what it always did (halt, the bug on its address); only the
+  operator's reading of it is new, and only for a program in phases. A program not in phases can still stop on any
+  cell to be run on from there ("play again?"). In the emulator: `run` halts at any HRS; `run_phases` (`cargo
+  cardiac run`, the tests) feeds the tape asked for; `run_stacked`, for a deck stacked beforehand (as a larger program's is),
+  runs on at 00 with the deck's next card. `JMP 00` is a plain jump into the loader again, as on the machine.
+- **Rejected: a flag in the accumulator** (a tape number in it at the stop). Every program halts with whatever its
+  accumulator holds, a panic with the value that overflowed, so an old program could look like a request; and it
+  costs a CLA at each stop.
+- **Cost.** None: `HRS n` is one cell, as `JMP 00` was. A larger program's listings changed in 11 lines (`JMP 00` to
+  `HRS 02`), its cells not at all, its renders identical to native. The peephole's rules that took any HRS for the
+  program's end (a scratch cell or a constant read after it, a load before it) now take only `HRS 0`.
+
+## 2026-10-21 · auto-overlay: the compiler places the phases
+
+- **Decision.** A setting, off by default: `auto-overlay = true` under `[package.metadata.cardiac]` (a single
+  file: `--auto-overlay`). On, a program whose main doesn't fit in memory is cut into phases by the compiler, and
+  an `overlay()` in main is an error. Off, nothing changes: the program places its phases with `overlay()`.
+- **Where it cuts.** Main's optimized blocks, once the passes are done and before anything is decided block by block
+  (`phases::cut_points`): on a way from one block to the next, or between two statements of a block, where every run
+  passes once on its way to main's return and that is the only way into the rest, so a phase is never loaded twice.
+  A main that never returns gets no cut. Each place is compiled and measured; the split kept is the
+  smallest in all whose phases each fit with the shared data, a tie going to the smaller largest phase. When no one
+  cut is enough, the cut that leaves the largest phase smallest is kept and another is looked for, up to 4 phases.
+- **Why a setting, and why overlay() is an error with it on.** The programmer decides whether the compiler
+  tries at all, and falls back to `overlay()` with it off; with it on, `overlay()` has no place in the source. A
+  program that mixed the two would have its own cuts and the compiler's to reconcile.
+- **Phase order.** A phase now starts with the block it is entered at. The loader starts a phase at its first line,
+  and blocks came in rustc's numbering; the block a cut returns to can be numbered after others of its phase.
+- **Evidence.** A larger program's 11 machines with `overlay()`, the calls taken out and the setting on: eight split with
+  exactly the cells of the hand-placed cut (rotor's is mid-block), and solid, compose and floor no longer need a
+  second phase (96, 94 and 90 cells); renders identical to native. That program's whole build takes under a second.
+  `tests/programs/auto_overlay.rs` (2^60 in digits) runs past memory without the setting and matches native with
+  it.
+- **Fuzzing.** `CARDIAC_FORCE_CUT=K[,K...]` cuts every program at its Kth places, fit or not; with it, `sh fuzz.sh
+  --generate` checks split programs against native in every setting. It found three faults, fixed: cuts inside an
+  `if`'s arm (passed by some runs, not all), a cut through a block whose temporary was already a scratch cell, and
+  cuts in a main that always panics; and a phase that starts with a panic (below), on main too. Then 1,200 programs, 12 seeds, one to three cuts each,
+  about 29,000 runs: no difference.
+- **Cost.** A program too big compiles once per place it could be cut, and again per extra phase. Only cuts in
+  main, never in a function it calls or inside a loop.
+
+## 2026-10-21 · A phase that starts with a panic keeps its jump to it
+
+- **Decision.** The peephole's look back for "the line before", which takes over a dropped `JMP rt_panic`'s check
+  when the panic routine comes next, stops at a phase's start. A phase whose code starts with the panic keeps its
+  jump.
+- **Why.** The line before was the last of the phase before, a different tape: the check was filed under that
+  phase, and `rt_panic`'s label, which nothing named any more, went too, so the panic map had no stop for the phase.
+  `cargo cardiac run` punched -999 and exited 0, where Rust exits 101. Found by fuzzing auto-overlay with forced cuts.
+- **Cost.** One cell (the JMP), only in a phase that starts by panicking. `tests/programs/panic_phase.rs`.
+
+## 2026-10-21 · A negative word is skipped, and kept for new instructions
+
+- **Decision.** The emulator skips a cell holding a negative number when it is reached as an instruction: a no-op,
+  as Brian Stuart's simulator (https://www.cs.drexel.edu/~bls96/museum/cardiac.html) has it, where the 1969 manual
+  says nothing. Before, it ran the word's digits (-123 as `CLA 23`).
+- **Why.** It leaves the negative words free, an opcode space for new instructions later (-0xx to
+  -9xx), where running their digits would have given them a meaning already. The flipboard's two extensions live
+  there already, CUT n as -(600 + n) and LDC n as -(100 + n); the emulator, with no card rack, took them for STO
+  and CLA, and now passes over them. It also matches the simulator that
+  settles the manual's other open questions, and agrees with ours on all of them (a 4-digit accumulator, STO
+  keeping the low three digits, cell 00 fixed at 001, JMP writing 800 plus the next address into 99).
+- **Cost.** None to compiled programs, which never execute a negative word; only a program that runs into its own
+  data behaves differently.
+
+## 2026-10-21 · A later phase's opening constants, dead stores, and ways in that can't be taken
+
+Three small ones a larger program's rewrite in plain Rust found, each a few cells where the plain form cost more:
+- **A later phase's opening run**. Main's opening blocks, run once, store their constants as their cells'
+  initial values on the tape. So now does the run each `overlay()` returns to, for a local no earlier phase names:
+  its cell is punched by a tape before anything reads it. `overlay(); for _ in 0..96 {..}` starts its counter at -96
+  on the tape, not with a CLA and STO in phase 2 (phase 2: 10 cells to 7).
+- **Dead stores** (`blocks::dead_stores`). A value or a comparison stored where no way on reads it before it
+  is set again goes, by liveness: `if (0..36).contains(&c)` left `_2 = const false` on its false way, past the test
+  that read it (14 cells to 10, the hand-written `c >= 0 && c < 36`). Only plain locals whose address is never
+  taken; a return reads the result.
+- **Ways in that can't be taken**. The range pass joins what holds on each way into a block; a way on which
+  some range is empty (`233 <= x` on the way out of `x < 233`) is never taken, and is left out of the join. The
+  descending `match l { 233.. => 3, 124..233 => 2, 31..124 => 1, ..31 => 0 }` loses its redundant test: 30 cells,
+  as ascending, from 33.
+
+## 2026-10-21 · A constant past a card is a compile-time error, always
+
+- **Decision.** A constant no card holds, written or folded by rustc (`if x == 0 { 0 } else { 101 * 10 }`, where
+  rustc hands the compiler 1010), stays refused, whether or not a run would reach it, with a message that says so in
+  Rust's terms. The fuzzer counts such a program as one past a card, never as a finding.
+- **Why.** It is what Rust does with overflow it can see: `30000 * 2` in an i16 is an error (`arithmetic_overflow`,
+  deny by default) in debug and release builds, in a branch that never runs too, and `i16::MAX + 1` in a `const` is
+  E0080. A card is the CARDIAC i16. Panicking at run time instead would put off an error rustc's own rules make a
+  compile-time one.
+- **Cost.** It is as good as rustc's constant folding, which depends on the opt-level: the same expression may be
+  refused at one and panic as an overflow at run time at another. rustc's lint has the same limit.
+
+## 2026-10-21 · Range patterns and consecutive arms cost what an if chain does
+
+- **Decision.** Two changes to how a `match` is tested, both about comparison, what costs on CARDIAC. The range
+  pass now settles a test written `k <= x` (the constant first, as rustc writes a range pattern's start) as it did
+  `x >= k`, and the peephole drops a TAC straight after another TAC, which never jumps. And a switch whose
+  arms are consecutive values (`0 => .., 1 => .., 2 => ..`, an enum's variants) is one subtraction, x - v0 below 0
+  the other way, then `SUB 00; TAC arm` for each value in turn, where each arm was an equality, two tests.
+- **Why.** A larger program rewritten in plain Rust: `match y { ..6 => 0, 6..13 => 1, 13..19 => 2, _ => 3 }` was 34 cells
+  against 30 for the first-match form or the if chain; `match s { 0 => .., 1 => .., 2 => .., _ => .. }` was 39
+  against 30 for `..=0 / ..=1 / ..=2`.
+- **Cost.** The disjoint form is now 30 cells, the consecutive one 32: its first test (x below v0) stays when the
+  ranges show x can't be, as the lowering doesn't see them.
+- **Evidence.** `tests/programs/match_ranges.rs` and `switch_consecutive.rs` match native Rust.
+
+## 2026-10-21 · A counter that only counts counts to 0
+
+- **Decision.** After the range pass (`blocks::rebase_counters`), a local that is only set to constants,
+  stepped by a constant and compared with one constant m (`c < k` read as `c < m`, `c <= k` as `c < k + 1`) counts
+  from each constant minus m up to 0, and is compared with 0: `for _ in 0..96` is the `for _ in -96..0` a
+  CARDIAC programmer writes. A loop `for _ in a..n`, n known only at run time, counts n down instead and drops its
+  counter, the step first in the body where the test's subtraction is the new n: what `(a..n).rev()` compiles to.
+  That needs n to hold the bound whenever the counter starts and to stay put while it counts: from the counter's
+  block no way back to it but through a line that sets n, from such a line no way to the test but through that
+  block, and from that block on nothing reads n but the test. So n may be a parameter, set on one arm of an
+  `if`, set again before each run of an inner loop, or set before `overlay()`.
+- **Why.** Comparison is what costs on CARDIAC: its one test is "below 0", so `c < 96` is a subtraction, a TAC and
+  a cell for 96, where `c < 0` is the TAC alone. Every group of a larger program's machines, rewritten in plain Rust, found
+  `for _ in 0..N` 1 to 3 cells over the hand-written loop, and wrote `-N..0` with a comment to say why.
+- **Cost.** A counter whose value is read (`for x in 0..96` using x) is left as it is. So is one compared with two
+  bounds, or set from a variable.
+- **Evidence.** `for _ in 0..96 { out(k - inp()) }` is 14 cells, from 16, as `-96..0` is; `for _ in 0..n` is 11,
+  from 14, as `(0..n).rev()` is. `tests/programs/count_loops.rs` and `count_down.rs` match native Rust.
+
+## 2026-10-21 · Nested structs, and structs behind a `&mut`, are taken apart leaf by leaf
+
+- **Decision.** A struct's field may be a struct, an enum with data (which the enum pass has written as a struct),
+  or an array of scalars. The struct pass takes a struct apart into its leaves: its fields, with each field
+  that is a struct its own leaves in turn (`Line { a: Point, b: Point }` is `l_a_x`, `l_a_y`, `l_b_x`, `l_b_y`).
+  A place is one leaf's cell (`((_1.0: Point).1: i16)` is `l_a_y`) or, when it names a struct, a run of them,
+  which a copy, a call's argument or a result copies cell by cell. A `&mut` to a struct is a `&mut` of each leaf:
+  `(*r).x` is `*r_x`, `r = &mut p` is `r_x = &mut p_x; r_y = &mut p_y`, and passing r passes each.
+- **Why.** It keeps the one rule of the struct pass: every later pass sees plain cells. It is what the enum pass
+  already did for an enum within an enum, and it lets an enum carry a struct (`Option<Point>`) or sit in one
+  (`struct Card { kind: Option<i16> }`) without either pass knowing about the other. A variant carrying a tuple of
+  scalars (`Option<(i16, i16)>`) carries the struct such a tuple is written as, `tuple__i16_i16`.
+- **Cost.** A `&mut` is an address a cell: each read or write through it is self-modifying code. Passing the
+  values in and copying them back would be cheaper for a function that touches each field. An array within
+  a struct can't be behind a `&mut` or in an array of structs yet, nor an enum in a struct in an enum.
+- **Evidence.** `tests/programs/struct_nested.rs`, `struct_mut.rs`, `struct_array_field.rs`, `enum_field.rs`,
+  `enum_field_mut.rs`, `enum_mut.rs`, `enum_payload.rs`, `enum_payload_array.rs` and `enum_payload_mut.rs` match
+  native Rust; no other test program changed size.
 
 ## 2026-10-20 · A result is worked in its own cell
 
@@ -1561,162 +1718,6 @@ Superseded by "The compiler reads MIR into a typed IR" (2026-10-19): the passes 
   - Fields must be scalars, so there are no nested structs yet (since changed: see nested structs, below).
 - **Evidence.** `tests/programs/structs.rs` and `structs2.rs` match native Rust. Programs without structs compile
   to byte-identical tapes.
-
-## 2026-10-21 · The overlay convention: a phase stops with the bug on the next tape
-
-- **Decision.** A phase ends with `HRS n`, not `JMP 00`: the machine stops with the bug (the program counter) on n,
-  the number of the tape to load next. The operator puts that tape in the reader, ahead of the input still unread,
-  moves the bug to 00 and presses Run; the loader reads it in. The bug on 00 is a stop for good, as every program
-  already ends (`HRS 0`, the panic routine's too).
-- **Why.** With `JMP 00` the machine never stopped: the loader read the next card at once, so the next tape had to
-  be in the reader already. The emulator put it there the moment the jump ran, an operator who knew the future. On
-  CARDIAC that works only for a deck stacked beforehand, which needs the number of cards each phase reads known in
-  advance; a program like the guessing game, which reads as many cards as the player takes, can't be stacked. A
-  stop is something an operator can see and act on, and naming the tape lets the machine ask for any of them
-  (loading one again is left for later).
-- **Overlay mode belongs to the program.** HRS does what it always did (halt, the bug on its address); only the
-  operator's reading of it is new, and only for a program in phases. A program not in phases can still stop on any
-  cell to be run on from there ("play again?"). In the emulator: `run` halts at any HRS; `run_phases` (`cargo
-  cardiac run`, the tests) feeds the tape asked for; `run_stacked`, for a deck stacked beforehand (as a larger program's is),
-  runs on at 00 with the deck's next card. `JMP 00` is a plain jump into the loader again, as on the machine.
-- **Rejected: a flag in the accumulator** (a tape number in it at the stop). Every program halts with whatever its
-  accumulator holds, a panic with the value that overflowed, so an old program could look like a request; and it
-  costs a CLA at each stop.
-- **Cost.** None: `HRS n` is one cell, as `JMP 00` was. A larger program's listings changed in 11 lines (`JMP 00` to
-  `HRS 02`), its cells not at all, its renders identical to native. The peephole's rules that took any HRS for the
-  program's end (a scratch cell or a constant read after it, a load before it) now take only `HRS 0`.
-
-## 2026-10-21 · auto-overlay: the compiler places the phases
-
-- **Decision.** A setting, off by default: `auto-overlay = true` under `[package.metadata.cardiac]` (a single
-  file: `--auto-overlay`). On, a program whose main doesn't fit in memory is cut into phases by the compiler, and
-  an `overlay()` in main is an error. Off, nothing changes: the program places its phases with `overlay()`.
-- **Where it cuts.** Main's optimized blocks, once the passes are done and before anything is decided block by block
-  (`phases::cut_points`): on a way from one block to the next, or between two statements of a block, where every run
-  passes once on its way to main's return and that is the only way into the rest, so a phase is never loaded twice.
-  A main that never returns gets no cut. Each place is compiled and measured; the split kept is the
-  smallest in all whose phases each fit with the shared data, a tie going to the smaller largest phase. When no one
-  cut is enough, the cut that leaves the largest phase smallest is kept and another is looked for, up to 4 phases.
-- **Why a setting, and why overlay() is an error with it on.** The programmer decides whether the compiler
-  tries at all, and falls back to `overlay()` with it off; with it on, `overlay()` has no place in the source. A
-  program that mixed the two would have its own cuts and the compiler's to reconcile.
-- **Phase order.** A phase now starts with the block it is entered at. The loader starts a phase at its first line,
-  and blocks came in rustc's numbering; the block a cut returns to can be numbered after others of its phase.
-- **Evidence.** A larger program's 11 machines with `overlay()`, the calls taken out and the setting on: eight split with
-  exactly the cells of the hand-placed cut (rotor's is mid-block), and solid, compose and floor no longer need a
-  second phase (96, 94 and 90 cells); renders identical to native. That program's whole build takes under a second.
-  `tests/programs/auto_overlay.rs` (2^60 in digits) runs past memory without the setting and matches native with
-  it.
-- **Fuzzing.** `CARDIAC_FORCE_CUT=K[,K...]` cuts every program at its Kth places, fit or not; with it, `sh fuzz.sh
-  --generate` checks split programs against native in every setting. It found three faults, fixed: cuts inside an
-  `if`'s arm (passed by some runs, not all), a cut through a block whose temporary was already a scratch cell, and
-  cuts in a main that always panics; and a phase that starts with a panic (below), on main too. Then 1,200 programs, 12 seeds, one to three cuts each,
-  about 29,000 runs: no difference.
-- **Cost.** A program too big compiles once per place it could be cut, and again per extra phase. Only cuts in
-  main, never in a function it calls or inside a loop.
-## 2026-10-21 · A phase that starts with a panic keeps its jump to it
-
-- **Decision.** The peephole's look back for "the line before", which takes over a dropped `JMP rt_panic`'s check
-  when the panic routine comes next, stops at a phase's start. A phase whose code starts with the panic keeps its
-  jump.
-- **Why.** The line before was the last of the phase before, a different tape: the check was filed under that
-  phase, and `rt_panic`'s label, which nothing named any more, went too, so the panic map had no stop for the phase.
-  `cargo cardiac run` punched -999 and exited 0, where Rust exits 101. Found by fuzzing auto-overlay with forced cuts.
-- **Cost.** One cell (the JMP), only in a phase that starts by panicking. `tests/programs/panic_phase.rs`.
-
-## 2026-10-21 · A negative word is skipped, and kept for new instructions
-
-- **Decision.** The emulator skips a cell holding a negative number when it is reached as an instruction: a no-op,
-  as Brian Stuart's simulator (https://www.cs.drexel.edu/~bls96/museum/cardiac.html) has it, where the 1969 manual
-  says nothing. Before, it ran the word's digits (-123 as `CLA 23`).
-- **Why.** It leaves the negative words free, an opcode space for new instructions later (-0xx to
-  -9xx), where running their digits would have given them a meaning already. The flipboard's two extensions live
-  there already, CUT n as -(600 + n) and LDC n as -(100 + n); the emulator, with no card rack, took them for STO
-  and CLA, and now passes over them. It also matches the simulator that
-  settles the manual's other open questions, and agrees with ours on all of them (a 4-digit accumulator, STO
-  keeping the low three digits, cell 00 fixed at 001, JMP writing 800 plus the next address into 99).
-- **Cost.** None to compiled programs, which never execute a negative word; only a program that runs into its own
-  data behaves differently.
-
-## 2026-10-21 · A later phase's opening constants, dead stores, and ways in that can't be taken
-
-Three small ones a larger program's rewrite in plain Rust found, each a few cells where the plain form cost more:
-- **A later phase's opening run**. Main's opening blocks, run once, store their constants as their cells'
-  initial values on the tape. So now does the run each `overlay()` returns to, for a local no earlier phase names:
-  its cell is punched by a tape before anything reads it. `overlay(); for _ in 0..96 {..}` starts its counter at -96
-  on the tape, not with a CLA and STO in phase 2 (phase 2: 10 cells to 7).
-- **Dead stores** (`blocks::dead_stores`). A value or a comparison stored where no way on reads it before it
-  is set again goes, by liveness: `if (0..36).contains(&c)` left `_2 = const false` on its false way, past the test
-  that read it (14 cells to 10, the hand-written `c >= 0 && c < 36`). Only plain locals whose address is never
-  taken; a return reads the result.
-- **Ways in that can't be taken**. The range pass joins what holds on each way into a block; a way on which
-  some range is empty (`233 <= x` on the way out of `x < 233`) is never taken, and is left out of the join. The
-  descending `match l { 233.. => 3, 124..233 => 2, 31..124 => 1, ..31 => 0 }` loses its redundant test: 30 cells,
-  as ascending, from 33.
-
-## 2026-10-21 · A constant past a card is a compile-time error, always
-
-- **Decision.** A constant no card holds, written or folded by rustc (`if x == 0 { 0 } else { 101 * 10 }`, where
-  rustc hands the compiler 1010), stays refused, whether or not a run would reach it, with a message that says so in
-  Rust's terms. The fuzzer counts such a program as one past a card, never as a finding.
-- **Why.** It is what Rust does with overflow it can see: `30000 * 2` in an i16 is an error (`arithmetic_overflow`,
-  deny by default) in debug and release builds, in a branch that never runs too, and `i16::MAX + 1` in a `const` is
-  E0080. A card is the CARDIAC i16. Panicking at run time instead would put off an error rustc's own rules make a
-  compile-time one.
-- **Cost.** It is as good as rustc's constant folding, which depends on the opt-level: the same expression may be
-  refused at one and panic as an overflow at run time at another. rustc's lint has the same limit.
-
-## 2026-10-21 · Range patterns and consecutive arms cost what an if chain does
-
-- **Decision.** Two changes to how a `match` is tested, both about comparison, what costs on CARDIAC. The range
-  pass now settles a test written `k <= x` (the constant first, as rustc writes a range pattern's start) as it did
-  `x >= k`, and the peephole drops a TAC straight after another TAC, which never jumps. And a switch whose
-  arms are consecutive values (`0 => .., 1 => .., 2 => ..`, an enum's variants) is one subtraction, x - v0 below 0
-  the other way, then `SUB 00; TAC arm` for each value in turn, where each arm was an equality, two tests.
-- **Why.** A larger program rewritten in plain Rust: `match y { ..6 => 0, 6..13 => 1, 13..19 => 2, _ => 3 }` was 34 cells
-  against 30 for the first-match form or the if chain; `match s { 0 => .., 1 => .., 2 => .., _ => .. }` was 39
-  against 30 for `..=0 / ..=1 / ..=2`.
-- **Cost.** The disjoint form is now 30 cells, the consecutive one 32: its first test (x below v0) stays when the
-  ranges show x can't be, as the lowering doesn't see them.
-- **Evidence.** `tests/programs/match_ranges.rs` and `switch_consecutive.rs` match native Rust.
-
-## 2026-10-21 · A counter that only counts counts to 0
-
-- **Decision.** After the range pass (`blocks::rebase_counters`), a local that is only set to constants,
-  stepped by a constant and compared with one constant m (`c < k` read as `c < m`, `c <= k` as `c < k + 1`) counts
-  from each constant minus m up to 0, and is compared with 0: `for _ in 0..96` is the `for _ in -96..0` a
-  CARDIAC programmer writes. A loop `for _ in a..n`, n known only at run time, counts n down instead and drops its
-  counter, the step first in the body where the test's subtraction is the new n: what `(a..n).rev()` compiles to.
-  That needs n to hold the bound whenever the counter starts and to stay put while it counts: from the counter's
-  block no way back to it but through a line that sets n, from such a line no way to the test but through that
-  block, and from that block on nothing reads n but the test. So n may be a parameter, set on one arm of an
-  `if`, set again before each run of an inner loop, or set before `overlay()`.
-- **Why.** Comparison is what costs on CARDIAC: its one test is "below 0", so `c < 96` is a subtraction, a TAC and
-  a cell for 96, where `c < 0` is the TAC alone. Every group of a larger program's machines, rewritten in plain Rust, found
-  `for _ in 0..N` 1 to 3 cells over the hand-written loop, and wrote `-N..0` with a comment to say why.
-- **Cost.** A counter whose value is read (`for x in 0..96` using x) is left as it is. So is one compared with two
-  bounds, or set from a variable.
-- **Evidence.** `for _ in 0..96 { out(k - inp()) }` is 14 cells, from 16, as `-96..0` is; `for _ in 0..n` is 11,
-  from 14, as `(0..n).rev()` is. `tests/programs/count_loops.rs` and `count_down.rs` match native Rust.
-
-## 2026-10-21 · Nested structs, and structs behind a `&mut`, are taken apart leaf by leaf
-
-- **Decision.** A struct's field may be a struct, an enum with data (which the enum pass has written as a struct),
-  or an array of scalars. The struct pass takes a struct apart into its leaves: its fields, with each field
-  that is a struct its own leaves in turn (`Line { a: Point, b: Point }` is `l_a_x`, `l_a_y`, `l_b_x`, `l_b_y`).
-  A place is one leaf's cell (`((_1.0: Point).1: i16)` is `l_a_y`) or, when it names a struct, a run of them,
-  which a copy, a call's argument or a result copies cell by cell. A `&mut` to a struct is a `&mut` of each leaf:
-  `(*r).x` is `*r_x`, `r = &mut p` is `r_x = &mut p_x; r_y = &mut p_y`, and passing r passes each.
-- **Why.** It keeps the one rule of the struct pass: every later pass sees plain cells. It is what the enum pass
-  already did for an enum within an enum, and it lets an enum carry a struct (`Option<Point>`) or sit in one
-  (`struct Card { kind: Option<i16> }`) without either pass knowing about the other. A variant carrying a tuple of
-  scalars (`Option<(i16, i16)>`) carries the struct such a tuple is written as, `tuple__i16_i16`.
-- **Cost.** A `&mut` is an address a cell: each read or write through it is self-modifying code. Passing the
-  values in and copying them back would be cheaper for a function that touches each field. An array within
-  a struct can't be behind a `&mut` or in an array of structs yet, nor an enum in a struct in an enum.
-- **Evidence.** `tests/programs/struct_nested.rs`, `struct_mut.rs`, `struct_array_field.rs`, `enum_field.rs`,
-  `enum_field_mut.rs`, `enum_mut.rs`, `enum_payload.rs`, `enum_payload_array.rs` and `enum_payload_mut.rs` match
-  native Rust; no other test program changed size.
 
 ## 2026-10-18 · `digit(v, k)` is built in, and compiles to a shift made on the spot
 
