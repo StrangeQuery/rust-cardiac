@@ -13,11 +13,13 @@
 use std::collections::HashMap;
 
 use super::front::local_types;
+use super::ir::visit_mut::{walk_const, walk_ty, VisitMut};
 use super::ir::{
-    occurrences, BinOp, Body, Const, File, IntTy, Item, Local, Operand, Place, Projection, Rvalue, Statement,
-    Terminator, Ty, Unwind,
+    occurrences, BinOp, Body, CastKind, Const, File, IntTy, Item, Local, Locals, Operand, Place, Projection, Rvalue,
+    Statement, Terminator, Ty, Unwind,
 };
 use super::methods::Gains;
+use super::runtime::NO_CARD;
 
 /// What a u16 or u32 local's cell holds (see the top of the file), as far as is known yet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +91,15 @@ fn read(o: &Operand) -> Option<Local> {
 
 fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
     let types = local_types(params, &body.decls);
+    let (cells, held) = wide_cells(body, params, &types);
+    if cells.is_empty() {
+        return;
+    }
+    rewrite(params, body, &cells, &types, &held);
+}
+
+/// The u16 and u32 locals that can be cells, and what each holds.
+fn wide_cells(body: &Body, params: &[(Local, Ty)], types: &HashMap<Local, Ty>) -> (Vec<Local>, HashMap<Local, Held>) {
     // not a parameter or the result, which a caller passes or reads as the type
     let wide: Vec<Local> = body
         .decls
@@ -97,7 +108,7 @@ fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
         .map(|d| d.local)
         .collect();
     if wide.is_empty() {
-        return;
+        return (vec![], HashMap::new());
     }
     let mut held: HashMap<Local, Held> = HashMap::new();
     // a sum in a loop could widen its bounds a step a round: after a few rounds, a value still growing is modular
@@ -153,10 +164,7 @@ fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
         .into_iter()
         .filter(|w| held.get(w).is_some_and(|h| *h != Held::Refused))
         .collect();
-    if cells.is_empty() {
-        return;
-    }
-    rewrite(params, body, &cells, &types, &held);
+    (cells, held)
 }
 
 /// What a definition `x = rv` of a u16 or u32 gives it; none while an operand isn't known yet.
@@ -381,6 +389,290 @@ fn check(params: &[(Local, Ty)], body: &mut Body, bi: usize, si: usize) {
     body.blocks.extend(gained);
 }
 
+/// The program's own u16 locals that `wide_locals` can't make cells, where they are compared, multiplied or
+/// divided, say: each is an i16 that holds its value, as an i16 does, and is never below 0, as a u16 isn't. So what
+/// a cast from a signed type or a usize sets it to is checked to be on a card, and so is what a difference does,
+/// in every profile: below 0, Rust's value is at least 65536 - 999. With overflow checks on, a difference below 0
+/// panics as Rust's does; without them it panics as an i16 past a card does. Sums, products and quotients of
+/// values not below 0 stay so, and compare and cast as Rust's do. Its uses: those, comparisons, `&`, `<<` and `>>`
+/// by a constant, a switch, the pair an overflow-checked op makes, and an assert's message. A group of locals
+/// that one names another in is made cells all together, or none of it is: where one has any other use, where one
+/// is a local of a function rustc inlined (core's may rely on a u16's wrapping), or where `wide_locals` can make
+/// every one a cell, which is exact where Rust's value is past a card and its own cast back is on one.
+pub fn u16_cells(file: &mut File) {
+    for item in &mut file.items {
+        if let Item::Fn(f) = item {
+            u16_cells_in(&f.params, &mut f.body);
+        }
+    }
+}
+
+const U16: Ty = Ty::Int(IntTy::U16);
+
+/// The u16 pair an overflow-checked op on two u16s makes.
+fn is_u16_pair(t: &Ty) -> bool {
+    matches!(t, Ty::Tuple(ts) if ts.as_slice() == [U16, Ty::Bool])
+}
+
+/// What setting a cell needs checked first: a cast's operand, or a difference's two sides, overflow-checked or not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Check {
+    Cast(IntTy),
+    Difference { checked: bool },
+}
+
+fn u16_cells_in(params: &[(Local, Ty)], body: &mut Body) {
+    let types = local_types(params, &body.decls);
+    let inlined: Vec<Local> = body.inlined.iter().map(|(l, _)| *l).collect();
+    let mut cells: Vec<Local> = body
+        .decls
+        .iter()
+        .filter(|d| (d.ty == U16 || is_u16_pair(&d.ty)) && d.local != Local(0) && !inlined.contains(&d.local))
+        .filter(|d| !params.iter().any(|(l, _)| *l == d.local))
+        .map(|d| d.local)
+        .collect();
+    // a cell only where every line that names it is one known here, with the cells as they are
+    loop {
+        let mut named: HashMap<Local, usize> = HashMap::new();
+        for b in &body.blocks {
+            let known = b
+                .statements
+                .iter()
+                .map(|s| known_statement(s, &cells, &types).is_some().then_some(s as &dyn Locals))
+                .chain([known_terminator(&b.terminator, &cells).then_some(&b.terminator as &dyn Locals)]);
+            for line in known.flatten() {
+                for &c in &cells {
+                    *named.entry(c).or_default() += line.count(c);
+                }
+            }
+        }
+        let before = cells.len();
+        cells.retain(|c| named.get(c).copied().unwrap_or(0) == occurrences(&body.blocks, *c));
+        if cells.len() == before {
+            break;
+        }
+    }
+    // the groups: each cell with those it is named with
+    let mut group: HashMap<Local, usize> = cells.iter().enumerate().map(|(i, &c)| (c, i)).collect();
+    loop {
+        let mut joined = false;
+        for line in body.blocks.iter().flat_map(|b| b.lines()) {
+            let named: Vec<usize> = cells.iter().filter(|&&c| line.mentions(c)).map(|c| group[c]).collect();
+            if let Some(&least) = named.iter().min() {
+                for c in &cells {
+                    if named.contains(&group[c]) && group[c] != least {
+                        group.insert(*c, least);
+                        joined = true;
+                    }
+                }
+            }
+        }
+        if !joined {
+            break;
+        }
+    }
+    let (wide, _) = wide_cells(body, params, &types);
+    let ours: Vec<usize> = cells.iter().filter(|c| !wide.contains(c)).map(|c| group[c]).collect();
+    cells.retain(|c| ours.contains(&group[c]));
+    if cells.is_empty() {
+        return;
+    }
+    let mut checks = vec![];
+    struct Narrow;
+    impl VisitMut for Narrow {
+        fn visit_ty(&mut self, t: &mut Ty) {
+            if *t == U16 {
+                *t = Ty::Int(IntTy::I16);
+            }
+            walk_ty(self, t)
+        }
+        fn visit_const(&mut self, c: &mut Const) {
+            if let Const::Int {
+                ty: ty @ IntTy::U16, ..
+            } = c
+            {
+                *ty = IntTy::I16;
+            }
+            walk_const(self, c)
+        }
+    }
+    let names_a_cell = |line: &dyn Locals| cells.iter().any(|&c| line.mentions(c));
+    for (bi, b) in body.blocks.iter_mut().enumerate() {
+        for (si, s) in b.statements.iter_mut().enumerate() {
+            if !names_a_cell(s) {
+                continue;
+            }
+            if let Some(Some(check)) = known_statement(s, &cells, &types) {
+                checks.push((bi, si, check));
+            }
+            Narrow.visit_statement(s);
+        }
+        if names_a_cell(&b.terminator) {
+            Narrow.visit_terminator(&mut b.terminator);
+        }
+    }
+    for d in body.decls.iter_mut().filter(|d| cells.contains(&d.local)) {
+        Narrow.visit_ty(&mut d.ty);
+    }
+    // last first, so that each split leaves the places of those before it as they were
+    for (bi, si, check) in checks.into_iter().rev() {
+        check_first(params, body, bi, si, check);
+    }
+}
+
+/// Whether a u16 operand is a cell or a constant a card holds, not below 0.
+fn u16_operand(o: &Operand, cells: &[Local]) -> bool {
+    match o {
+        Operand::Constant(Const::Int { value, ty: IntTy::U16 }) => (0..=999).contains(value),
+        _ => read(o).is_some_and(|l| cells.contains(&l)),
+    }
+}
+
+/// Whether a statement is one the cells may be named in, and if so what it needs checked first.
+fn known_statement(s: &Statement, cells: &[Local], types: &HashMap<Local, Ty>) -> Option<Option<Check>> {
+    let ok = |o: &Operand| u16_operand(o, cells);
+    let cell = |l: Option<Local>| l.is_some_and(|l| cells.contains(&l));
+    // `(_8.0: u16)` or `(_8.1: bool)` of a pair
+    let of_pair = |o: &Operand, k: u32| match o {
+        Operand::Copy(p) | Operand::Move(p) => {
+            cell(p.base_local()) && matches!(p.projection.as_slice(), [Projection::Field(j, _)] if *j == k)
+        }
+        _ => false,
+    };
+    let (dest, rv) = match s {
+        Statement::StorageLive(_) | Statement::StorageDead(_) => return Some(None),
+        Statement::Assign(d, rv) => (d, rv),
+        _ => return None,
+    };
+    let into = dest.as_local().filter(|l| cells.contains(l));
+    let into_ty = into.and_then(|l| types.get(&l));
+    let comparison = |op: &BinOp| {
+        matches!(
+            op,
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Cmp
+        )
+    };
+    match (into_ty, rv) {
+        (Some(t), Rvalue::Use(o)) if *t == U16 && (ok(o) || of_pair(o, 0)) => Some(None),
+        (Some(t), Rvalue::Cast(o, to, CastKind::IntToInt)) if *t == U16 && *to == U16 => {
+            let from = match o {
+                Operand::Constant(Const::Int { value, .. }) => return (0..=999).contains(value).then_some(None),
+                _ => types.get(&read(o)?)?,
+            };
+            match from {
+                Ty::Bool | Ty::Int(IntTy::U8) => Some(None),
+                _ if ok(o) => Some(None),
+                Ty::Int(t @ (IntTy::I8 | IntTy::I16 | IntTy::I32 | IntTy::Isize | IntTy::Usize)) => {
+                    Some(Some(Check::Cast(*t)))
+                }
+                _ => None,
+            }
+        }
+        (Some(t), Rvalue::BinaryOp(op, a, b)) if *t == U16 => match op {
+            BinOp::Add | BinOp::Mul | BinOp::Div | BinOp::Rem | BinOp::AddUnchecked | BinOp::MulUnchecked
+                if ok(a) && ok(b) =>
+            {
+                Some(None)
+            }
+            BinOp::Sub | BinOp::SubUnchecked if ok(a) && ok(b) => Some(Some(Check::Difference { checked: false })),
+            BinOp::BitAnd | BinOp::Shl | BinOp::Shr if ok(a) && matches!(b, Operand::Constant(_)) => Some(None),
+            _ => None,
+        },
+        (Some(t), Rvalue::BinaryOp(op, a, b)) if is_u16_pair(t) && ok(a) && ok(b) => match op {
+            BinOp::AddWithOverflow | BinOp::MulWithOverflow => Some(None),
+            BinOp::SubWithOverflow => Some(Some(Check::Difference { checked: true })),
+            _ => None,
+        },
+        (Some(_), _) => None,
+        // what reads a cell into something else
+        (None, Rvalue::Cast(o, Ty::Int(to), CastKind::IntToInt)) if ok(o) && *to != IntTy::U16 => Some(None),
+        (None, Rvalue::BinaryOp(op, a, b)) if comparison(op) && ok(a) && ok(b) => Some(None),
+        (None, Rvalue::Use(o)) if of_pair(o, 1) => Some(None),
+        _ => None,
+    }
+}
+
+/// Whether a terminator is one the cells may be named in: an assert of a pair's flag (its message may name cells),
+/// or a switch on a cell whose arms are on a card.
+fn known_terminator(t: &Terminator, cells: &[Local]) -> bool {
+    let ok = |o: &Operand| u16_operand(o, cells) || !cells.iter().any(|&c| o.mentions(c));
+    match t {
+        Terminator::Assert { cond, msg_args, .. } => {
+            let flag = match cond {
+                Operand::Copy(p) | Operand::Move(p) => {
+                    !p.base_local().is_some_and(|l| cells.contains(&l))
+                        || matches!(p.projection.as_slice(), [Projection::Field(1, _)])
+                }
+                _ => true,
+            };
+            flag && msg_args.iter().all(ok)
+        }
+        Terminator::SwitchInt { discr, arms, .. } => {
+            u16_operand(discr, cells) && arms.iter().all(|(v, _)| (0..=999).contains(v))
+        }
+        _ => false,
+    }
+}
+
+/// The check `check` before statement `si` of block `bi`: the block ends there in an assert, and the statement and
+/// the rest of the block go on in a block of their own.
+fn check_first(params: &[(Local, Ty)], body: &mut Body, bi: usize, si: usize, check: Check) {
+    let Statement::Assign(_, rv) = &body.blocks[bi].statements[si] else {
+        unreachable!("a cell set")
+    };
+    let copy = |o: &Operand| match o {
+        Operand::Move(p) => Operand::Copy(p.clone()),
+        o => o.clone(),
+    };
+    let (test, msg, msg_args) = match (check, rv) {
+        // a usize past a card is held below 0, above every usize a card holds
+        (Check::Cast(IntTy::Usize), Rvalue::Cast(o, ..)) => (
+            Rvalue::BinaryOp(
+                BinOp::Le,
+                copy(o),
+                Operand::Constant(Const::Int {
+                    value: 999,
+                    ty: IntTy::Usize,
+                }),
+            ),
+            NO_CARD.to_string(),
+            vec![],
+        ),
+        (Check::Cast(ty), Rvalue::Cast(o, ..)) => (
+            Rvalue::BinaryOp(BinOp::Ge, copy(o), Operand::Constant(Const::Int { value: 0, ty })),
+            NO_CARD.to_string(),
+            vec![],
+        ),
+        (Check::Difference { checked }, Rvalue::BinaryOp(_, a, b)) => (
+            Rvalue::BinaryOp(BinOp::Ge, copy(a), copy(b)),
+            if checked {
+                "attempt to compute `{} - {}`, which would overflow".to_string()
+            } else {
+                NO_CARD.to_string()
+            },
+            if checked { vec![copy(a), copy(b)] } else { vec![] },
+        ),
+        _ => unreachable!("a check of what was found"),
+    };
+    let mut gains = Gains::new(params, &body.blocks, &mut body.decls);
+    let flag = gains.local(Ty::Bool);
+    let block = &mut body.blocks[bi];
+    let rest = block.statements.split_off(si);
+    block.statements.push(Statement::Assign(Place::local(flag), test));
+    let end = std::mem::replace(&mut block.terminator, Terminator::Unreachable);
+    let rest = gains.block(rest, end);
+    let gained = std::mem::take(&mut gains.blocks);
+    body.blocks[bi].terminator = Terminator::Assert {
+        cond: Operand::Move(Place::local(flag)),
+        expected: true,
+        msg,
+        msg_args,
+        target: rest,
+        unwind: Unwind::Continue,
+    };
+    body.blocks.extend(gained);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,5 +716,38 @@ mod tests {
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         // nothing to check: at most 510
         assert!(matches!(b.blocks[0].terminator, Terminator::Return));
+    }
+
+    #[test]
+    fn a_compared_cast_of_an_i16_is_checked_to_be_on_a_card() {
+        let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _7 = Lt(copy _3, copy _4);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
+        u16_cells_in(&[], &mut b);
+        assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
+        // each cast, and the difference, after a test that ends its block
+        let mut tests: Vec<String> = b
+            .blocks
+            .iter()
+            .filter_map(|b| match &b.terminator {
+                Terminator::Assert { .. } => b.statements.last().map(|s| s.to_string()),
+                _ => None,
+            })
+            .collect();
+        tests.sort();
+        assert_eq!(
+            tests,
+            [
+                "_10 = Ge(copy _2, const 0_i16);",
+                "_8 = Ge(copy _3, copy _4);",
+                "_9 = Ge(copy _1, const 0_i16);"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_group_the_modular_cells_take_whole_is_theirs() {
+        let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
+        u16_cells_in(&[], &mut b);
+        assert_eq!(ty(&b, 3), Ty::Int(IntTy::U16));
+        assert_eq!(b.blocks.len(), 1);
     }
 }

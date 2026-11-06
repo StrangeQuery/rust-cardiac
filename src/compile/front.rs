@@ -71,7 +71,9 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     let widened = widened_in_core(&file);
-    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
+    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type; first those
+    // `wide_locals` can't make cells, as all a u16's values are
+    super::wide::u16_cells(&mut file);
     super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
     file.visit(&mut PastACardDivisor);
