@@ -21,13 +21,19 @@ use cargo_cardiac::compile::ir::IntTy;
 use cargo_cardiac::compile::methods;
 
 /// Integer methods whose inlined body (at opt-level 2) the compiler can't compile right: kept calls, so that at
-/// opt-level 1 and s they stay refused as they are at 2. `midpoint` adds in an `i32` past a card, and
-/// `saturating_mul` picks between `i16::MIN` and `i16::MAX` as values.
-const WRONG_INLINED: [(&str, IntTy); 2] = [("midpoint", IntTy::I16), ("saturating_mul", IntTy::I16)];
+/// opt-level 1 and s they stay refused as they are at 2. `midpoint` adds in an `i32` past a card.
+const WRONG_INLINED: [(&str, IntTy); 1] = [("midpoint", IntTy::I16)];
 
 /// Integer methods the compiler writes itself (`methods::written_here`) whose inlined body works on numbers no
-/// card holds: kept calls at opt-level 2 and 3 too. `ilog10` is bit operations on u32 constants (`393206`).
-const WRITTEN_AT_EVERY_LEVEL: [(&str, IntTy); 1] = [("ilog10", IntTy::I16)];
+/// card holds: kept calls at opt-level 2 and 3 too. `ilog10` is bit operations on u32 constants (`393206`);
+/// `isqrt` calls core's root of a u16; an i16's `saturating_mul` picks between `i16::MIN` and `i16::MAX` as values,
+/// and a u8's multiplies two u8s with the overflow flag, which no card holds the product of.
+const WRITTEN_AT_EVERY_LEVEL: [(&str, IntTy); 4] = [
+    ("ilog10", IntTy::I16),
+    ("isqrt", IntTy::I16),
+    ("saturating_mul", IntTy::I16),
+    ("saturating_mul", IntTy::U8),
+];
 
 /// Whether the inliner should run where rustc wouldn't run it: opt-level 1, s or z, unless `-Zinline-mir` says.
 /// (At 0 the MIR is unoptimized and the compiler's passes are off; from 2 rustc runs it already.)

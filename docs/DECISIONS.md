@@ -4,6 +4,252 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · A closure that captures is a struct of its captures; a call of it through `Fn` is a call of its function
+
+- **Decision.** The front end makes each closure that captures a struct (`closures::closures_as_structs`), named
+  after its function (`main_closure0_env`), built where rustc builds the closure (`{closure@..} { k: copy _5 }`,
+  which the IR now reads as `Rvalue::Closure`) and taken apart by the struct pass as any struct. A call of a closure
+  through its trait, `<{closure@..} as Fn<(i16,)>>::call(move _3, move _4)` (or `FnMut`'s `call_mut`), is a call of
+  its function with the struct and the arguments rustc tupled, one by one: a constant tuple's values, or the
+  operands of the tuple the block built just for the call. With that, a closure passed to one of the program's
+  generic functions is the generic function's instance for that closure's type (the entry on instances), a closure
+  returned as `impl Fn` is the struct returned, and one kept in a generic struct is a field of that struct's
+  instance. The IR also reads what these need and the parser didn't: a tuple of one (`(copy _2,)`, and the constant
+  `(10_i16,)`) and a copy without a retag (`no_retag copy ((*_1).0: &i16)`, which is the copy).
+- **Why.** Each closure is a type of its own, so rustc writes the code that takes one generically, through `Fn`,
+  and the instance machinery already makes a function of each instance; what was missing was the closure as a value
+  (its captures) and the call it makes through `Fn` (its function). A capture by reference is a reference field, an
+  address, as a slice iterator's pointers are; by value, the value.
+- **Refused, where the function that does it is compiled.** A closure called through `FnOnce::call_once`, or whose
+  function takes it by value; one that captures a field of a struct (`p.a`, which rustc captures as a place the
+  struct pass doesn't take apart); a closure defined in a module's function or a generic one; a tuple of one left
+  over; core's generic functions given a closure (`array::from_fn`, whose MIR is core's: the linker refuses it).
+- **Cost.** None to programs without such closures: the compiler's tests and the examples are unchanged.
+- **Evidence.** Support matrix: closure_passed, closure_returned, closure_stored and closure_generic_arg match at
+  every setting; and three rows the copy without a retag was all they lacked (array_get, option_as_ref,
+  option_copied). Probes matching native Rust at the four settings: an `FnMut` that adds to a captured variable,
+  called twice, and one called through `&mut F`; a `move` closure whose variable changes after it is made; a
+  closure capturing an array and indexing it; a closure passed down from one generic function to another by
+  reference; a closure made anew in each pass of a loop around a changing variable.
+
+## 2026-11-06 · A `&dyn Trait` is an enum of the types the program makes one of; a method call through it a `match`
+
+- **Decision.** The front end makes each trait object an enum (`indirect::trait_objects`): for a trait the program
+  makes `&dyn Trait`s of, `dyn_Shape`, with a variant for each of the program's structs a reference to which is
+  coerced to one (`copy _11 as &dyn Shape (PointerCoercion(Unsize, Implicit))`), holding the struct's value. The
+  coercion builds the variant (`dyn_Shape::Sq(copy (*_11))`), a reborrow (`&(*_1)`) is a copy, and a call of a
+  method through the object, `<dyn Shape as Shape>::area(move _1)`, is what rustc writes for a `match`: its
+  discriminant, a `switchInt` (the last type the otherwise), and in each arm the type's own method called on a
+  reference to its variant's value (`<Sq as Shape>::area`). The enums go to the enum pass with the driver's, so an
+  object is passed, copied and returned as any enum is. The driver names each type's methods of the trait as a call
+  names them, as it does the functions a pointer is made to.
+- **Why.** As with function pointers, every type an object can be is named where rustc's MIR makes it, so a call
+  through its table of functions is a choice among calls known at compile time. A shared reference can't see its
+  value change while it lives, so the object can hold the value, as a shared reference to a struct already is the
+  struct (`structs::shared_refs_by_value`); and with the object an enum, everything the enum pass does for enums
+  (tag cells, sign tags, values passed and returned) is done for objects too.
+- **Refused, where the function that does it is compiled.** An object of anything but one of the program's structs
+  of a plain name (a primitive's impl, a generic struct's, a closure: `&dyn Fn`); a trait with generic arguments;
+  `&mut dyn Trait`; a method the impl doesn't define (the trait's default, which would be an instance of a generic
+  function), or one of a trait the object's trait extends; two of the object's types of the same name; anything
+  else done through an object (a read through its pointer, a cast). Their error says what works.
+- **Cost.** A variant's value is its struct's cells, which the variants don't share (the enum pass shares a cell
+  only between fields of one type): an object of `Sq(i16)` or `Rect(i16, i16)` is a tag and three cells, and
+  passing one passes all four. dyn_choose, whose two `area`s multiply, is 98 cells, two over.
+- **Evidence.** Support matrix: method_dyn, trait_dyn_dispatch, trait_dyn_single and dyn_one match at every
+  setting; dyn_choose is too big; closure_passed_dyn stays refused (a capturing closure behind `&dyn Fn`). Probes:
+  an object returned from a function, objects of two traits with a method of one name, and an object passed down
+  two functions match native Rust at the four settings; a default method, a supertrait's method, an `impl Trait for
+  i16` and an impl for a generic struct are refused.
+
+## 2026-11-06 · A function pointer is a number; a call through one is a switch to a call of each function it can be
+
+- **Decision.** The front end makes every function pointer a number (`indirect::function_pointers`): the
+  function's place among those the program makes pointers of that type to, in the order it first makes them, held
+  as a `u8`. `double as fn(i16) -> i16 (PointerCoercion(ReifyFnPointer(Safe), ..))` is `const 0_u8`; a closure that
+  captures nothing, coerced (`ClosureFnPointer`), is its function's number; and a call through a pointer, `_7 =
+  copy _8(move _10)`, is a `switchInt` on the number to a call of each function of that type, the last the
+  otherwise, or the call itself when there is one. A pointer, or an array of them, may be made, copied, filled,
+  indexed, borrowed, passed and returned. The IR has what it takes: a function pointer's type (`Ty::FnPtr`, `fn(i16)
+  -> i16`, a `for<'a>` binder's lifetimes left out), a function as a value (`Operand::Fn`), the two coercions as
+  cast kinds, a closure's zero-sized value with its type (`Const::ZeroSized`), and the call through a pointer
+  (`Terminator::CallIndirect`), which no pass after the front end meets. The driver reads them all, and names an
+  impl's function a pointer is made to as a call names it; the linker renames a pointer's function as it renames a
+  call's.
+- **Why.** Every function a pointer can point to is named where rustc's MIR makes the pointer, so the set is fixed
+  at compile time. CARDIAC's indirect jump is one the program builds itself (as an indexed read is), but a jump to
+  the address in a cell isn't a call: each function has cells of its own for its parameters and its result, so the
+  caller has to know which function it calls to pass it anything. A switch to direct calls keeps every pass after
+  it (parameters passed on, cells shared by liveness, recursion found through the calls) as it is for any call.
+- **Considered.** The pointer as the function's address and a call as a built `JMP` to it: every function a pointer
+  can be would have to share its parameters' and its result's cells, which the cell allocator has no way to say.
+  A jump table for the switch (a computed jump into a row of calls): for two or three functions the test chain
+  is smaller (two cells a function), and a switch with many dense arms could get one for every `match`, not only
+  here.
+- **Refused, where the function that does it is compiled.** Anything else done with a pointer: compared (Rust says
+  the result isn't meaningful), cast to an address, kept in a struct, a tuple, an enum (`Option<fn(..)>`), a
+  `const` or a `static` (their bytes hold addresses), given to a generic function (`F: Fn` with a pointer); a
+  pointer to an `unsafe` or `extern` function, or to a closure that reads itself; a call through a pointer of a
+  type the program makes no pointer of. Recursion through pointers is refused as any recursion is.
+- **Cost.** None to programs without pointers: the compiler's tests, the examples and the support matrix are
+  unchanged but for the rows that now compile (fnptr_array is 56 cells; a call through a pointer of two functions
+  is the test and each call's own arguments).
+- **Evidence.** Support matrix: 7 rows better (call_fn_pointer, call_fn_pointer_param, closure_no_capture_fn_ptr,
+  fn_pointer, fnptr_array, fnptr_choose, fnptr_param, at every setting), 0 worse. Probes, each matching native Rust
+  at the four settings: a pointer returned from a function, a pointer reassigned in a loop, `[f; 3]` then
+  elements set, a pointer through `&fn(..)` and an array through `&[fn(..); 2]`, `fn(&mut i16)`, `P::get as fn(&P)
+  -> i16`, pointers of two types in one loop, a pointer to another crate's function and one passed into it.
+
+## 2026-11-06 · An i16's saturating `+`, `-` and `*` are the operation on a card, and panic past one
+
+- **Decision.** `saturating_add`, `saturating_sub` and `saturating_mul` on an i16 (the method, or the intrinsic
+  rustc calls at both opt-levels for the first two) are the overflow-checked operation, whose flag on CARDIAC
+  says the value is past a card, and a panic there in every profile: `the value doesn't fit on a card`.
+  `saturating_mul` stays a call at opt-level 2 (`WRITTEN_AT_EVERY_LEVEL`), where rustc inlines a choice between
+  `i16::MIN` and `i16::MAX` as values.
+- **Why.** Rust saturates at 32767 and -32768, which no card holds. Of two values on a card, a sum or a difference
+  is at most 1998 from 0, so Rust's is never saturated, and wherever it is on a card CARDIAC's is the same number;
+  a product Rust saturates (999 * 999) is past a card too. So the answer is Rust's wherever a card holds it, and a
+  panic, never another number, where it doesn't: as for `abs_diff`, `!` and `<<`, whose values past a card panic
+  where Rust's never do.
+- **Considered.** Saturating at the card's own limits, 999 and -999: a wrong answer, as Rust's 600 + 600 is
+  1200. Refusing them, as nothing past a card can match: the rows are on a card, and the past-a-card rule is
+  the one every i16 operation follows.
+- **Cost.** A panic where Rust gives a number past a card (1200, or 32767 for 999 * 999), which Rust never does.
+  The three matrix rows match at every setting (30, 30 and 52 cells).
+
+## 2026-11-06 · `isqrt`, `pow` by a variable, `checked_pow` and a u8's `saturating_mul`, written here
+
+- **Decision.** `methods` writes these where rustc calls them, and the driver keeps `isqrt` and a u8's
+  `saturating_mul` calls at opt-level 2 too (`WRITTEN_AT_EVERY_LEVEL`): what rustc inlines is core's root of a
+  u16, and a u8 product with its overflow flag. `i16::isqrt` panics below 0, as Rust's does, and is then the odd
+  numbers 1, 3, 5, .. taken away while they last (their sums are the squares): at most 31 rounds, all on a card,
+  no multiply. `i16::pow` by a variable is that many checked multiplications, counted down; its u32 exponent is a
+  `wide` cell, which may hold a number equal to it modulo 2^32, and one below 0 (`n as u32` of an n below 0) is
+  an exponent past a card, which panics. `i16::checked_pow` by a constant up to 10 (`enum_methods::checked_pows`)
+  is `None` where Rust's is, where the power is past an i16, which the base's bounds say without the power (above
+  31 or below -32 for a cube), and else `Some` of the power, its multiplications checked against the card in
+  every profile. A u8's `saturating_mul` is a sum of b a's that stops past 255, so nothing past 510 is ever held.
+- **Why.** Each is exact wherever Rust's answer is on a card. `checked_pow` gives Rust's `None` where it is
+  `None`, which a check of the card alone would not: `10.checked_pow(3)` is `Some(1000)` in Rust, a value no card
+  holds, so it panics rather than say `None`. A u8's product reaches 65025, which no card holds and the multiply
+  routine refuses, so `saturating_mul` doesn't multiply.
+- **Cost.** A panic where Rust's value is past a card (`10.pow(3)`, and `2.pow(16)` without overflow checks,
+  which Rust wraps to 0), and for `pow` with an exponent past a card even where Rust's answer is on one
+  (`1.pow(-3i16 as u32)`). `checked_pow` by a variable stays refused, and by 7 or more doesn't fit in the cells.
+  `saturating_mul` of a u8 takes up to 255 rounds. The four matrix rows match at every setting (isqrt 35 cells,
+  pow by a variable 78, checked_pow 79, saturating_mul 69); nothing else changed.
+
+## 2026-11-06 · An isize is an i16
+
+- **Decision.** After the C-like enum pass, every isize (a type, a constant, a path's `isize`) is an i16, as an
+  i32 is (`front::IsizeIsI16`). The enum pass already made a discriminant's isize one, but only in a program with
+  a C-like enum.
+- **Why.** On a card an isize and an i16 hold the same values and their arithmetic, comparisons and casts agree:
+  `-1isize as usize` is usize::MAX, held below 0 as `-1i16 as usize` is, and back. Its methods are an i16's there
+  too, and `isize::MAX`, which no card holds, is refused or settled as `i16::MAX` is.
+- **Cost.** Past a card it panics or keeps three digits as an i16 does, where Rust's isize goes on to 2^63. The
+  matrix's int_isize matches at every setting; nothing else changed.
+
+## 2026-11-06 · A u16 that is compared is a cell that holds its value, never below 0
+
+- **Decision.** `wide::u16_cells`, before `wide_locals`: the program's own u16 locals (not a parameter or the
+  result, and not a local of a function rustc inlined) are i16 cells that hold the u16's value, where every line
+  that names one is a cast to or from it, a copy, `+`, `-`, `*`, `/`, `%` (overflow-checked or not), a comparison,
+  `&`, `<<` or `>>` by a constant, a switch whose arms are on a card, or an assert's message. The value is never
+  below 0: a cast from an i8, an i16, an i32 or an isize is checked to be 0 or more and a cast from a usize to be
+  at most 999 (a usize past a card is held below 0), and a difference is checked not to go below 0, in every
+  profile. With overflow checks on that check is Rust's own (`attempt to subtract with overflow`); without them
+  Rust's value is at least 65536 - 999, and it panics as a value past a card does (`the value doesn't fit on a
+  card`). A group of locals that are named together is made cells whole or not at all, and is left to
+  `wide_locals` where that makes every one of them a cell.
+- **Why.** `wide_locals` keeps a u16 cast from an i16 as a number equal to it modulo 2^16, which is exact for what
+  core's `abs_diff` does with one, and compares with a constant as a usize; but two such cells can't be compared
+  with each other (-3 held for 65533 and 5), nor divided. A u16 that is has to hold its value, and a u16's value
+  is never below 0.
+- **Cost.** Where Rust's u16 is past a card, CARDIAC panics or (a sum or product without overflow checks) keeps
+  three digits, as for an i16: `(a - b) as i16` of 300 and 400 is -100 in Rust without overflow checks, and a
+  panic here, where the modular cells would have been exact had nothing compared them. The matrix's int_u16
+  matches at every setting; nothing else changed.
+
+## 2026-11-06 · A formatted panic message keeps its literal text, without the values
+
+- **Decision.** `panic!("negative card: {}", a)`, and `assert!`, `unreachable!` and `assert_eq!` with a message
+  that has arguments, become the call a bare `assert!` makes, as a literal message does, and the map gives the
+  message's literal text with the values left out (`negative card: `). At opt-level 1 and 2 rustc builds the
+  message in the panic's block: its template a byte string, which `panic_messages::template_text` reads in core's
+  encoding (pieces, each its length and its bytes; placeholders, each a byte with the top two bits set and the
+  fields its low bits say; a 0 byte at the end), and its arguments an array of `fmt::rt::Argument`s. It is
+  refused unless the template reads to its end exactly, every placeholder names an argument there, no width or
+  precision comes from an argument, every argument points to an integer, a bool, a char or a str (or a reference
+  to one), and some text is left that isn't space (`panic!("{}", a)` has none).
+- **Why.** Three rows of the support matrix were refused only for the message. The values can't be in the map,
+  which is written before the program runs (as for `assert_eq!`'s), but the text says which panic it was.
+- **Considered.** A value of the program's own type is formatted by its own `Display` or `Debug`, which could
+  do what the program can see (call `out()`), and is dropped with the message: refused. A message built by calls
+  (`Arguments::new` and `Argument::new_display` left as calls, at opt-level 0) is refused as before.
+- **Cost.** None: the panic's block keeps no statements, as for a literal message. The three rows match at every
+  setting; no test program or example changed.
+
+## 2026-11-06 · The bit methods are the intrinsics rustc leaves, written as walks over the bits
+
+- **Decision.** `count_ones`, `leading_zeros`, `trailing_zeros`, which rustc leaves as calls of the intrinsics
+  `ctpop`, `ctlz` (`ctlz_nonzero`) and `cttz` on a u8, a u16 (an i16's) or a usize, and `rotate_left` and
+  `rotate_right` of a u8 by a constant, are code of the caller's own (`bits`): the low ten bits of the cell walked
+  from the top as `runtime::bitwise` walks them, until all that is left is 0. A cell below 0 stands for a value
+  whose high bits are 1, a u16's (`wide`) or a usize's past a card: its ones are the bits less those of -1 - c, its
+  leading zeros none, its trailing zeros those of -c. The u32 they return is a cell, as `wide` makes one of a count
+  known to be on a card. A u8's rotation by one is 2v, less 255 past 255, done k times. `T::MAX >> n` by a variable,
+  which `next_power_of_two` makes, is 0 doubled and 1 added (bits - n) times, checked for a usize, whose
+  `usize::MAX >> 0` is usize::MAX. `is_power_of_two` is rustc's own code, `count_ones() == 1`. `wide` lets a shift by
+  a u32 and a bit intrinsic read a value held modulo its size, which has the bits they read.
+- **Why.** The counts are small and on a card; only the bits behind them aren't decimal, and the walk needs no
+  more than adds.
+- **Cost.** About 20 to 40 cells a call (the walk is written where it is called), and up to ten passes. Left refused: a
+  usize's `leading_zeros` (rustc casts it to u64), rotations of an i16, by a variable, and `swap_bytes`, which on an
+  i16 is past a card for most values (256 becomes 1, but 100 becomes 25600).
+- **Evidence.** Every value on a card for the i16 methods, every u8 for the u8 ones (rotations by 0, 1, 3, 5, 7
+  and 9), every value on a card cast to a usize, those below 0 too, against native Rust at all four settings. The
+  support matrix's rows for them match at every setting but `swap_bytes_i16`.
+
+## 2026-11-06 · Without overflow checks, the checks of core's inlined code are not made
+
+- **Decision.** In a build without overflow checks, the driver makes an `assert` of an overflow of `+`, `-`, `*`, a
+  negation or a shift go straight on to its target (`front::drop_inherited_overflow_checks`), and the checked
+  operation it read the flag of, where nothing else reads it, is the plain one. rustc writes no such check in such a
+  build, but keeps those of core's code it inlines that inherits the caller's overflow checks
+  (`#[rustc_inherit_overflow_checks]`), and codegen leaves them out (`is_optional_overflow_check`). A divide's
+  checks stay.
+- **Why.** `u8::next_power_of_two(200)` is 0 natively without overflow checks, and panicked on CARDIAC at its
+  `+ 1`.
+- **Cost.** None found; an i16 past a card keeps three digits there, as `a + b` does in the program's own code
+  without overflow checks.
+
+## 2026-11-06 · `&`, `|` and `^` between integers, and shifts by a variable, are routines
+
+- **Decision.** `a & b`, `a | b` and `a ^ b` of two integers (i16, i8, u8, a usize on a card), but for `x & m` by a
+  mask one below a power of two, call a routine of the runtime's, one for each operator (`runtime::bitwise`). It
+  reads a card as Rust's i16 is, 11 bits of two's complement, from the sign down: each operand is held as the bits
+  not yet read, the low ten less 512, so that the next bit is whether that is 0 or more, and reading it is a
+  doubling. The result is built as the bits come, 0 or -1 for the signs, then 2r and the bit, ten times. Two u8s
+  have a routine of their own: eight bits, no sign. `a >> n` by a variable (i16, i8, u8, usize on a card) and `a << n`
+  (i16, u8) call `rt_shr`, `rt_shl` and `rt_shl8`, with n taken modulo the type's bits first, as Rust's MIR does once
+  the overflow check has passed: n halvings, rounding down; for an i16's `<<`, a's low 16 - n bits as a number of
+  that many bits, doubled n times (513 << 7 is 128, as in Rust); for a u8's, n doublings modulo 256. rustc's check
+  of a shift by an i16, `b as u16 < 16`, compiles: a u16 held modulo 2^16 compares with a constant on a card as the
+  cell cast to a usize does (`wide::unsigned_compare`).
+- **Why.** A cell holds a decimal number, not bits, so each operator is a loop over the bits; a loop of halvings
+  would need the divide routine, and the doubling walk needs no more than adds.
+- **Cost.** The routines are big: 66 instructions for `&` (67 for `^`), 49 for two u8s, 26 for `>>`, 46 for an
+  i16's `<<`, and a few cells of data each; a program using one has about 25 cells of its own left. Slow: 10 passes
+  of about 20 instructions for `&`. Where Rust's answer is past a card (`-513 & -512` is -1024, `512 | 511` is 1023,
+  `300 << 2` is 1200), the program panics, overflow checks on or off, as `!` and `<<` by a constant do. Left
+  refused: `<<` of an i8 or a usize.
+- **Evidence.** Every pair of values on a card, for each operator, against Rust's answer (3.8 million each, at
+  opt-level 2 without overflow checks), and every pair of u8s, at all four settings; shifts: every a on a card by n
+  from -40 to 39 and more, at all four settings. The support matrix's `and_var`, `or_var` and `xor_var` match at
+  every setting (95, 95 and 96 cells); `shift_var`, both shifts in one program, is too big.
+
 ## 2026-11-06 · cargo-cardiac says when a newer version is out
 
 - **Decision.** After `build`, `run` and `view`, cargo-cardiac says in one line when crates.io has a newer version

@@ -21,8 +21,8 @@
 use std::collections::HashMap;
 
 use super::ir::{
-    BasicBlock, BinOp, Block, BorrowKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection,
-    Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
+    BasicBlock, BinOp, Block, BorrowKind, CastKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place,
+    Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
 };
 use super::structs::Function;
 
@@ -48,18 +48,22 @@ enum Method {
     AbsDiff,
     SaturatingSub,
     SaturatingAdd,
+    SaturatingMul,
     Midpoint,
     Ilog10,
     WrappingDiv,
     OverflowingDiv,
     Pow,
+    Isqrt,
 }
 
 /// The types it compiles them for: the card's own number for the signed methods, and every integer type for the
 /// ones that only compare (`min`, `max`, `clamp`) or can't leave the type's range (`abs_diff`, `saturating_sub` of
 /// an unsigned type). A u8's `saturating_add` and `midpoint` work in an i16, whose cell holds the sum of two u8s.
 /// The rest, on u8 or usize, wrap or saturate where a card does not (at 256, at 2^64). On an i16, `abs_diff` and
-/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`).
+/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`). An i16's
+/// saturating methods saturate at 32767 and -32768, which no card holds: on a card each is the plain operation,
+/// and past one it panics, as `abs_diff` does. A u8's `saturating_mul` is a sum of b a's that stops at 255.
 fn method(name: &str, ty: IntTy) -> Option<Method> {
     use Method::*;
     let signed = ty == IntTy::I16;
@@ -79,13 +83,15 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
         "max" if signed || unsigned => Max,
         "clamp" if signed || unsigned => Clamp,
         "abs_diff" if signed || unsigned => AbsDiff,
-        "saturating_sub" if unsigned => SaturatingSub,
-        "saturating_add" if ty == IntTy::U8 => SaturatingAdd,
+        "saturating_sub" if signed || unsigned => SaturatingSub,
+        "saturating_add" if signed || ty == IntTy::U8 => SaturatingAdd,
+        "saturating_mul" if signed || ty == IntTy::U8 => SaturatingMul,
         "midpoint" if ty == IntTy::U8 => Midpoint,
         "ilog10" if signed => Ilog10,
         "wrapping_div" if signed => WrappingDiv,
         "overflowing_div" if signed => OverflowingDiv,
         "pow" if signed => Pow,
+        "isqrt" if signed => Isqrt,
         _ => return None,
     })
 }
@@ -155,6 +161,12 @@ pub fn exact_result(func: &Path) -> Option<[i128; 2]> {
         (Method::Ilog10, IntTy::I16) => Some([0, 2]),
         _ => None,
     }
+}
+
+/// Whether a call is an i16's `pow`, whose u32 exponent may be a cell that holds a number equal to it modulo 2^32
+/// (`wide`): its code here takes one below 0 as the exponent past a card that it is.
+pub fn takes_exponent(func: &Path) -> bool {
+    called(func) == Some((Method::Pow, IntTy::I16))
 }
 
 /// `(a..b).contains(&x)` or `(a..=b).contains(&x)`, as rustc calls it at opt-level 1 and s:
@@ -231,14 +243,24 @@ impl<'a> Gains<'a> {
     }
 
     pub(super) fn block(&mut self, statements: Vec<Statement>, terminator: Terminator) -> BasicBlock {
+        let name = self.next_block();
+        self.block_named(name, statements, terminator);
+        name
+    }
+
+    /// A block's name, for a block made later: a loop's head, which the blocks in the loop go back to.
+    fn next_block(&mut self) -> BasicBlock {
         let name = BasicBlock(self.next_block);
         self.next_block += 1;
+        name
+    }
+
+    fn block_named(&mut self, name: BasicBlock, statements: Vec<Statement>, terminator: Terminator) {
         self.blocks.push(Block {
             name,
             statements,
             terminator,
         });
-        name
     }
 
     /// `t = Op(a, b)` and a switch on it: the statement for the block that ends in the switch.
@@ -271,6 +293,37 @@ impl<'a> Gains<'a> {
         dest: &Place,
         back: BasicBlock,
     ) -> (Statement, Terminator) {
+        let msg = match op {
+            BinOp::SubWithOverflow => "attempt to compute `{} - {}`, which would overflow",
+            _ => "attempt to compute `{} * {}`, which would overflow",
+        };
+        self.flagged(op, a, b, dest, back, msg.into(), vec![a.clone(), b.clone()])
+    }
+
+    /// The same, where Rust's own operation doesn't overflow there (a power `checked_pow` gives as a `Some`, a
+    /// saturating sum) and the flag says that the value is past a card: the panic says so.
+    pub(super) fn on_a_card(
+        &mut self,
+        op: BinOp,
+        a: &Operand,
+        b: &Operand,
+        dest: &Place,
+        back: BasicBlock,
+    ) -> (Statement, Terminator) {
+        self.flagged(op, a, b, dest, back, super::runtime::NO_CARD.into(), vec![])
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn flagged(
+        &mut self,
+        op: BinOp,
+        a: &Operand,
+        b: &Operand,
+        dest: &Place,
+        back: BasicBlock,
+        msg: String,
+        msg_args: Vec<Operand>,
+    ) -> (Statement, Terminator) {
         let pair = self.local(Ty::Tuple(vec![Ty::Int(IntTy::I16), Ty::Bool]));
         let field = |k: u32, t: Ty| Place {
             base: Place::local(pair).base,
@@ -278,17 +331,13 @@ impl<'a> Gains<'a> {
         };
         let value = Rvalue::Use(Operand::Move(field(0, Ty::Int(IntTy::I16))));
         let set = self.set(dest, value, back);
-        let msg = match op {
-            BinOp::SubWithOverflow => "attempt to compute `{} - {}`, which would overflow",
-            _ => "attempt to compute `{} * {}`, which would overflow",
-        };
         (
             Statement::Assign(Place::local(pair), Rvalue::BinaryOp(op, a.clone(), b.clone())),
             Terminator::Assert {
                 cond: Operand::Move(field(1, Ty::Bool)),
                 expected: false,
-                msg: msg.into(),
-                msg_args: vec![a.clone(), b.clone()],
+                msg,
+                msg_args,
                 target: set,
                 unwind: Unwind::Continue,
             },
@@ -485,6 +534,40 @@ impl<'a> Gains<'a> {
                 let (s, t) = self.test(BinOp::Lt, a, b, up, down);
                 (vec![s], t)
             }
+            // on a card, the operation: Rust's saturates at 32767 and -32768, which no card holds, so past a card
+            // (1000 + 1000, or 999 * 999, which Rust takes to 32767) it panics, in every profile
+            (Method::SaturatingAdd | Method::SaturatingSub | Method::SaturatingMul, [a, b]) if ty == IntTy::I16 => {
+                let op = match m {
+                    Method::SaturatingAdd => BinOp::AddWithOverflow,
+                    Method::SaturatingSub => BinOp::SubWithOverflow,
+                    _ => BinOp::MulWithOverflow,
+                };
+                let (s, t) = self.on_a_card(op, a, b, dest, back);
+                (vec![s], t)
+            }
+            // b a's added up, stopping at 255: the product of two u8s (up to 65025) is no card, and the sum stays
+            // on one (at most 510)
+            (Method::SaturatingMul, [a, b]) => {
+                let [sum, count, each] = [(); 3].map(|_| self.local(Ty::Int(IntTy::I16)));
+                let [sv, cv, ev] = [sum, count, each].map(|l| Operand::Copy(Place::local(l)));
+                let top = self.set(dest, copy(&int(255)), back);
+                let done = self.set(dest, copy(&sv), back);
+                let head = self.next_block();
+                let less = Statement::Assign(Place::local(count), BinaryOp(BinOp::Sub, cv.clone(), card(1)));
+                let next = self.block(vec![less], Terminator::Goto(head));
+                let (s, t) = self.test(BinOp::Gt, &sv, &card(255), top, next);
+                let add = Statement::Assign(Place::local(sum), BinaryOp(BinOp::Add, sv.clone(), ev));
+                let body = self.block(vec![add, s], t);
+                let (s, t) = self.test(BinOp::Eq, &cv, &card(0), done, body);
+                self.block_named(head, vec![s], t);
+                let widen = |o: &Operand| Rvalue::Cast(o.clone(), Ty::Int(IntTy::I16), CastKind::IntToInt);
+                let start = vec![
+                    Statement::Assign(Place::local(sum), copy(&card(0))),
+                    Statement::Assign(Place::local(count), widen(b)),
+                    Statement::Assign(Place::local(each), widen(a)),
+                ];
+                (start, Terminator::Goto(head))
+            }
             // a + b in an i16, which holds it (at most 510), or 255 where that is past a u8
             (Method::SaturatingAdd, [a, b]) => {
                 let sum = self.local(Ty::Int(IntTy::I16));
@@ -545,6 +628,30 @@ impl<'a> Gains<'a> {
                 let (check, assert) = self.nonzero(a, b, ty, DIVIDE_BY_ZERO, quotient);
                 (vec![check], assert)
             }
+            // by a variable, the u32 a cell holding a number equal to it modulo 2^32 (`wide`): below 0 it is past a
+            // card (`n as u32` of an n below 0), and panics; else that many checked multiplications, counted down
+            (Method::Pow, [x, n]) if !matches!(n, Operand::Constant(_)) => {
+                let (left, r) = (self.local(Ty::Int(ty)), self.local(Ty::Int(ty)));
+                let (lv, rv) = (Operand::Copy(Place::local(left)), Operand::Copy(Place::local(r)));
+                let head = self.next_block();
+                let less = Statement::Assign(Place::local(left), BinaryOp(BinOp::Sub, lv.clone(), one.clone()));
+                let next = self.block(vec![less], Terminator::Goto(head));
+                let (s, t) = self.checked(BinOp::MulWithOverflow, &rv, x, &Place::local(r), next);
+                let body = self.block(vec![s], t);
+                let done = self.set(dest, copy(&rv), back);
+                let (s, t) = self.test(BinOp::Eq, &lv, &zero, done, body);
+                self.block_named(head, vec![s], t);
+                let start = self.block(
+                    vec![
+                        Statement::Assign(Place::local(left), copy(n)),
+                        Statement::Assign(Place::local(r), copy(&one)),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let ok = self.local(Ty::Bool);
+                let check = Statement::Assign(Place::local(ok), BinaryOp(BinOp::Ge, n.clone(), card(0)));
+                (vec![check], on_a_card(Operand::Move(Place::local(ok)), true, start))
+            }
             // by a constant k: k - 1 multiplications, each checked in every profile, as a product past a card can't
             // be held (with overflow checks off Rust's would wrap at 32768)
             (Method::Pow, [x, k]) => {
@@ -562,6 +669,46 @@ impl<'a> Gains<'a> {
                     into = r.unwrap_or(into);
                 }
                 (vec![], Terminator::Goto(next))
+            }
+            // a panic below 0, as in Rust; then the odd numbers 1, 3, 5, .. taken away while they last, as many as
+            // the root (their sums are the squares), all on a card
+            (Method::Isqrt, [x]) => {
+                let [rest, odd, root] = [(); 3].map(|_| self.local(Ty::Int(ty)));
+                let [restv, oddv, rootv] = [rest, odd, root].map(|l| Operand::Copy(Place::local(l)));
+                let head = self.next_block();
+                let step = |l: Local, op: BinOp, by: Operand| {
+                    Statement::Assign(Place::local(l), BinaryOp(op, Operand::Copy(Place::local(l)), by))
+                };
+                let body = self.block(
+                    vec![
+                        step(rest, BinOp::Sub, oddv.clone()),
+                        step(odd, BinOp::Add, int(2)),
+                        step(root, BinOp::Add, one.clone()),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let done = self.set(dest, copy(&rootv), back);
+                let (s, t) = self.test(BinOp::Lt, &restv, &oddv, done, body);
+                self.block_named(head, vec![s], t);
+                let start = self.block(
+                    vec![
+                        Statement::Assign(Place::local(rest), copy(x)),
+                        Statement::Assign(Place::local(odd), copy(&one)),
+                        Statement::Assign(Place::local(root), copy(&zero)),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let ok = self.local(Ty::Bool);
+                let check = Statement::Assign(Place::local(ok), BinaryOp(BinOp::Ge, x.clone(), zero.clone()));
+                let assert = Terminator::Assert {
+                    cond: Operand::Move(Place::local(ok)),
+                    expected: true,
+                    msg: "argument of integer square root cannot be negative".into(),
+                    msg_args: vec![],
+                    target: start,
+                    unwind: Unwind::Continue,
+                };
+                (vec![check], assert)
             }
             // a - b, or 0 where that is below 0
             (Method::SaturatingSub, [a, b]) => {
@@ -999,6 +1146,13 @@ mod tests {
                 Method::SaturatingAdd,
                 IntTy::U8,
             ),
+            (
+                "core::num::<impl i16>::saturating_add",
+                Method::SaturatingAdd,
+                IntTy::I16,
+            ),
+            ("core::num::<impl u8>::saturating_mul", Method::SaturatingMul, IntTy::U8),
+            ("core::num::<impl i16>::isqrt", Method::Isqrt, IntTy::I16),
         ];
         for (p, m, t) in known {
             let f = callee(p);
@@ -1007,7 +1161,7 @@ mod tests {
         for p in [
             "core::num::<impl u8>::abs_diff::<u8>",
             "core::num::<impl usize>::wrapping_add",
-            "core::num::<impl i16>::saturating_add",
+            "core::num::<impl usize>::saturating_mul",
             "core::num::<impl i16>::min",
             "<i16 as PartialOrd>::lt",
             "kit::abs",

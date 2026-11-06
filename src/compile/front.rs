@@ -60,6 +60,76 @@ pub struct Statics {
     pub of_alloc: HashMap<String, String>,
 }
 
+/// The overflow checks that codegen leaves out where the build's overflow checks are off: `+`, `-`, `*`, a
+/// negation and the shifts. rustc writes none in a crate built without them, but it keeps those of core's code it
+/// inlines that inherits the caller's (`#[rustc_inherit_overflow_checks]`, as `next_power_of_two`'s `+ 1` does),
+/// and the build that runs natively doesn't check them. A divide's are always made.
+const INHERITED_CHECKS: [&str; 6] = [
+    "attempt to compute `{} + {}`, which would overflow",
+    "attempt to compute `{} - {}`, which would overflow",
+    "attempt to compute `{} * {}`, which would overflow",
+    "attempt to negate `{}`, which would overflow",
+    "attempt to shift left by `{}`, which would overflow",
+    "attempt to shift right by `{}`, which would overflow",
+];
+
+/// For a build without overflow checks (the driver knows the session's): each of those checks goes on to its
+/// target, as the native build does. The checked operation it read the flag of is then the plain one, into the
+/// pair's value, where nothing else reads the flag (a u8's then wraps, `ranges::mark_wrapping`).
+pub fn drop_inherited_overflow_checks(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let body = &mut f.body;
+        for bi in 0..body.blocks.len() {
+            let Terminator::Assert { cond, msg, target, .. } = &body.blocks[bi].terminator else {
+                continue;
+            };
+            if !INHERITED_CHECKS.contains(&msg.as_str()) {
+                continue;
+            }
+            // the flag, `_t.1`
+            let flag = cond
+                .place()
+                .filter(|p| matches!(p.projection.as_slice(), [Projection::Field(1, _)]))
+                .and_then(|p| p.base_local());
+            body.blocks[bi].terminator = Terminator::Goto(*target);
+            let Some(t) = flag else { continue };
+            let read_whole_or_flag = body.blocks.iter().any(|b| {
+                // what each statement reads: its places but the one an assignment writes
+                let read = b.statements.iter().flat_map(|s| {
+                    let skip = usize::from(matches!(s, Statement::Assign(..)));
+                    s.places().into_iter().skip(skip)
+                });
+                read.chain(b.terminator.places()).any(|p| {
+                    p.base_local() == Some(t) && !matches!(p.projection.first(), Some(Projection::Field(0, _)))
+                })
+            });
+            let Some(Ty::Tuple(fields)) = body.decls.iter().find(|d| d.local == t).map(|d| &d.ty) else {
+                continue;
+            };
+            let (false, Some(value)) = (read_whole_or_flag, fields.first().cloned()) else {
+                continue;
+            };
+            for s in &mut body.blocks[bi].statements {
+                if let Statement::Assign(d, Rvalue::BinaryOp(op, a, c)) = s {
+                    let plain = match op {
+                        BinOp::AddWithOverflow => BinOp::Add,
+                        BinOp::SubWithOverflow => BinOp::Sub,
+                        BinOp::MulWithOverflow => BinOp::Mul,
+                        _ => continue,
+                    };
+                    if d.as_local() == Some(t) {
+                        *s = Statement::Assign(
+                            Place::field(t, 0, value.clone()),
+                            Rvalue::BinaryOp(plain, a.clone(), c.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
@@ -83,9 +153,12 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     let widened = widened_in_core(&file);
-    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
+    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type; first those
+    // `wide_locals` can't make cells, as all a u16's values are
+    super::wide::u16_cells(&mut file);
     super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
+    file.visit(&mut IsizeIsI16);
     file.visit(&mut PastACardDivisor);
     file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
@@ -946,6 +1019,42 @@ impl VisitMut for I32IsI16 {
         for s in &mut p.segments {
             if let Segment::Name { name, .. } = s {
                 if name == "i32" {
+                    *name = "i16".into();
+                }
+            }
+        }
+        walk_path(self, p)
+    }
+}
+
+/// An isize is an i16, as a C-like enum's discriminant already is (`enums`): what a card holds, an isize holds too,
+/// and past a card it panics or keeps three digits as an i16 does. (A cast of one to a usize, or of a usize to one,
+/// is then an i16's: -1 is usize::MAX, held below 0, and back.)
+struct IsizeIsI16;
+
+impl VisitMut for IsizeIsI16 {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if *t == Ty::Int(IntTy::Isize) {
+            *t = Ty::Int(IntTy::I16);
+        }
+        walk_ty(self, t)
+    }
+
+    fn visit_const(&mut self, c: &mut Const) {
+        if let Const::Int {
+            ty: ty @ IntTy::Isize, ..
+        } = c
+        {
+            *ty = IntTy::I16;
+        }
+        walk_const(self, c)
+    }
+
+    /// `isize::MAX`, which no card holds, as `i16::MAX` is refused
+    fn visit_path(&mut self, p: &mut Path) {
+        for s in &mut p.segments {
+            if let Segment::Name { name, .. } = s {
+                if name == "isize" {
                     *name = "i16".into();
                 }
             }
