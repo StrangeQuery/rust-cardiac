@@ -327,6 +327,10 @@ fn args() -> Args {
         print!("{}", usage());
         std::process::exit(0)
     }
+    if matches!(command.as_str(), "--version" | "-V" | "version") {
+        println!("cargo-cardiac {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0)
+    }
     // the commands whose options are another program's: everything after the command is theirs
     let passed = matches!(command.as_str(), "new" | "debug" | "asm");
     let mut r = Args {
