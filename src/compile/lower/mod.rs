@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::ir::{
-    self, lines_naming, BasicBlock, BinOp, Const, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind,
+    self, lines_naming, BasicBlock, BinOp, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind,
 };
 use super::machine::{Arg, Kind, Line, Op};
 use super::util::Ordered;
@@ -152,11 +152,6 @@ fn bare(o: &ir::Operand) -> String {
 /// A statement as a comment: its text without the semicolon.
 fn source(s: &Statement) -> String {
     s.to_string().trim_end_matches(';').to_string()
-}
-
-/// `const i16::MIN` or `const i16::MAX`.
-fn is_i16_limit(o: &ir::Operand) -> bool {
-    matches!(o, ir::Operand::Constant(Const::Path(p)) if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]))
 }
 
 /// A plain unwind: `unwind continue` or `unwind unreachable`.

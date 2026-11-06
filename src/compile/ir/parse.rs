@@ -936,8 +936,9 @@ impl Parser<'_> {
 /// rustc prints a literal at its type's limit by name: `255_u8` is `u8::MAX` (in an array, an operand, an argument,
 /// a field), `-128_i8` is `i8::MIN`. One a card holds is read as the number it is (`u8::MAX`, `i8::MIN`), and is
 /// then a constant like any other. The others stay names, as before: past a card, they are refused where they
-/// are used, but for `i16::MIN` and `i16::MAX` in rustc's own overflow checks, which lowering knows no card equals,
-/// and an index of `usize::MAX` that only a failing bounds check reads (`blocks::settled_checks`).
+/// are used, but for a comparison with `i16::MIN` or `i16::MAX`, which the card settles
+/// (`compile::settled_by_the_card`), and an index of `usize::MAX` that only a failing bounds check reads
+/// (`blocks::settled_checks`).
 pub fn limit_on_a_card(path: &Path) -> Option<Const> {
     let [Segment::Name { name: ty, .. }, Segment::Name { name: which, .. }] = path.segments.as_slice() else {
         return None;

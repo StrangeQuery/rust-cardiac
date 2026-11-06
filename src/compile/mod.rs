@@ -439,6 +439,93 @@ fn card_bounds(blocks: &mut [ir::Block]) {
     }
 }
 
+/// What the card settles: an i16 is always on one, -999..999. A comparison with `i16::MIN` or `i16::MAX` is known
+/// (`x == i16::MIN` is false, `x < i16::MAX` true), and a switch on an i16 never takes an arm past a card (`match
+/// x { i16::MIN => .. }`). rustc writes both in its own checks (`-x` and `x / y` test for i16::MIN) and in the methods
+/// it inlines (`checked_neg`). Settled here, at every opt-level, a limit is left only where it is a value, and that
+/// is refused as any other constant past a card is.
+fn settled_by_the_card(blocks: &mut [ir::Block], types: &HashMap<ir::Local, ir::Ty>) {
+    use ir::BinOp::{Eq, Ge, Gt, Le, Lt, Ne};
+    let limit = |o: &ir::Operand| match o {
+        ir::Operand::Constant(ir::Const::Path(p)) if p.is_path(&["i16", "MIN"]) => Some(false),
+        ir::Operand::Constant(ir::Const::Path(p)) if p.is_path(&["i16", "MAX"]) => Some(true),
+        _ => None,
+    };
+    for b in blocks.iter_mut() {
+        // the settled comparisons still in their locals, for an assert of one at the block's end
+        let mut settled: HashMap<ir::Local, bool> = HashMap::new();
+        for s in b.statements.iter_mut() {
+            if let Some(l) = s.def() {
+                settled.remove(&l);
+            }
+            let ir::Statement::Assign(dest, rv @ ir::Rvalue::BinaryOp(..)) = s else {
+                continue;
+            };
+            let ir::Rvalue::BinaryOp(op, x, y) = &*rv else {
+                unreachable!()
+            };
+            // `a & b` with either settled false, `a | b` with either true (`b == -1 && a == i16::MIN` in a divide's
+            // check)
+            let known = |o: &ir::Operand| o.local().and_then(|l| settled.get(&l)).copied();
+            let either = match op {
+                ir::BinOp::BitAnd => [known(x), known(y)].contains(&Some(false)).then_some(false),
+                ir::BinOp::BitOr => [known(x), known(y)].contains(&Some(true)).then_some(true),
+                _ => None,
+            };
+            if let Some(holds) = either {
+                *rv = ir::Rvalue::Use(ir::Operand::Constant(ir::Const::Bool(holds)));
+                if let Some(l) = dest.as_local() {
+                    settled.insert(l, holds);
+                }
+                continue;
+            }
+            // x op limit, or limit op x as x op' limit; `max` says which limit
+            let (op, max) = match (limit(x), limit(y)) {
+                (None, Some(max)) => (*op, max),
+                (Some(max), None) => match *op {
+                    Lt => (Gt, max),
+                    Le => (Ge, max),
+                    Gt => (Lt, max),
+                    Ge => (Le, max),
+                    o => (o, max),
+                },
+                _ => continue,
+            };
+            let holds = match op {
+                Eq => false,
+                Ne => true,
+                Lt | Le => max,
+                Gt | Ge => !max,
+                _ => continue,
+            };
+            *rv = ir::Rvalue::Use(ir::Operand::Constant(ir::Const::Bool(holds)));
+            if let Some(l) = dest.as_local() {
+                settled.insert(l, holds);
+            }
+        }
+        // `assert(!move _8)` of one is `assert(!const false)`, which `blocks::settled_checks` takes as it is
+        if let ir::Terminator::Assert { cond, .. } = &mut b.terminator {
+            if let Some(&holds) = cond.local().and_then(|l| settled.get(&l)) {
+                *cond = ir::Operand::Constant(ir::Const::Bool(holds));
+            }
+        }
+        if let ir::Terminator::SwitchInt {
+            discr,
+            arms,
+            otherwise: Some(otherwise),
+        } = &mut b.terminator
+        {
+            let i16 = discr.local().and_then(|l| types.get(&l)) == Some(&ir::Ty::Int(ir::IntTy::I16));
+            if i16 {
+                arms.retain(|(v, _)| (-999..=999).contains(v));
+                if arms.is_empty() {
+                    b.terminator = ir::Terminator::Goto(*otherwise);
+                }
+            }
+        }
+    }
+}
+
 /// Each local's type, for the passes to look up.
 fn local_types(locals: &Ordered<ir::Local, ir::Ty>) -> HashMap<ir::Local, ir::Ty> {
     locals.iter().map(|(l, t)| (*l, t.clone())).collect()
@@ -703,6 +790,7 @@ fn compile(
         let params: HashSet<ir::Local> = f.params.iter().map(|(l, _)| *l).collect();
         let results: HashSet<ir::Local> = f.results.iter().copied().collect();
         card_bounds(&mut blocks);
+        settled_by_the_card(&mut blocks, &local_types(&locals));
         blocks::settled_checks(&mut blocks, &results);
         if optimize {
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);

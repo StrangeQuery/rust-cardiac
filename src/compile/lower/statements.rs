@@ -7,7 +7,7 @@ use crate::compile::Fail;
 
 use super::arith::plain_op;
 use super::places::{Loc, Value};
-use super::{is_comparison, is_i16_limit, numbered, one_word, source, Access, Cell, Lowering, Operand, Sym};
+use super::{is_comparison, numbered, one_word, source, Access, Cell, Lowering, Operand, Sym};
 
 /// A value an array repeat stores into each element: a scalar constant, or a place read without indexing (rustc
 /// reads an element into a temporary first).
@@ -306,14 +306,6 @@ impl<'a> Lowering<'a> {
             }
             Rvalue::BinaryOp(op @ (BinOp::Rem | BinOp::Div), x, y) => {
                 self.divide(src, dest, *op == BinOp::Rem, x, y, false)
-            }
-            Rvalue::BinaryOp(op @ (BinOp::Eq | BinOp::Ne), _, y) if is_i16_limit(y) => {
-                // no card equals i16::MIN or MAX
-                let c = self.konst(if *op == BinOp::Eq { 0 } else { 1 });
-                self.emit(Op::Cla, c);
-                let p = self.place(dest)?;
-                self.emit_c(Op::Sto, p, src);
-                Ok(())
             }
             Rvalue::BinaryOp(op, ir::Operand::Constant(ca), ir::Operand::Constant(cb))
                 if is_comparison(*op) && ca.is_scalar() && cb.is_scalar() =>
