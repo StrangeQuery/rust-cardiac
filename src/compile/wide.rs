@@ -7,8 +7,9 @@
 //!     (`methods::exact_result`). It can then be used as any number on a card is;
 //!   or else a number on a card equal to its value modulo 2^16 (2^32 for a u32): `-500i16 as u16` is 65036, held
 //!     as -500. A cast to i16 or u8 keeps that true (65036 as i16 is -500), and so does a sum or a difference that
-//!     is exact, so each is overflow-checked here, in every profile: past a card it panics, as an i16 does.
-//!     Nothing else may read such a local: not a comparison, a division, a wider cast or a call.
+//!     is exact, so each is overflow-checked here, in every profile: past a card it panics, as an i16 does. A
+//!     comparison with a constant on a card can read it too, as the cell cast to a usize (`unsigned_compare`).
+//!     Nothing else may: not another comparison, a division, a wider cast or a call.
 //! A local that is neither keeps its type, which the lowering refuses.
 use std::collections::HashMap;
 
@@ -250,6 +251,10 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
                         {
                             need(Needs::Exact)
                         }
+                        // against a constant on a card, the cell tells: see `unsigned_compare`
+                        Rvalue::BinaryOp(op, a, c) if compare_to_constant(*op, a, c).is_some() && (is(a) || is(c)) => {
+                            need(Needs::Either)
+                        }
                         Rvalue::BinaryOp(
                             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge,
                             a,
@@ -274,6 +279,49 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
         }
     }
     (seen, needs)
+}
+
+/// A comparison of a local and a constant on a card, as `local op constant`: the op, the local's operand and the
+/// constant.
+fn compare_to_constant<'a>(op: BinOp, a: &'a Operand, c: &'a Operand) -> Option<(BinOp, &'a Operand, i128)> {
+    let k = |o: &Operand| o.int().map(|(k, _)| k).filter(|k| (0..=999).contains(k));
+    let flipped = match op {
+        BinOp::Lt => BinOp::Gt,
+        BinOp::Le => BinOp::Ge,
+        BinOp::Gt => BinOp::Lt,
+        BinOp::Ge => BinOp::Le,
+        BinOp::Eq | BinOp::Ne => op,
+        _ => return None,
+    };
+    match (read(a), read(c)) {
+        (Some(_), None) => Some((op, a, k(c)?)),
+        (None, Some(_)) => Some((flipped, c, k(a)?)),
+        _ => None,
+    }
+}
+
+/// `x op k` of a u16 or u32 held modulo its size, for k a constant on a card: its value is the cell's where that is
+/// 0 or more, and where it is below 0 2^16 - 999 or more (2^32 - 999 for a u32), above every k, as a usize past a
+/// card is (held below 0 too, `ranges::huge_usizes`). So the cell, cast to a usize, compares as the value does: the
+/// statements that set `d`. rustc's check of a shift by an i16, `b as u16 < 16`, is one.
+fn unsigned_compare(gains: &mut Gains, d: &Place, op: BinOp, x: &Operand, k: i128) -> Vec<Statement> {
+    let usize = |v: i128| {
+        Operand::Constant(Const::Int {
+            value: v,
+            ty: IntTy::Usize,
+        })
+    };
+    let wide = gains.local(Ty::Int(IntTy::Usize));
+    vec![
+        Statement::Assign(
+            Place::local(wide),
+            Rvalue::Cast(x.clone(), Ty::Int(IntTy::Usize), super::ir::CastKind::IntToInt),
+        ),
+        Statement::Assign(
+            d.clone(),
+            Rvalue::BinaryOp(op, Operand::Move(Place::local(wide)), usize(k)),
+        ),
+    ]
 }
 
 fn types_int(types: &HashMap<Local, Ty>, l: Local) -> IntTy {
@@ -335,6 +383,28 @@ fn rewrite(
     // last first, so that each split leaves the places of those before it as they were
     for (bi, si) in checked.into_iter().rev() {
         check(params, body, bi, si);
+    }
+    // a comparison of one held modulo its size with a constant: of the cell as a usize
+    let modular = |o: &Operand| read(o).is_some_and(|l| cells.contains(&l) && held.get(&l) == Some(&Held::Modular));
+    let mut gains = Gains::new(params, &body.blocks, &mut body.decls);
+    for b in body.blocks.iter_mut() {
+        let compares = b.statements.iter().any(|s| {
+            matches!(s, Statement::Assign(_, Rvalue::BinaryOp(op, a, c))
+                if compare_to_constant(*op, a, c).is_some_and(|(_, x, _)| modular(x)))
+        });
+        if !compares {
+            continue;
+        }
+        let statements = std::mem::take(&mut b.statements);
+        for s in statements {
+            match &s {
+                Statement::Assign(d, Rvalue::BinaryOp(op, a, c)) => match compare_to_constant(*op, a, c) {
+                    Some((op, x, k)) if modular(x) => b.statements.extend(unsigned_compare(&mut gains, d, op, x, k)),
+                    _ => b.statements.push(s),
+                },
+                _ => b.statements.push(s),
+            }
+        }
     }
 }
 
@@ -409,8 +479,24 @@ mod tests {
     }
 
     #[test]
-    fn a_value_known_only_modulo_its_size_is_not_compared() {
+    fn a_value_known_only_modulo_its_size_is_compared_with_a_constant_as_a_usize() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _7 = Lt(copy _3, const 5_u16);");
+        wide_in(&[], &mut b);
+        assert_eq!(ty(&b, 3), Ty::Int(IntTy::I16));
+        assert!(matches!(
+            &b.blocks[0].statements[1],
+            Statement::Assign(_, Rvalue::Cast(_, Ty::Int(IntTy::Usize), _))
+        ));
+        assert!(matches!(
+            &b.blocks[0].statements[2],
+            Statement::Assign(_, Rvalue::BinaryOp(BinOp::Lt, ..))
+        ));
+    }
+
+    #[test]
+    fn two_values_known_only_modulo_their_size_are_not_compared() {
+        let mut b =
+            body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _7 = Lt(copy _3, copy _4);");
         wide_in(&[], &mut b);
         assert_eq!(ty(&b, 3), Ty::Int(IntTy::U16));
     }
