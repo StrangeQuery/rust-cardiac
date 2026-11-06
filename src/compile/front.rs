@@ -42,9 +42,15 @@ const CORE_MODULES: [&str; 14] = [
     "clone",
 ];
 
-/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, and its
-/// statics.
-pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>, Statics);
+/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, its
+/// statics, and the enums its trait objects are (`indirect::trait_objects`).
+pub type FrontEnd = (
+    File,
+    Ordered<String, Function>,
+    HashMap<String, i64>,
+    Statics,
+    Vec<super::enums::EnumDef>,
+);
 
 /// The program's statics, each a fixed run of cells, as every variable on CARDIAC is: what each holds first, by the
 /// static's name, and the static each allocation a body points into is (`{alloc1: *mut i16}`).
@@ -57,9 +63,10 @@ pub struct Statics {
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
-    // function pointers as numbers, and calls through them as calls of what they can be (after the promoteds,
-    // which may make them)
+    // function pointers as numbers, and trait objects as enums, with calls through them as calls of what they can
+    // be (after the promoteds, which may make them)
     super::indirect::function_pointers(&mut file);
+    let objects = super::indirect::trait_objects(&mut file);
     super::panic_messages::literal_panics(&mut file);
     byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
@@ -93,7 +100,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
             f.widened = Some(p);
         }
     }
-    Ok((file, fns, named, statics))
+    Ok((file, fns, named, statics, objects))
 }
 
 /// `<T as PartialEq>::ne(a, b)`, which rustc calls at opt-level 1 and s for a derived `!=`: `PartialEq`'s own `ne`,

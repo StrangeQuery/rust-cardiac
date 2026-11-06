@@ -663,7 +663,8 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named, statics) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
         return Err("no fn main in MIR".into());
     }

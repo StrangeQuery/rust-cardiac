@@ -214,7 +214,8 @@ pub fn calls(tcx: TyCtxt<'_>, defs: &[DefId]) -> std::collections::HashSet<DefId
 }
 
 /// The functions the calls in a body reach, each resolved to the definition it runs, added to `called`; and those
-/// a call through a pointer can: the functions it makes pointers to.
+/// a call through a pointer or a trait object can: the functions it makes pointers to, and the methods of each type
+/// it makes a `&dyn Trait` of, as the type implements them.
 pub fn calls_in<'tcx>(tcx: TyCtxt<'tcx>, body: &mmir::Body<'tcx>, called: &mut std::collections::HashSet<DefId>) {
     use mty::adjustment::PointerCoercion;
     let env = mty::TypingEnv::post_analysis(tcx, body.source.def_id());
@@ -222,15 +223,45 @@ pub fn calls_in<'tcx>(tcx: TyCtxt<'tcx>, body: &mmir::Body<'tcx>, called: &mut s
         let mmir::StatementKind::Assign(assign) = &s.kind else {
             continue;
         };
-        let mmir::Rvalue::Cast(mmir::CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer(_), _), f, _) =
-            &assign.1
-        else {
+        let mmir::Rvalue::Cast(mmir::CastKind::PointerCoercion(coercion, _), o, to) = &assign.1 else {
             continue;
         };
-        if let Some((callee, args)) = f.const_fn_def() {
-            if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, callee, args) {
-                called.insert(instance.def_id());
+        match coercion {
+            PointerCoercion::ReifyFnPointer(_) => {
+                if let Some((callee, args)) = o.const_fn_def() {
+                    if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, callee, args) {
+                        called.insert(instance.def_id());
+                    }
+                }
             }
+            PointerCoercion::Unsize => {
+                let (mty::Ref(_, from, _), mty::Ref(_, to, _)) = (o.ty(&body.local_decls, tcx).kind(), to.kind())
+                else {
+                    continue;
+                };
+                let mty::Dynamic(predicates, ..) = to.kind() else {
+                    continue;
+                };
+                // a trait of no generic arguments, and its methods of none of their own
+                let Some(principal) = predicates.principal() else {
+                    continue;
+                };
+                if !principal.skip_binder().args.is_empty() {
+                    continue;
+                }
+                let args = tcx.mk_args(&[(*from).into()]);
+                for &m in tcx.associated_item_def_ids(principal.def_id()) {
+                    if tcx.def_kind(m) != rustc_hir::def::DefKind::AssocFn
+                        || tcx.generics_of(m).own_requires_monomorphization()
+                    {
+                        continue;
+                    }
+                    if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, m, args) {
+                        called.insert(instance.def_id());
+                    }
+                }
+            }
+            _ => {}
         }
     }
     for b in body.basic_blocks.iter() {
