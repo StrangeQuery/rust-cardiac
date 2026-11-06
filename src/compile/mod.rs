@@ -553,6 +553,7 @@ fn compile(
     for n in &names {
         // slices of arrays as arrays, and the pointers of their iterators as raw pointers, for the passes below
         slices::known_lengths(fns.get_mut(n).unwrap());
+        slices::slice_iterator_calls(fns.get_mut(n).unwrap());
         // `for x in t` over an array by value: a range over its indexes
         iterators::array_into_iter(fns.get_mut(n).unwrap());
         iterators::enumerate_slices(fns.get_mut(n).unwrap());

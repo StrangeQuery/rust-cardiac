@@ -97,3 +97,13 @@
 - **Why.** `swap` moves one element through a temporary; with these it is the four copies it is.
 - **Cost.** None found. A `copy_nonoverlapping` of more than one element, and a slice from parts of a length not
   known, stay refused.
+
+## 2026-11-06 · A slice iterator's and a StepBy's calls at opt-level 1, as what rustc inlines at 2
+
+- **Decision.** `slices::slice_iterator_calls`: where rustc calls them, `iter()`, `iter_mut()` and `into_iter()` of
+  an array reference build the slice iterator's two pointers, `into_iter()` of the iterator (or of an `Enumerate`
+  of it) is the iterator, `next()` is its test and step, and `enumerate()` builds core's struct: the code rustc
+  inlines at opt-level 2, which the passes after take as they do there. `iterators::step_by` likewise reads a
+  `StepBy`'s `into_iter()` and `next()` (the range's `nth()` of 0 the first time, of k - 1 after).
+- **Why.** One way through the passes for both opt-levels: the loops take the same cells at 1 as at 2.
+- **Cost.** None found.

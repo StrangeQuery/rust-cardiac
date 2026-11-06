@@ -1045,3 +1045,256 @@ fn steady(blocks: &[Block], c: Local, a: Local) -> bool {
     }
     true
 }
+
+/// A slice iterator's calls, where rustc makes them rather than inlining them (opt-level 1), as the code it inlines
+/// at opt-level 2, which the passes after take as they do there:
+///   `iter(s)`, `iter_mut(s)` and `<&[T; N] as IntoIterator>::into_iter(s)`: the iterator's two pointers, s and s
+///     stepped by N
+///   `into_iter(it)` of the iterator itself: it
+///   `next(&mut it)`: None at the end, else the pointer, stepped past
+///   `enumerate(it)`: `Enumerate { iter: it, count: 0 }`
+/// Only on a slice whose length `known_lengths` found.
+pub fn slice_iterator_calls(f: &mut Function) {
+    let types: HashMap<Local, Ty> = f
+        .params
+        .iter()
+        .cloned()
+        .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+        .collect();
+    let iter_struct = |t: &Ty| match t {
+        Ty::Path(p) if p.is_plain() && p.name().starts_with("slice_Iter") => Some(p.name().to_string()),
+        _ => None,
+    };
+    let mut next_local = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+    let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1;
+    let mut decls: Vec<ir::Decl> = vec![];
+    let mut blocks: Vec<Block> = vec![];
+    let mut fresh = |ty: Ty, decls: &mut Vec<ir::Decl>| {
+        let l = Local(next_local);
+        next_local += 1;
+        decls.push(ir::Decl {
+            local: l,
+            mutable: true,
+            ty,
+        });
+        l
+    };
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(target),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let (Some(d), [arg]) = (dest.as_local(), args.as_slice()) else {
+            continue;
+        };
+        let Some(dty) = types.get(&d) else { continue };
+        let Some(a) = arg.local() else { continue };
+        let qself = func.qself.as_ref().map(|q| &q.ty);
+        let name = func.name();
+        let slice_impl = matches!(func.segments.as_slice(), [Segment::Name { name: s, .. }, Segment::Impl(Ty::Slice(_)), _] if s == "slice");
+        let mut done: Vec<Statement> = vec![];
+        // the iterator made from the slice
+        let made_from_slice = (slice_impl && (name == "iter" || name == "iter_mut"))
+            || (name == "into_iter" && qself.is_some_and(|t| array_length(t).is_some()));
+        if let (true, Some(s), Some(n)) = (made_from_slice, iter_struct(dty), types.get(&a).and_then(array_length)) {
+            let Some(Ty::Ref { to, .. } | Ty::Ptr { to, .. }) = types.get(&a) else {
+                continue;
+            };
+            let Ty::Array(e, _) = &**to else { continue };
+            let mutable = s.starts_with("slice_IterMut");
+            let ptr = fresh(
+                Ty::Ptr {
+                    mutable: true,
+                    to: e.clone(),
+                },
+                &mut decls,
+            );
+            let end = fresh(Ty::Ptr { mutable, to: e.clone() }, &mut decls);
+            done.extend([
+                Statement::Assign(Place::local(ptr), Rvalue::Use(Operand::Copy(Place::local(a)))),
+                Statement::Assign(
+                    Place::local(end),
+                    Rvalue::BinaryOp(
+                        BinOp::Add,
+                        Operand::Copy(Place::local(ptr)),
+                        Operand::Constant(Const::Int {
+                            value: n as i128,
+                            ty: IntTy::Usize,
+                        }),
+                    ),
+                ),
+                Statement::Assign(
+                    dest.clone(),
+                    Rvalue::Struct(
+                        plain(s),
+                        vec![
+                            ("ptr".into(), Operand::Copy(Place::local(ptr))),
+                            ("end_or_len".into(), Operand::Copy(Place::local(end))),
+                        ],
+                    ),
+                ),
+            ]);
+        }
+        // the iterator, or an Enumerate of it, passed through
+        let through = |t: Option<&Ty>| {
+            t.is_some_and(|t| {
+                iter_struct(t).is_some() || matches!(t, Ty::Path(p) if p.name() == "Enumerate" && last_iter(p))
+            })
+        };
+        if done.is_empty() && name == "into_iter" && through(qself) && through(types.get(&a)) {
+            done.push(Statement::Assign(dest.clone(), Rvalue::Use(arg.clone())));
+        }
+        if done.is_empty()
+            && name == "enumerate"
+            && qself.and_then(iter_struct).is_some()
+            && iter_struct(types.get(&a).unwrap_or(&Ty::Unit)).is_some()
+        {
+            let Ty::Path(p) = dty else { continue };
+            done.push(Statement::Assign(
+                dest.clone(),
+                Rvalue::Struct(
+                    p.clone(),
+                    vec![
+                        ("iter".into(), arg.clone()),
+                        (
+                            "count".into(),
+                            Operand::Constant(Const::Int {
+                                value: 0,
+                                ty: IntTy::Usize,
+                            }),
+                        ),
+                    ],
+                ),
+            ));
+        }
+        if !done.is_empty() {
+            let b = &mut f.body.blocks[bi];
+            b.statements.extend(done);
+            b.terminator = Terminator::Goto(target);
+            continue;
+        }
+        // next(): the borrow of the iterator in this block, `r = &mut it`
+        if name != "next" || !qself.and_then(iter_struct).is_some() {
+            continue;
+        }
+        let Some(at) = f.body.blocks[bi].statements.iter().position(|s| {
+            matches!(s, Statement::Assign(r, Rvalue::Ref(BorrowKind::Mut, p)) if r.as_local() == Some(a) && p.projection.is_empty())
+        }) else {
+            continue;
+        };
+        let Statement::Assign(_, Rvalue::Ref(_, itp)) = &f.body.blocks[bi].statements[at] else {
+            continue;
+        };
+        let it = itp.clone();
+        let Some(s) = it.base_local().and_then(|l| types.get(&l)).and_then(iter_struct) else {
+            continue;
+        };
+        if ir::occurrences(&f.body.blocks, a) != 2 {
+            continue;
+        }
+        // the item's type, `Option<&T>`: the element type T
+        let Ty::Path(op) = dty else { continue };
+        let Some(GenericArg::Ty(item @ Ty::Ref { .. })) = last_arg(op) else {
+            continue;
+        };
+        let Ty::Ref { to: e, .. } = item else { continue };
+        let mutable = s.starts_with("slice_IterMut");
+        let ptr_ty = Ty::Ptr {
+            mutable: true,
+            to: e.clone(),
+        };
+        let end_ty = Ty::Ptr { mutable, to: e.clone() };
+        let field = |k: u32, t: &Ty| {
+            let mut p = it.clone();
+            p.projection.push(Projection::Field(k, t.clone()));
+            p
+        };
+        let x = fresh(ptr_ty.clone(), &mut decls);
+        let y = fresh(end_ty.clone(), &mut decls);
+        let c = fresh(Ty::Bool, &mut decls);
+        let (some, none) = (BasicBlock(next_block), BasicBlock(next_block + 1));
+        next_block += 2;
+        let variant = |v: &str, args: Vec<Operand>| {
+            let mut p = op.clone();
+            if let Some(Segment::Name { args: Some(g), .. }) = p.segments.last_mut() {
+                g.turbofish = true;
+            }
+            p.segments
+                .retain(|s| matches!(s, Segment::Name { name, .. } if name == "Option"));
+            p.segments.push(Segment::Name {
+                name: v.into(),
+                args: None,
+            });
+            Rvalue::Variant(p, args)
+        };
+        blocks.push(Block {
+            name: some,
+            statements: vec![
+                Statement::Assign(
+                    field(0, &ptr_ty),
+                    Rvalue::BinaryOp(
+                        BinOp::Add,
+                        Operand::Copy(Place::local(x)),
+                        Operand::Constant(Const::Int {
+                            value: 1,
+                            ty: IntTy::Usize,
+                        }),
+                    ),
+                ),
+                Statement::Assign(dest.clone(), variant("Some", vec![Operand::Copy(Place::local(x))])),
+            ],
+            terminator: Terminator::Goto(target),
+        });
+        blocks.push(Block {
+            name: none,
+            statements: vec![Statement::Assign(dest.clone(), variant("None", vec![]))],
+            terminator: Terminator::Goto(target),
+        });
+        let b = &mut f.body.blocks[bi];
+        b.statements.remove(at);
+        b.statements.extend([
+            Statement::Assign(Place::local(x), Rvalue::Use(Operand::Copy(field(0, &ptr_ty)))),
+            Statement::Assign(Place::local(y), Rvalue::Use(Operand::Copy(field(1, &end_ty)))),
+            // the iterator's own test: its pointer never passes its end
+            Statement::Assign(
+                Place::local(c),
+                Rvalue::BinaryOp(
+                    BinOp::Ge,
+                    Operand::Copy(Place::local(x)),
+                    Operand::Copy(Place::local(y)),
+                ),
+            ),
+        ]);
+        b.terminator = Terminator::SwitchInt {
+            discr: Operand::Move(Place::local(c)),
+            arms: vec![(0, some)],
+            otherwise: Some(none),
+        };
+    }
+    f.body.decls.extend(decls);
+    f.body.blocks.extend(blocks);
+    let blocks = &f.body.blocks;
+    // the borrows that went with next(), now named nowhere
+    f.body.decls.retain(|d| {
+        ir::occurrences(blocks, d.local) > 0 || !matches!(&d.ty, Ty::Ref { to, .. } if iter_struct(to).is_some())
+    });
+}
+
+/// A path's last segment's last type argument.
+fn last_arg(p: &Path) -> Option<&GenericArg> {
+    match p.segments.last() {
+        Some(Segment::Name { args: Some(g), .. }) => g.args.last(),
+        _ => None,
+    }
+}
+
+/// `Enumerate<I>` for I one of the slice iterators.
+fn last_iter(p: &Path) -> bool {
+    matches!(last_arg(p), Some(GenericArg::Ty(Ty::Path(i))) if i.is_plain() && i.name().starts_with("slice_Iter"))
+}
