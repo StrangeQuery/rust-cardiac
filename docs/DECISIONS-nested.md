@@ -20,3 +20,22 @@
   Probes matching native Rust at the four settings, bounds failures too: a u8 grid wrapping, a bool grid, a grid
   passed by `&` and by `&mut` and indexed there, filled in nested `for` loops, copied whole and then changed, a
   literal grid, an index changed between two uses, and constant and variable indexes mixed in a loop.
+
+## 2026-11-06 · A tuple of tuples, and an array of tuples, are structs as a tuple of scalars is
+
+- **Decision.** `structs::tuples_as_structs` makes a struct of a tuple whose elements are scalars or, now, such
+  tuples (`((i16, i16), bool)` is `tuple__tuple2__i16_i16_bool`, whose field `0` is `tuple__i16_i16`), and of the
+  element of an array of them (`[(i16, i16); 3]` is `[tuple__i16_i16; 3]`, which the struct pass keeps as one
+  array per leaf, as it does an array of structs). The tuple type is replaced wherever a local's type or a field's
+  (`(_6.0: (i16, i16))`) has it; `(a, b)` into any place of such a type is the struct built, and a tuple constant
+  there (`[const (0_i16, 0_i16); 3]`) the struct's constant. A function whose parameter is a tuple of tuples is
+  read, as one of scalars was.
+- **Why.** The struct pass already takes apart structs of structs and arrays of structs; a tuple is a struct whose
+  fields are numbered.
+- **Cost.** None to other programs: the compiler's tests, the examples and the matrix's other tuple rows are
+  unchanged. An array of tuples passed by reference stays refused, as an array of structs is.
+- **Evidence.** The support matrix's array_tuples and tuple_nested_return match at every setting. Probes matching
+  native Rust at the four settings: an array of `(i16, bool)` set whole from a tuple local and by field, copied
+  out whole; a literal array of tuples indexed; a `((i16, i16), i16)` parameter given a tuple built and a tuple
+  local; `(usize, u8)` and `(bool, (u8, i16))` returned; an array of `((i16, i16), i16)` set whole and read by
+  field; an array of `(u8, i16)` wrapping its u8s.

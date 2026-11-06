@@ -619,10 +619,11 @@ fn shared_scalar_refs_by_value(fns: &mut Ordered<String, Function>) {
     }
 }
 
-/// A tuple of scalars that crosses a call (`fn split(v: i16) -> (i16, i16)`, rustc takes the others apart itself) is
-/// a struct whose fields are `.0`, `.1`, ..., which the struct pass then takes apart as any: its type a
-/// struct's named after its elements' (`tuple__i16_i16`), and `(a, b)` that struct built. An overflow-checked op's
-/// pair (`AddWithOverflow`'s `(i16, bool)`) stays a tuple: the passes after know it so. Returns the structs, each with
+/// A tuple of scalars (`fn split(v: i16) -> (i16, i16)`; rustc takes most others apart itself), or of such tuples
+/// (`((i16, i16), bool)`), is a struct whose fields are `.0`, `.1`, ..., which the struct pass then takes apart as
+/// any: its type a struct's named after its elements' (`tuple__i16_i16`), and `(a, b)` that struct built. So is
+/// an array of them, which is then one array per leaf, as an array of structs is. An overflow-checked op's pair
+/// (`AddWithOverflow`'s `(i16, bool)`) stays a tuple: the passes after know it so. Returns the structs, each with
 /// its fields.
 fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Field>)> {
     let mut made: Vec<(String, Vec<Field>)> = vec![];
@@ -643,84 +644,158 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
                 _ => None,
             })
             .collect();
-        let mut strukt = |t: &Ty| -> Option<Ty> {
-            let Ty::Tuple(ts) = t else { return None };
+        let mut retype = |l: Local, t: &mut Ty| {
+            if !pairs.contains(&l) {
+                if let Some(s) = tuple_struct(t, &mut made) {
+                    *t = s;
+                }
+            }
+        };
+        for (l, t) in f.params.iter_mut() {
+            retype(*l, t);
+        }
+        retype(Local(0), &mut f.ret);
+        for d in f.body.decls.iter_mut() {
+            retype(d.local, &mut d.ty);
+        }
+        // the fields of a tuple within a tuple, `(_6.0: (i16, i16))`
+        let mut fields = |p: &mut Place| {
+            for q in p.projection.iter_mut() {
+                if let Projection::Field(_, t) = q {
+                    if let Some(s) = tuple_struct(t, &mut made) {
+                        *t = s;
+                    }
+                }
+            }
+        };
+        for b in f.body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                s.places_mut(&mut fields);
+            }
+            b.terminator.places_mut(&mut fields);
+        }
+        // `(a, b)` into one of them: the struct built; and a tuple constant, the struct's constant
+        let types = local_types(f);
+        for s in f.body.blocks.iter_mut().flat_map(|b| b.statements.iter_mut()) {
+            let Statement::Assign(d, r) = s else { continue };
+            let Some(t) = super::front::place_ty(&types, d) else {
+                continue;
+            };
+            let element = match &t {
+                Ty::Array(e, _) => Some(&**e),
+                _ => None,
+            };
+            match r {
+                Rvalue::Tuple(ops) => {
+                    let Some(fs) = struct_fields(&t, &made) else { continue };
+                    if ops.len() != fs.len() {
+                        continue;
+                    }
+                    let built = ops
+                        .iter()
+                        .zip(fs)
+                        .enumerate()
+                        .map(|(k, (o, f))| (k.to_string(), tuple_const(o, &f.ty, &made)))
+                        .collect();
+                    let Ty::Path(p) = &t else { unreachable!() };
+                    *r = Rvalue::Struct(p.clone(), built);
+                }
+                Rvalue::Use(o) => *o = tuple_const(o, &t, &made),
+                Rvalue::Repeat(o, _) if element.is_some() => *o = tuple_const(o, element.unwrap(), &made),
+                Rvalue::Array(os) if element.is_some() => {
+                    for o in os {
+                        *o = tuple_const(o, element.unwrap(), &made);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    made
+}
+
+/// The struct a tuple type is (one of scalars, or of such tuples), an array of them, or a reference to either:
+/// that type with the struct in the tuple's place, the struct made the first time it is met.
+fn tuple_struct(t: &Ty, made: &mut Vec<(String, Vec<Field>)>) -> Option<Ty> {
+    match t {
+        Ty::Tuple(ts) => {
             let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
-            if ts.len() < 2 || !ts.iter().all(scalar) {
+            if ts.len() < 2 {
                 return None;
             }
-            let name = format!(
-                "tuple__{}",
-                ts.iter().map(|t| t.to_string()).collect::<Vec<_>>().join("_")
-            );
+            let mut fields = vec![];
+            let mut words = vec![];
+            for (k, e) in ts.iter().enumerate() {
+                let ty = if scalar(e) { e.clone() } else { tuple_struct(e, made)? };
+                // (a tuple within says how many elements it has, so that no two tuples have one name)
+                words.push(match e {
+                    Ty::Tuple(inner) => format!(
+                        "tuple{}__{}",
+                        inner.len(),
+                        struct_name_of(&ty)?.trim_start_matches("tuple__")
+                    ),
+                    e => e.to_string(),
+                });
+                fields.push(Field {
+                    name: k.to_string(),
+                    ty,
+                });
+            }
+            let name = format!("tuple__{}", words.join("_"));
             if !made.iter().any(|(m, _)| *m == name) {
-                let fields = ts
-                    .iter()
-                    .enumerate()
-                    .map(|(k, t)| Field {
-                        name: k.to_string(),
-                        ty: t.clone(),
-                    })
-                    .collect();
                 made.push((name.clone(), fields));
             }
             Some(Ty::Path(Path {
                 qself: None,
                 segments: vec![Segment::Name { name, args: None }],
             }))
-        };
-        let mut tuples: Vec<(Local, Path, usize)> = vec![];
-        let mut retype = |l: Local, t: &mut Ty, tuples: &mut Vec<(Local, Path, usize)>| {
-            if pairs.contains(&l) {
-                return;
-            }
-            let n = match t {
-                Ty::Tuple(ts) => ts.len(),
-                // a reference to one: to the struct, which a shared reference is by value
-                Ty::Ref { to, .. } => {
-                    if let Some(s) = strukt(to) {
-                        **to = s;
-                    }
-                    return;
-                }
-                _ => return,
-            };
-            if let Some(s) = strukt(t) {
-                let Ty::Path(p) = &s else { unreachable!() };
-                tuples.push((l, p.clone(), n));
-                *t = s;
-            }
-        };
-        for (l, t) in f.params.iter_mut() {
-            retype(*l, t, &mut tuples);
         }
-        retype(Local(0), &mut f.ret, &mut tuples);
-        for d in f.body.decls.iter_mut() {
-            retype(d.local, &mut d.ty, &mut tuples);
-        }
-        if tuples.is_empty() {
-            continue;
-        }
-        // `(a, b)` into one of them: the struct built
-        for s in f.body.blocks.iter_mut().flat_map(|b| b.statements.iter_mut()) {
-            if let Statement::Assign(d, r @ Rvalue::Tuple(_)) = s {
-                let Some((_, p, n)) = d.as_local().and_then(|l| tuples.iter().find(|(t, ..)| *t == l)) else {
-                    continue;
-                };
-                let Rvalue::Tuple(ops) = &*r else { unreachable!() };
-                if ops.len() == *n {
-                    *r = Rvalue::Struct(
-                        p.clone(),
-                        ops.iter()
-                            .enumerate()
-                            .map(|(k, o)| (k.to_string(), o.clone()))
-                            .collect(),
-                    );
-                }
-            }
-        }
+        Ty::Array(e, n) => Some(Ty::Array(Box::new(tuple_struct(e, made)?), n.clone())),
+        // a shared reference to one: to the struct, which a shared reference is by value
+        Ty::Ref { lifetime, mutable, to } => Some(Ty::Ref {
+            lifetime: lifetime.clone(),
+            mutable: *mutable,
+            to: Box::new(tuple_struct(to, made)?),
+        }),
+        _ => None,
     }
-    made
+}
+
+/// A one-word path type's name.
+fn struct_name_of(t: &Ty) -> Option<&str> {
+    match t {
+        Ty::Path(p) if p.is_plain() && p.segments.len() == 1 => Some(p.name()),
+        _ => None,
+    }
+}
+
+/// The fields of a tuple's struct, by its type.
+fn struct_fields<'a>(t: &Ty, made: &'a [(String, Vec<Field>)]) -> Option<&'a Vec<Field>> {
+    let name = struct_name_of(t)?;
+    made.iter().find(|(m, _)| m == name).map(|(_, fs)| fs)
+}
+
+/// A tuple constant, `const (0_i16, 0_i16)`, where the tuple is a struct of type t: the struct's constant (a tuple
+/// within, its own struct's). Any other operand as it is.
+fn tuple_const(o: &Operand, t: &Ty, made: &[(String, Vec<Field>)]) -> Operand {
+    fn adt(c: &Const, t: &Ty, made: &[(String, Vec<Field>)]) -> Option<Const> {
+        let Const::Tuple(cs) = c else { return Some(c.clone()) };
+        let fs = struct_fields(t, made)?;
+        if cs.len() != fs.len() {
+            return None;
+        }
+        let fields: Option<Vec<(String, Const)>> = cs
+            .iter()
+            .zip(fs)
+            .map(|(c, f)| Some((f.name.clone(), adt(c, &f.ty, made)?)))
+            .collect();
+        let Ty::Path(p) = t else { return None };
+        Some(Const::Adt(p.clone(), fields?))
+    }
+    match o {
+        Operand::Constant(c @ Const::Tuple(_)) => adt(c, t, made).map_or_else(|| o.clone(), Operand::Constant),
+        o => o.clone(),
+    }
 }
 
 /// A struct behind a shared reference (`fn show(p: &Pair)`, `let r = &q;`), which can't change while the reference
