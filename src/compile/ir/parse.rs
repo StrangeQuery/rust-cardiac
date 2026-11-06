@@ -509,6 +509,11 @@ impl Parser<'_> {
             if self.is_punct("(") {
                 let index = self.place()?;
                 place.projection.push(Projection::IndexPlace(Box::new(index)));
+            } else if self.eat_punct("-") {
+                let offset = self.number()? as u64;
+                self.keyword("of")?;
+                let min_length = self.number()? as u64;
+                place.projection.push(Projection::ConstantIndexFromEnd { offset, min_length });
             } else if matches!(self.peek(), Some(Tok::Int { .. })) {
                 let offset = self.number()? as u64;
                 if self.eat_punct(".") {
@@ -572,6 +577,20 @@ impl Parser<'_> {
                 .ok_or_else(|| self.error("an integer's type"))?;
             let v: i128 = digits.parse().map_err(|_| self.error("an integer that fits"))?;
             self.pos += 1;
+            // a value of a pattern type, `2_usize is 1..` (a NonZero's inside): the value
+            if self.eat_ident("is") {
+                self.eat_punct("-");
+                if matches!(self.peek(), Some(Tok::Int { .. })) {
+                    self.pos += 1;
+                }
+                self.punct(".")?;
+                self.punct(".")?;
+                self.eat_punct("=");
+                self.eat_punct("-");
+                if matches!(self.peek(), Some(Tok::Int { .. })) {
+                    self.pos += 1;
+                }
+            }
             return Ok(Const::Int {
                 value: if negative { -v } else { v },
                 ty,
@@ -924,6 +943,25 @@ impl Parser<'_> {
         Ok(args)
     }
 
+    /// A function item's type, to the brace that closes its path: its text as written.
+    fn fn_item(&mut self) -> Parsed<Ty> {
+        let start = self.toks[self.pos].start;
+        let mut depth = 0;
+        while let Some(t) = self.peek().cloned() {
+            self.pos += 1;
+            match t {
+                Tok::Punct("{") => depth += 1,
+                Tok::Punct("}") if depth == 1 => {
+                    let end = self.toks[self.pos - 1].end;
+                    return Ok(Ty::Other(self.text[start..end].to_string()));
+                }
+                Tok::Punct("}") => depth -= 1,
+                _ => {}
+            }
+        }
+        Err(self.error("a function's type"))
+    }
+
     fn ty(&mut self) -> Parsed<Ty> {
         // a closure's type, which the IR doesn't model: its text, as rustc wrote it, which is also how a closure's
         // own function gives it for its first parameter
@@ -931,6 +969,11 @@ impl Parser<'_> {
             let t = t.clone();
             self.pos += 1;
             return Ok(Ty::Other(t));
+        }
+        // a function's own type, `for<'a, 'b> fn(&'a i16, &'b i16) -> bool {<i16 as PartialOrd>::lt}`, as a closure's
+        // is: its text
+        if self.is_ident("for") || (self.is_ident("fn") && matches!(self.peek_at(1), Some(Tok::Punct("(")))) {
+            return self.fn_item();
         }
         if self.eat_punct("(") {
             if self.eat_punct(")") {

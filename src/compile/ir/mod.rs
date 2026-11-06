@@ -259,6 +259,12 @@ pub enum Projection {
         offset: u64,
         min_length: u64,
     },
+    /// `xs[-k of n]`: the kth element from the end of a slice of at least n (`last()` reads `[-1 of 1]`), which
+    /// `slices` makes a constant index or an index once the slice's length is known.
+    ConstantIndexFromEnd {
+        offset: u64,
+        min_length: u64,
+    },
     /// `xs[(r.0: usize)]`: an index read from a struct's field, as the for-loop pass writes it, until the struct
     /// pass makes the field a local of its own.
     IndexPlace(Box<Place>),
@@ -813,6 +819,7 @@ impl fmt::Display for Place {
                 Projection::Index(i) => format!("{s}[{i}]"),
                 Projection::IndexPlus(i, k) => format!("{s}[{i}+{k}]"),
                 Projection::ConstantIndex { offset, min_length } => format!("{s}[{offset} of {min_length}]"),
+                Projection::ConstantIndexFromEnd { offset, min_length } => format!("{s}[-{offset} of {min_length}]"),
                 Projection::IndexPlace(p) => format!("{s}[{p}]"),
                 Projection::Downcast(v) => format!("({s} as {v})"),
                 Projection::Subslice { from, to } => format!("{s}[{from}..{to}]"),

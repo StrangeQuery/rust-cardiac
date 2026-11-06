@@ -40,6 +40,7 @@ pub mod preconditions;
 pub mod program;
 pub mod ranges;
 pub mod runtime;
+pub mod slice_calls;
 pub mod slices;
 pub mod stack;
 pub mod structs;
@@ -686,6 +687,9 @@ fn compile(
     // other slice as its address and its length
     for n in &names {
         slices::known_lengths(fns.get_mut(n).unwrap());
+        // split_at, copy_from_slice and their kin, which rustc calls: loops over the slice
+        slice_calls::write_calls(fns.get_mut(n).unwrap());
+        slice_calls::chunks_and_windows(fns.get_mut(n).unwrap());
     }
     slices::run_time_lengths(&mut fns)?;
     for n in &names {

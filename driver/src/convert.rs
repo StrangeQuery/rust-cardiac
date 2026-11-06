@@ -847,6 +847,14 @@ impl<'tcx> Convert<'tcx> {
                     offset: *offset,
                     min_length: *min_length,
                 },
+                pmir::ProjectionElem::ConstantIndex {
+                    offset,
+                    min_length,
+                    from_end: true,
+                } => ir::Projection::ConstantIndexFromEnd {
+                    offset: *offset,
+                    min_length: *min_length,
+                },
                 pmir::ProjectionElem::Subslice {
                     from,
                     to,
@@ -858,9 +866,8 @@ impl<'tcx> Convert<'tcx> {
                     }
                     _ => return None,
                 },
-                // `[-1 of 3]` and a slice's `[1:-1]` don't parse; an opaque type's cast (`(_1 as T)`) isn't modelled
-                pmir::ProjectionElem::ConstantIndex { from_end: true, .. }
-                | pmir::ProjectionElem::Subslice { from_end: true, .. }
+                // a slice's `[1:-1]` doesn't parse; an opaque type's cast (`(_1 as T)`) isn't modelled
+                pmir::ProjectionElem::Subslice { from_end: true, .. }
                 | pmir::ProjectionElem::OpaqueCast(_) => return None,
             });
             ty = e.ty(ty).ok()?;

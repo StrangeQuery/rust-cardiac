@@ -17,3 +17,24 @@
   and is refused, as is a call that would pass such a slice on.
 - **Evidence.** The support matrix's slice_param, slice_mut, slice_on_slice, slice_len and slice_is_empty match at
   every setting; 0 rows worse; the compiler's tests and the examples unchanged.
+
+## 2026-11-06 · Core's slice methods that rustc calls are the loops they stand for
+
+- **Decision.** `slice_calls::write_calls`, between `known_lengths` and `run_time_lengths`: where rustc calls
+  them (at both opt-levels), `split_at` (its pair read field by field, each field a slice of its own),
+  `copy_from_slice`, `rotate_left`, `binary_search` and the insertion sort `sort_unstable` runs for 2 to 20
+  elements are written in the IR as plain loops over the slice, with core's checks and messages (`mid > len`,
+  the lengths not matching, `mid <= self.len()`). `binary_search` is core's own search step for step, which never
+  stops early, so it finds what core finds among equal elements and in a slice that isn't sorted; on a slice of
+  known length its halvings are known and written out, and on any other the halving is a loop of subtractions.
+  `slice_calls::chunks_and_windows`: a `Chunks` or `Windows` whose `next()` rustc calls is two locals, the rest of
+  the slice and k, and each `next()` the two slices core's makes; the `Option<&[T]>` it returns is its
+  discriminant and its slice. `insertion_sort_shift_left`'s function-item type argument and `NonZero`'s
+  pattern-typed constant (`2_usize is 1..`) are read. After the struct pass, a pointer to a whole local array
+  (or a slice of it from its start) used only as `(*p)[i]` is the array (`pointers_to_locals`), so these loops
+  index it directly. `(*s)[-k of n]`, `last()`'s, is a constant index, or an index worked out from the length.
+- **Why.** Each is a short loop the compiler writes well, and core's own bodies aren't here, or (rotate, sort)
+  move memory as a machine with a stack does.
+- **Cost.** `rotate_left(k)` turns the slice k times by one, k times n moves, where core's moves each element
+  once: the fewest cells (the support row is 87 cells). `chunks_mut`, `split_at_mut`, `rotate_right`, the other
+  sorts and searches stay refused.

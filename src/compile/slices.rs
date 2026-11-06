@@ -455,7 +455,11 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
             }
             b.statements = statements;
         }
-        // the length read, and passed
+        // the length read, and passed (an array pointer's is the length in its type)
+        let length_of = |a: Local| {
+            let n = types.get(&a).and_then(array_length).map(usize_const);
+            n.or_else(|| lengths.get(&a).cloned())
+        };
         for b in f.body.blocks.iter_mut() {
             for s in b.statements.iter_mut() {
                 if let Statement::Assign(_, r @ Rvalue::Variant(..)) = s {
@@ -464,23 +468,53 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
                         [a] => a.local(),
                         _ => None,
                     };
-                    if let (true, Some(n)) = (p.is_path(&["PtrMetadata"]), of.and_then(|a| lengths.get(&a))) {
-                        *r = Rvalue::Use(n.clone());
+                    if let (true, Some(n)) = (p.is_path(&["PtrMetadata"]), of.and_then(length_of)) {
+                        *r = Rvalue::Use(n);
                     }
                 }
             }
+            // `(*s)[-k of n]`, the kth element from the end: `[N - k of N]` of an array, of a slice `(*s)[i]` with i its
+            // length less k, worked out first
+            let mut statements = vec![];
+            for mut st in std::mem::take(&mut b.statements) {
+                let mut before = vec![];
+                st.places_mut(&mut |p: &mut Place| {
+                    let Some(s) = p.base_local() else { return };
+                    let [Projection::Deref, Projection::ConstantIndexFromEnd { offset: k, .. }, ..] = p.projection[..]
+                    else {
+                        return;
+                    };
+                    if let Some(n) = types.get(&s).and_then(array_length).filter(|n| *n >= k) {
+                        p.projection[1] = Projection::ConstantIndex {
+                            offset: n - k,
+                            min_length: n,
+                        };
+                    } else if let Some(n) = lengths.get(&s) {
+                        let i = Local(next);
+                        next += 1;
+                        decls.push(ir::Decl {
+                            local: i,
+                            mutable: true,
+                            ty: Ty::Int(IntTy::Usize),
+                        });
+                        before.push(Statement::Assign(
+                            Place::local(i),
+                            Rvalue::BinaryOp(BinOp::Sub, n.clone(), usize_const(k)),
+                        ));
+                        p.projection[1] = Projection::Index(i);
+                    }
+                });
+                statements.extend(before);
+                statements.push(st);
+            }
+            b.statements = statements;
             let Terminator::Call { func, args, .. } = &mut b.terminator else {
                 continue;
             };
             let callee = func.to_string();
             let Some(at) = sliced.get(&callee) else { continue };
             for &k in at.iter().rev() {
-                let given = args.get(k).and_then(Operand::local);
-                let n = given.and_then(|a| match types.get(&a).and_then(array_length) {
-                    Some(n) => Some(usize_const(n)),
-                    None => lengths.get(&a).cloned(),
-                });
-                let Some(n) = n else {
+                let Some(n) = args.get(k).and_then(Operand::local).and_then(length_of) else {
                     return Err(format!(
                         "{name}: a call of {callee}: the length of the slice it is passed isn't known here"
                     ));
@@ -833,9 +867,11 @@ fn whole_targets(f: &Function) -> HashMap<Local, Local> {
 
 /// A pointer assigned once, the address of a whole scalar local x (or a copy of one), and used only as `*p` (read
 /// or written) or copied into another such pointer: `*p` is x itself, and the pointers go. (A slice's `swap`
-/// moves an element through a temporary so.)
+/// moves an element through a temporary so.) Of an array x, `(*p)[i]` is `x[i]`: the pointer, an array's or a
+/// slice's, holds the address of x's first element (the loops `slice_calls` writes index a slice so).
 pub fn pointers_to_locals(f: &mut Function) {
     let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+    let array = |t: &Ty| matches!(t, Ty::Array(e, ArrayLen::Known(_)) if scalar(e));
     let types: HashMap<Local, Ty> = f
         .params
         .iter()
@@ -846,7 +882,7 @@ pub fn pointers_to_locals(f: &mut Function) {
         .into_iter()
         .filter(|(p, x)| {
             matches!(types.get(p), Some(Ty::Ref { .. } | Ty::Ptr { .. }))
-                && types.get(x).is_some_and(scalar)
+                && types.get(x).is_some_and(|t| scalar(t) || array(t))
                 && *p != Local(0)
                 && !f.results.contains(p)
         })
@@ -872,8 +908,16 @@ pub fn pointers_to_locals(f: &mut Function) {
                 .iter()
                 .flat_map(|s| s.places())
                 .chain(b.terminator.places());
+            let of_array = types.get(&targets[&p]).is_some_and(array);
             n += places
-                .filter(|q| q.base_local() == Some(p) && q.projection.as_slice() == [Projection::Deref])
+                .filter(|q| {
+                    q.base_local() == Some(p)
+                        && match q.projection.as_slice() {
+                            [Projection::Deref] => !of_array,
+                            [Projection::Deref, Projection::Index(_) | Projection::ConstantIndex { .. }] => of_array,
+                            _ => false,
+                        }
+                })
                 .count();
         }
         n == ir::occurrences(&f.body.blocks, p)
@@ -910,9 +954,10 @@ pub fn pointers_to_locals(f: &mut Function) {
                 && !matches!(s, Statement::StorageLive(l) | Statement::StorageDead(l) if gone.contains(l))
         });
         let mut to_x = |q: &mut Place| {
-            if let (Some(p), [Projection::Deref]) = (q.base_local(), q.projection.as_slice()) {
+            if let (Some(p), [Projection::Deref, ..]) = (q.base_local(), q.projection.as_slice()) {
                 if gone.contains(&p) {
-                    *q = Place::local(targets[&p]);
+                    q.base = PlaceBase::Local(targets[&p]);
+                    q.projection.remove(0);
                 }
             }
         };
