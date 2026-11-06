@@ -208,6 +208,46 @@ pub fn c_like_enums(file: &mut File, defs: &[EnumDef]) -> Result<(), Fail> {
                     *c = Const::Int { value, ty: IntTy::I16 };
                 }
             }
+            // a variant named alone in another enum's constant, `Option::<Ordering>::Some(Equal)`: of the one C-like
+            // enum among the constant's type arguments that has a variant of that name
+            if let Const::Variant(p, fields) = c {
+                let args: Vec<&Path> = p
+                    .segments
+                    .iter()
+                    .filter_map(|s| match s {
+                        Segment::Name { args: Some(a), .. } => Some(&a.args),
+                        _ => None,
+                    })
+                    .flatten()
+                    .filter_map(|a| match a {
+                        GenericArg::Ty(Ty::Path(e)) if self.0.is_enum(e) => Some(e),
+                        _ => None,
+                    })
+                    .collect();
+                for f in fields.iter_mut() {
+                    let Const::Path(v) = f else { continue };
+                    let [Segment::Name { name, args: None }] = v.segments.as_slice() else {
+                        continue;
+                    };
+                    let numbered: Vec<i128> = args
+                        .iter()
+                        .filter_map(|e| {
+                            let mut named = (*e).clone();
+                            named.segments.push(Segment::Name {
+                                name: name.clone(),
+                                args: None,
+                            });
+                            self.0.variant(&named)
+                        })
+                        .collect();
+                    if let ([value], None) = (numbered.as_slice(), &v.qself) {
+                        *f = Const::Int {
+                            value: *value,
+                            ty: IntTy::I16,
+                        };
+                    }
+                }
+            }
             walk_const(self, c)
         }
         // a call's path keeps the enum's name: `<Colour as PartialEq>::eq` names the impl's function, as the

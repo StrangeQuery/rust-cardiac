@@ -72,3 +72,16 @@
 - **Evidence.** option_zip matches at every setting (44 and 69 cells). Probes matching native Rust at the four
   settings: a zip of an `Option<i16>` and an `Option<bool>` matched on both, `Option<(i16, i16)>` returned from a
   function and `Option<(i16, u8)>` passed to one, and an `Option<((i16, i16), bool)>`.
+
+## 2026-11-06 · `<` between two `Option`s: a comparison's constant `Some(Equal)` is its number
+
+- **Decision.** The C-like pass numbers a variant named alone inside another enum's constant,
+  `const Option::<Ordering>::Some(Equal)` (rustc's `partial_cmp` of two `Option`s, inlined), by the one C-like
+  enum among the constant's type arguments that has a variant of that name. And where the for-loop pass makes an
+  `Option` that is only ever read as `Some`'s value its value (`Some(x), unwrapped at once`), a constant `Some(c)`
+  it is set to elsewhere is `c` too; before, that line was left, and the program refused.
+- **Why.** `o < p` of two `Option<i16>`s is a choice among four `Some` of an `Ordering`, read straight back.
+- **Cost.** None to other programs.
+- **Evidence.** option_lt matches at every setting (69 cells). `<`, `<=`, `>` and `>=` of two `Option<i16>`s over
+  every pair of `None`, below, equal and above, an `Option<u8>` against `Some(3)` and `None < o`, match native
+  Rust at the four settings. `o.cmp(&p)` and `o.max(p)` stay refused (core's `Ord` for `Option`, a call).
