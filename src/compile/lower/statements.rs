@@ -19,7 +19,7 @@ fn repeatable(o: &ir::Operand) -> bool {
             Projection::Field(_, t) => !matches!(t, Ty::Array(..) | Ty::Slice(_)),
             _ => false,
         }),
-        ir::Operand::Aggregate(..) => false,
+        ir::Operand::Aggregate(..) | ir::Operand::Fn(_) => false,
     }
 }
 
@@ -286,22 +286,18 @@ impl<'a> Lowering<'a> {
             Rvalue::BinaryOp(op @ (BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor), x, y)
                 if [x, y].iter().any(|o| matches!(self.operand_ty(o), Some(Ty::Int(_)))) =>
             {
-                // on integers: only `x & m` for a mask m one below a power of two, which is x.rem_euclid(m + 1)
+                // `x & m` for a mask m one below a power of two is x.rem_euclid(m + 1); anything else, the routine
                 let mask = |o: &ir::Operand| o.int().map(|(k, _)| k).filter(|&k| k >= 0 && (k + 1) & k == 0);
-                let (x, m) = match (*op, mask(y), mask(x)) {
-                    (BinOp::BitAnd, Some(m), _) => (x, m),
-                    (BinOp::BitAnd, None, Some(m)) => (y, m),
-                    _ => fail!(
-                        "{} on integers is not supported (only x & m, for m one below a power of two): {src}",
-                        op.name()
-                    ),
-                };
-                self.mask(src, dest, x, m as i64)
+                match (*op, mask(y), mask(x)) {
+                    (BinOp::BitAnd, Some(m), _) => self.mask(src, dest, x, m as i64),
+                    (BinOp::BitAnd, None, Some(m)) => self.mask(src, dest, y, m as i64),
+                    _ => self.bitwise(src, dest, *op, x, y),
+                }
             }
-            Rvalue::BinaryOp(op @ (BinOp::Shl | BinOp::Shr), ..) => {
-                // those by a constant on an i16 or a u8 are arithmetic already (`methods::inline_operators`)
-                let name = if *op == BinOp::Shl { "<<" } else { ">>" };
-                fail!("{name} is supported by a constant, up to 9 on an i16 and 7 on a u8: {src}")
+            Rvalue::BinaryOp(op @ (BinOp::Shl | BinOp::Shr), x, y) => {
+                // by a constant on an i16 or a u8 they are arithmetic already (`methods::inline_operators`), up to 9
+                // and 7; a routine for the rest
+                self.shift(src, dest, *op == BinOp::Shl, x, y)
             }
             Rvalue::BinaryOp(op @ (BinOp::BitAnd | BinOp::BitOr), x, y) => {
                 // bools only (integers are above): and = a * b, or = a + b - a b

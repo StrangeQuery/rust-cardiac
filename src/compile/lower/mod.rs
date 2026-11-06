@@ -45,6 +45,12 @@ pub struct Pool {
     pub skip: bool,
     /// add_times(): the row of ADD c
     pub times: bool,
+    /// `&`, `|` and `^` between integers, each a routine of its own
+    pub bitwise: Vec<super::runtime::BitRoutine>,
+    /// `>>` and `<<` by a variable: an i16's or a u8's `>>`, an i16's `<<`, a u8's `<<`
+    pub shr: bool,
+    pub shl: bool,
+    pub shl8: bool,
 }
 
 impl Pool {
@@ -146,7 +152,7 @@ fn bare(o: &ir::Operand) -> String {
     match o {
         ir::Operand::Copy(p) | ir::Operand::Move(p) | ir::Operand::Place(p) => p.to_string(),
         ir::Operand::Constant(c) => format!("const {c}"),
-        ir::Operand::Aggregate(..) => o.to_string(),
+        ir::Operand::Aggregate(..) | ir::Operand::Fn(_) => o.to_string(),
     }
 }
 
@@ -188,6 +194,8 @@ pub fn check_message(msg: &str) -> String {
             "attempt to calculate the remainder with overflow".into()
         }
         "attempt to negate `{}`, which would overflow" => "attempt to negate with overflow".into(),
+        "attempt to shift left by `{}`, which would overflow" => "attempt to shift left with overflow".into(),
+        "attempt to shift right by `{}`, which would overflow" => "attempt to shift right with overflow".into(),
         "attempt to divide `{}` by zero" => "attempt to divide by zero".into(),
         "attempt to calculate the remainder of `{}` with a divisor of zero" => {
             "attempt to calculate the remainder with a divisor of zero".into()

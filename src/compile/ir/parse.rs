@@ -233,6 +233,17 @@ impl Parser<'_> {
             {
                 CoercionSource::from_name(source).map(CastKind::Unsize)
             }
+            // a safe function's pointer: `PointerCoercion(ReifyFnPointer(Safe), Implicit)`
+            [Tok::Ident(c), Tok::Punct("("), Tok::Ident(kind), Tok::Punct("("), Tok::Ident(safe), Tok::Punct(")"), Tok::Punct(","), Tok::Ident(source), Tok::Punct(")")]
+                if c == "PointerCoercion" && safe == "Safe" =>
+            {
+                let source = CoercionSource::from_name(source);
+                match kind.as_str() {
+                    "ReifyFnPointer" => source.map(CastKind::ReifyFnPointer),
+                    "ClosureFnPointer" => source.map(CastKind::ClosureFnPointer),
+                    _ => None,
+                }
+            }
             _ => None,
         };
         known.unwrap_or_else(|| {
@@ -313,6 +324,9 @@ impl Parser<'_> {
         let dest = self.place()?;
         self.punct("=")?;
         if let Some(call) = self.try_call(&dest)? {
+            return Ok(Line::Terminator(call));
+        }
+        if let Some(call) = self.try_indirect_call(&dest)? {
             return Ok(Line::Terminator(call));
         }
         let r = self.rvalue()?;
@@ -424,6 +438,44 @@ impl Parser<'_> {
             self.pos = back;
             return Ok(None);
         };
+        let Some((args, target, unwind)) = self.call_rest(back)? else {
+            return Ok(None);
+        };
+        Ok(Some(Terminator::Call {
+            dest: dest.clone(),
+            func,
+            args,
+            target,
+            unwind,
+        }))
+    }
+
+    /// `copy _3(args) -> [return: bbN, unwind ...];`, a call through a function pointer, if that is what follows.
+    fn try_indirect_call(&mut self, dest: &Place) -> Parsed<Option<Terminator>> {
+        let back = self.pos;
+        if !(self.is_ident("copy") || self.is_ident("move")) {
+            return Ok(None);
+        }
+        let Ok(func) = self.operand() else {
+            self.pos = back;
+            return Ok(None);
+        };
+        let Some((args, target, unwind)) = self.call_rest(back)? else {
+            return Ok(None);
+        };
+        Ok(Some(Terminator::CallIndirect {
+            dest: dest.clone(),
+            func,
+            args,
+            target,
+            unwind,
+        }))
+    }
+
+    /// A call's arguments, where it returns to, and its unwind, after what it calls: `(args) -> [return: bbN, unwind
+    /// ...];`. None, and back at `back`, if no call's follow.
+    #[allow(clippy::type_complexity)]
+    fn call_rest(&mut self, back: usize) -> Parsed<Option<(Vec<Operand>, Option<BasicBlock>, Unwind)>> {
         if !self.eat_punct("(") {
             self.pos = back;
             return Ok(None);
@@ -461,13 +513,7 @@ impl Parser<'_> {
             (None, self.unwind()?)
         };
         self.punct(";")?;
-        Ok(Some(Terminator::Call {
-            dest: dest.clone(),
-            func,
-            args,
-            target,
-            unwind,
-        }))
+        Ok(Some((args, target, unwind)))
     }
 
     // ---- places and operands ----
@@ -602,8 +648,11 @@ impl Parser<'_> {
         // a value of a type with no bytes (a closure that captures nothing): `ZeroSized: {closure@...}`
         if self.is_ident("ZeroSized") && self.peek_at(1) == Some(&Tok::Punct(":")) {
             self.pos += 2;
-            self.ty()?;
-            return Ok(Const::Unit);
+            // (a closure's type is the one the parser keeps as text)
+            return Ok(match self.ty()? {
+                t @ Ty::Other(_) => Const::ZeroSized(t),
+                _ => Const::Unit,
+            });
         }
         if self.eat_ident("true") {
             return Ok(Const::Bool(true));
@@ -614,6 +663,15 @@ impl Parser<'_> {
         if self.is_punct("(") && self.peek_at(1) == Some(&Tok::Punct(")")) {
             self.pos += 2;
             return Ok(Const::Unit);
+        }
+        // a tuple's value, `(10_i16,)` or `(1_i16, 2_i16)`
+        if self.eat_punct("(") {
+            let mut values = vec![self.constant()?];
+            while self.eat_punct(",") && !self.is_punct(")") {
+                values.push(self.constant()?);
+            }
+            self.punct(")")?;
+            return Ok(Const::Tuple(values));
         }
         if let Some(Tok::Str(s)) = self.peek() {
             let s = s.clone();
@@ -693,10 +751,6 @@ impl Parser<'_> {
     // ---- rvalues ----
 
     fn rvalue(&mut self) -> Parsed<Rvalue> {
-        // `no_retag copy _1`: a copy rustc marks for Miri's aliasing model alone, and a copy here
-        if self.eat_ident("no_retag") {
-            return Ok(Rvalue::Use(self.operand()?));
-        }
         if self.eat_punct("&") {
             let kind = if self.eat_ident("raw") {
                 if self.eat_ident("mut") {
@@ -749,11 +803,40 @@ impl Parser<'_> {
         {
             self.pos += 1;
             let mut items = vec![self.operand()?];
-            while self.eat_punct(",") {
+            // (a tuple of one is `(copy _2,)`)
+            while self.eat_punct(",") && !self.is_punct(")") {
                 items.push(self.operand()?);
             }
             self.punct(")")?;
             return Ok(Rvalue::Tuple(items));
+        }
+        // a closure built of what it captures: `{closure@src/main.rs:9:15: 9:18} { k: copy _5 }`
+        if let (Some(Tok::Closure(t)), Some(Tok::Punct("{"))) = (self.peek(), self.peek_at(1)) {
+            let t = Ty::Other(t.clone());
+            self.pos += 2;
+            let mut fields = vec![];
+            loop {
+                // (a capture is named by its variable, or numbered)
+                let name = match self.peek() {
+                    Some(Tok::Int { digits, suffix: None }) => {
+                        let n = digits.clone();
+                        self.pos += 1;
+                        n
+                    }
+                    _ => self.ident()?,
+                };
+                self.punct(":")?;
+                fields.push((name, self.operand()?));
+                if !self.eat_punct(",") {
+                    break;
+                }
+            }
+            self.punct("}")?;
+            return Ok(Rvalue::Closure(t, fields));
+        }
+        // a copy without a retag, `no_retag copy ((*_1).0: &i16)`: a copy (retags are for Miri's aliasing model)
+        if self.eat_ident("no_retag") {
+            return Ok(Rvalue::Use(self.operand()?));
         }
         if starts_operand(self)
             || self.is_punct("(")
@@ -762,23 +845,7 @@ impl Parser<'_> {
         {
             let o = self.operand()?;
             if self.eat_ident("as") {
-                let t = self.ty()?;
-                self.punct("(")?;
-                let from = self.pos;
-                let mut depth = 1;
-                while depth > 0 {
-                    match self.peek() {
-                        Some(Tok::Punct("(")) => depth += 1,
-                        Some(Tok::Punct(")")) => depth -= 1,
-                        None => return Err(self.error("`)`")),
-                        _ => {}
-                    }
-                    self.pos += 1;
-                }
-                self.pos -= 1;
-                let kind = self.cast_kind(from);
-                self.pos += 1;
-                return Ok(Rvalue::Cast(o, t, kind));
+                return self.cast(o);
             }
             return Ok(Rvalue::Use(o));
         }
@@ -828,6 +895,10 @@ impl Parser<'_> {
             return Ok(Rvalue::Discriminant(p));
         }
         let path = self.path(true)?;
+        // a function made a pointer: `double as fn(i16) -> i16 (PointerCoercion(ReifyFnPointer(Safe), Implicit))`
+        if self.eat_ident("as") {
+            return self.cast(Operand::Fn(path));
+        }
         if self.eat_punct("{") {
             let mut fields = vec![];
             loop {
@@ -871,6 +942,27 @@ impl Parser<'_> {
             }
         }
         Ok(Rvalue::Variant(path, args))
+    }
+
+    /// A cast of `o`, after its `as`: the type, then the kind in parentheses.
+    fn cast(&mut self, o: Operand) -> Parsed<Rvalue> {
+        let t = self.ty()?;
+        self.punct("(")?;
+        let from = self.pos;
+        let mut depth = 1;
+        while depth > 0 {
+            match self.peek() {
+                Some(Tok::Punct("(")) => depth += 1,
+                Some(Tok::Punct(")")) => depth -= 1,
+                None => return Err(self.error("`)`")),
+                _ => {}
+            }
+            self.pos += 1;
+        }
+        self.pos -= 1;
+        let kind = self.cast_kind(from);
+        self.pos += 1;
+        Ok(Rvalue::Cast(o, t, kind))
     }
 
     // ---- paths and types ----
@@ -947,9 +1039,10 @@ impl Parser<'_> {
         Ok(args)
     }
 
-    /// A function item's type, to the brace that closes its path: its text as written.
-    fn fn_item(&mut self) -> Parsed<Ty> {
-        let start = self.toks[self.pos].start;
+    /// A function item's type, from the token at `from` to the brace that closes its path, the parser at its opening
+    /// brace: its text as written.
+    fn fn_item(&mut self, from: usize) -> Parsed<Ty> {
+        let start = self.toks[from].start;
         let mut depth = 0;
         while let Some(t) = self.peek().cloned() {
             self.pos += 1;
@@ -973,11 +1066,6 @@ impl Parser<'_> {
             let t = t.clone();
             self.pos += 1;
             return Ok(Ty::Other(t));
-        }
-        // a function's own type, `for<'a, 'b> fn(&'a i16, &'b i16) -> bool {<i16 as PartialOrd>::lt}`, as a closure's
-        // is: its text
-        if self.is_ident("for") || (self.is_ident("fn") && matches!(self.peek_at(1), Some(Tok::Punct("(")))) {
-            return self.fn_item();
         }
         if self.eat_punct("(") {
             if self.eat_punct(")") {
@@ -1040,6 +1128,53 @@ impl Parser<'_> {
         if self.eat_ident("dyn") {
             return Ok(Ty::Dyn(self.path(false)?));
         }
+        // a function pointer, `fn(i16, bool) -> i16`, or `fn(i16)` for one that returns `()`; with references,
+        // `for<'a> fn(&'a P) -> i16`, which is `fn(&P) -> i16`
+        let back = self.pos;
+        let mut bound = vec![];
+        if self.eat_ident("for") && self.eat_punct("<") {
+            loop {
+                match self.peek() {
+                    Some(Tok::Lifetime(l)) => {
+                        bound.push(l.clone());
+                        self.pos += 1;
+                    }
+                    _ => return Err(self.error("a lifetime")),
+                }
+                if !self.eat_punct(",") {
+                    break;
+                }
+            }
+            self.punct(">")?;
+            if !self.is_ident("fn") {
+                self.pos = back;
+            }
+        }
+        if self.is_ident("fn") && self.peek_at(1) == Some(&Tok::Punct("(")) {
+            self.pos += 2;
+            let mut params = vec![];
+            if !self.eat_punct(")") {
+                loop {
+                    params.push(self.ty()?);
+                    if !self.eat_punct(",") {
+                        break;
+                    }
+                }
+                self.punct(")")?;
+            }
+            let ret = if self.eat_punct("->") { self.ty()? } else { Ty::Unit };
+            // a function's own type, `for<'a, 'b> fn(&'a i16, &'b i16) -> bool {<i16 as PartialOrd>::lt}`, as a
+            // closure's is: its text
+            if self.is_punct("{") {
+                return self.fn_item(back);
+            }
+            let mut t = Ty::FnPtr {
+                params,
+                ret: Box::new(ret),
+            };
+            super::visit_mut::VisitMut::visit_ty(&mut Unbound(&bound), &mut t);
+            return Ok(t);
+        }
         let path = self.path(false)?;
         let simple = path.qself.is_none()
             && path.segments.len() == 1
@@ -1057,6 +1192,20 @@ impl Parser<'_> {
             }
         }
         Ok(Ty::Path(path))
+    }
+}
+
+/// A function pointer's references with the lifetimes it is generic over (`for<'a>`) left out, as Rust lets them be.
+struct Unbound<'a>(&'a [String]);
+
+impl super::visit_mut::VisitMut for Unbound<'_> {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if let Ty::Ref { lifetime, .. } = t {
+            if lifetime.as_ref().is_some_and(|l| self.0.contains(l)) {
+                *lifetime = None;
+            }
+        }
+        super::visit_mut::walk_ty(self, t)
     }
 }
 
@@ -1160,6 +1309,14 @@ mod tests {
                 "_3 = copy _4 as *const u8 (PointerCoercion(ReifyFnPointer, AsCast));",
                 CastKind::Other("PointerCoercion(ReifyFnPointer, AsCast)".into()),
             ),
+            (
+                "_2 = double as fn(i16) -> i16 (PointerCoercion(ReifyFnPointer(Safe), Implicit));",
+                CastKind::ReifyFnPointer(CoercionSource::Implicit),
+            ),
+            (
+                "_2 = const ZeroSized: {closure@src/main.rs:4:13: 4:16} as fn(i16) (PointerCoercion(ClosureFnPointer(Safe), AsCast));",
+                CastKind::ClosureFnPointer(CoercionSource::AsCast),
+            ),
             ("_2 = copy _1 as u16 (Novel);", CastKind::Other("Novel".into())),
             ("_2 = copy _1 as u16 ();", CastKind::Other(String::new())),
         ];
@@ -1167,5 +1324,30 @@ mod tests {
             assert_eq!(cast_kind(line), kind);
             assert_eq!(parse_line(line).unwrap().to_string(), line);
         }
+    }
+
+    #[test]
+    fn function_pointers_read_and_print_back_as_rustc_writes_them() {
+        let ty = |t: &str| parse_ty(t).unwrap();
+        assert_eq!(
+            ty("fn(i16, bool) -> i16"),
+            Ty::FnPtr {
+                params: vec![Ty::Int(IntTy::I16), Ty::Bool],
+                ret: Box::new(Ty::Int(IntTy::I16))
+            }
+        );
+        assert_eq!(ty("fn(i16)").to_string(), "fn(i16)");
+        assert_eq!(ty("[fn() -> u8; 3]").to_string(), "[fn() -> u8; 3]");
+        // the lifetimes it is generic over are left out, as Rust lets them be
+        assert_eq!(ty("for<'a> fn(&'a mut i16)"), ty("fn(&mut i16)"));
+        // an unsafe function's pointer is a type the IR doesn't read
+        assert!(parse_ty("unsafe fn(i16)").is_err());
+        let call = "_7 = copy _8(move _10) -> [return: bb4, unwind continue];";
+        let Ok(Line::Terminator(t @ Terminator::CallIndirect { .. })) = parse_line(call) else {
+            panic!("not a call through a pointer: {call}")
+        };
+        assert_eq!(t.to_string(), call);
+        let called = "_7 = copy (*_1)(const 3_i16) -> unwind continue;";
+        assert_eq!(parse_line(called).unwrap().to_string(), called);
     }
 }

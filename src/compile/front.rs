@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use super::ir::visit_mut::{walk_const, walk_operand, walk_path, walk_rvalue, walk_terminator, walk_ty, VisitMut};
 use super::ir::{
-    ArrayLen, BinOp, Block, Body, CastKind, Const, ConstItem, ConstValue, File, IntTy, Item, Local, Operand, Path,
-    Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp,
+    ArrayLen, BinOp, Block, Body, CastKind, Const, ConstItem, ConstValue, File, IntTy, Item, ItemPath, Local, Operand,
+    Path, Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp,
 };
 use super::structs::Function;
 use super::util::Ordered;
@@ -42,9 +42,15 @@ const CORE_MODULES: [&str; 14] = [
     "clone",
 ];
 
-/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, and its
-/// statics.
-pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>, Statics);
+/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, its
+/// statics, and the enums its trait objects are (`indirect::trait_objects`).
+pub type FrontEnd = (
+    File,
+    Ordered<String, Function>,
+    HashMap<String, i64>,
+    Statics,
+    Vec<super::enums::EnumDef>,
+);
 
 /// The program's statics, each a fixed run of cells, as every variable on CARDIAC is: what each holds first, by the
 /// static's name, and the static each allocation a body points into is (`{alloc1: *mut i16}`).
@@ -54,9 +60,85 @@ pub struct Statics {
     pub of_alloc: HashMap<String, String>,
 }
 
+/// The overflow checks that codegen leaves out where the build's overflow checks are off: `+`, `-`, `*`, a
+/// negation and the shifts. rustc writes none in a crate built without them, but it keeps those of core's code it
+/// inlines that inherits the caller's (`#[rustc_inherit_overflow_checks]`, as `next_power_of_two`'s `+ 1` does),
+/// and the build that runs natively doesn't check them. A divide's are always made.
+const INHERITED_CHECKS: [&str; 6] = [
+    "attempt to compute `{} + {}`, which would overflow",
+    "attempt to compute `{} - {}`, which would overflow",
+    "attempt to compute `{} * {}`, which would overflow",
+    "attempt to negate `{}`, which would overflow",
+    "attempt to shift left by `{}`, which would overflow",
+    "attempt to shift right by `{}`, which would overflow",
+];
+
+/// For a build without overflow checks (the driver knows the session's): each of those checks goes on to its
+/// target, as the native build does. The checked operation it read the flag of is then the plain one, into the
+/// pair's value, where nothing else reads the flag (a u8's then wraps, `ranges::mark_wrapping`).
+pub fn drop_inherited_overflow_checks(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let body = &mut f.body;
+        for bi in 0..body.blocks.len() {
+            let Terminator::Assert { cond, msg, target, .. } = &body.blocks[bi].terminator else {
+                continue;
+            };
+            if !INHERITED_CHECKS.contains(&msg.as_str()) {
+                continue;
+            }
+            // the flag, `_t.1`
+            let flag = cond
+                .place()
+                .filter(|p| matches!(p.projection.as_slice(), [Projection::Field(1, _)]))
+                .and_then(|p| p.base_local());
+            body.blocks[bi].terminator = Terminator::Goto(*target);
+            let Some(t) = flag else { continue };
+            let read_whole_or_flag = body.blocks.iter().any(|b| {
+                // what each statement reads: its places but the one an assignment writes
+                let read = b.statements.iter().flat_map(|s| {
+                    let skip = usize::from(matches!(s, Statement::Assign(..)));
+                    s.places().into_iter().skip(skip)
+                });
+                read.chain(b.terminator.places()).any(|p| {
+                    p.base_local() == Some(t) && !matches!(p.projection.first(), Some(Projection::Field(0, _)))
+                })
+            });
+            let Some(Ty::Tuple(fields)) = body.decls.iter().find(|d| d.local == t).map(|d| &d.ty) else {
+                continue;
+            };
+            let (false, Some(value)) = (read_whole_or_flag, fields.first().cloned()) else {
+                continue;
+            };
+            for s in &mut body.blocks[bi].statements {
+                if let Statement::Assign(d, Rvalue::BinaryOp(op, a, c)) = s {
+                    let plain = match op {
+                        BinOp::AddWithOverflow => BinOp::Add,
+                        BinOp::SubWithOverflow => BinOp::Sub,
+                        BinOp::MulWithOverflow => BinOp::Mul,
+                        _ => continue,
+                    };
+                    if d.as_local() == Some(t) {
+                        *s = Statement::Assign(
+                            Place::field(t, 0, value.clone()),
+                            Rvalue::BinaryOp(plain, a.clone(), c.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
+    // function pointers as numbers, and trait objects as enums, with calls through them as calls of what they can
+    // be (after the promoteds, which may make them)
+    super::indirect::function_pointers(&mut file);
+    let objects = super::indirect::trait_objects(&mut file);
+    // a closure that captures, a struct; one called through its trait, a call of its function
+    super::closures::closures_as_structs(&mut file);
     super::panic_messages::literal_panics(&mut file);
     strings_as_bytes(&mut file);
     byte_strings(&mut file);
@@ -72,9 +154,12 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     let widened = widened_in_core(&file);
-    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
+    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type; first those
+    // `wide_locals` can't make cells, as all a u16's values are
+    super::wide::u16_cells(&mut file);
     super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
+    file.visit(&mut IsizeIsI16);
     file.visit(&mut PastACardDivisor);
     file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
@@ -91,7 +176,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
             f.widened = Some(p);
         }
     }
-    Ok((file, fns, named, statics))
+    Ok((file, fns, named, statics, objects))
 }
 
 /// `<T as PartialEq>::ne(a, b)`, which rustc calls at opt-level 1 and s for a derived `!=`: `PartialEq`'s own `ne`,
@@ -1005,6 +1090,42 @@ impl VisitMut for I32IsI16 {
     }
 }
 
+/// An isize is an i16, as a C-like enum's discriminant already is (`enums`): what a card holds, an isize holds too,
+/// and past a card it panics or keeps three digits as an i16 does. (A cast of one to a usize, or of a usize to one,
+/// is then an i16's: -1 is usize::MAX, held below 0, and back.)
+struct IsizeIsI16;
+
+impl VisitMut for IsizeIsI16 {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if *t == Ty::Int(IntTy::Isize) {
+            *t = Ty::Int(IntTy::I16);
+        }
+        walk_ty(self, t)
+    }
+
+    fn visit_const(&mut self, c: &mut Const) {
+        if let Const::Int {
+            ty: ty @ IntTy::Isize, ..
+        } = c
+        {
+            *ty = IntTy::I16;
+        }
+        walk_const(self, c)
+    }
+
+    /// `isize::MAX`, which no card holds, as `i16::MAX` is refused
+    fn visit_path(&mut self, p: &mut Path) {
+        for s in &mut p.segments {
+            if let Segment::Name { name, .. } = s {
+                if name == "isize" {
+                    *name = "i16".into();
+                }
+            }
+        }
+        walk_path(self, p)
+    }
+}
+
 struct StdIsCore;
 
 impl VisitMut for StdIsCore {
@@ -1400,6 +1521,16 @@ fn word(w: &str) -> bool {
     !w.is_empty() && w.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
+/// A closure's own function, `main::{closure#0}`, by the name the compiler reads it as, `main_closure0` (a call
+/// to it is `map`'s, say).
+pub(super) fn closure_name(path: &ItemPath) -> Option<String> {
+    let [owner, c] = path.segments.as_slice() else {
+        return None;
+    };
+    let n = c.strip_prefix("{closure#")?.strip_suffix('}')?;
+    (word(owner) && word(n) && n.bytes().all(|b| b.is_ascii_digit())).then(|| format!("{owner}_closure{n}"))
+}
+
 /// The functions the compiler reads: those named by one plain name (not an impl's), and closures' (as
 /// `OWNER_closureN`), in the order the file gives them. Of two of the same name (a const fn and its `// MIR FOR CTFE` copy), the later body is the one kept, in
 /// the earlier one's place.
@@ -1408,10 +1539,9 @@ fn functions(file: &File) -> Ordered<String, Function> {
     for item in &file.items {
         let Item::Fn(f) = item else { continue };
         let name = match f.path.segments.as_slice() {
-            // a closure's own function, `main::{closure#0}`, as `main_closure0` (a call to it is `map`'s)
-            [owner, c] if word(owner) => match c.strip_prefix("{closure#").and_then(|c| c.strip_suffix('}')) {
-                Some(n) if n.bytes().all(|b| b.is_ascii_digit()) => format!("{owner}_closure{n}"),
-                _ => continue,
+            [owner, _] if word(owner) => match closure_name(&f.path) {
+                Some(name) => name,
+                None => continue,
             },
             _ => match f.path.single().filter(|_| f.path.is_plain()) {
                 Some(name) => name.to_string(),

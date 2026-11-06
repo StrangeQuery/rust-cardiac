@@ -7,6 +7,14 @@ use crate::compile::Fail;
 use super::places::{range_of, Loc, Value};
 use super::symbols::shift;
 use super::{Cell, Lowering, Sym};
+use crate::compile::runtime::{BitRoutine, Bitwise};
+
+/// The routine a shift by a variable calls.
+enum Shift {
+    Shr,
+    Shl,
+    Shl8,
+}
 
 /// The plain operation an overflow-checked one does.
 pub(super) fn plain_op(op: BinOp) -> BinOp {
@@ -57,16 +65,22 @@ impl<'a> Lowering<'a> {
     }
 
     /// `x & m` on an integer, m one below a power of two: x.rem_euclid(m + 1), as two's complement has it (a usize
-    /// past a card, held below 0, too). Subtract m + 1 until the accumulator goes negative, then step back once; a
-    /// negative x first has m + 1 added until it is not.
+    /// past a card, held below 0, too).
     pub(super) fn mask(&mut self, src: &str, dest: &ir::Place, x: &ir::Operand, m: i64) -> Result<(), Fail> {
         let dst = self.place_any(dest)?;
+        self.mask_acc(src, x, m)?;
+        self.store(&dst, "")
+    }
+
+    /// `x & m` into the accumulator. Subtract m + 1 until the accumulator goes negative, then step back once; a
+    /// negative x first has m + 1 added until it is not.
+    fn mask_acc(&mut self, src: &str, x: &ir::Operand, m: i64) -> Result<(), Fail> {
         let a = self.operand(x)?;
         let a = self.mat(a);
         if m == 0 {
             let z = self.konst(0);
             self.emit_c(Op::Cla, z, src);
-            return self.store(&dst, "");
+            return Ok(());
         }
         // a u8, or a usize that can't be past a card, is never below 0
         let never_negative = match self.operand_ty(x) {
@@ -92,6 +106,106 @@ impl<'a> Lowering<'a> {
         }
         self.define(&done);
         self.emit(Op::Add, k);
+        Ok(())
+    }
+
+    /// `x & y`, `x | y` or `x ^ y` of two integers by the routine for it (`runtime::bitwise`): on a card, as two's
+    /// complement has it, whatever the type (a u8's and an i8's bits are an i16's too); past a card it panics.
+    pub(super) fn bitwise(
+        &mut self,
+        src: &str,
+        dest: &ir::Place,
+        op: BinOp,
+        x: &ir::Operand,
+        y: &ir::Operand,
+    ) -> Result<(), Fail> {
+        let on_a_card = |l: &Self, o: &ir::Operand| match l.operand_ty(o) {
+            Some(Ty::Int(IntTy::I16 | IntTy::I8 | IntTy::U8)) => true,
+            Some(Ty::Int(IntTy::Usize)) => !l.is_huge(o),
+            _ => false,
+        };
+        if !on_a_card(self, x) || !on_a_card(self, y) {
+            fail!("{} is supported on i16, i8, u8 and usize, not here: {src}", op.name())
+        }
+        let op = match op {
+            BinOp::BitAnd => Bitwise::And,
+            BinOp::BitOr => Bitwise::Or,
+            _ => Bitwise::Xor,
+        };
+        // two u8s are never below 0, and stay below 256
+        let byte = [x, y].iter().all(|o| self.operand_ty(o) == Some(Ty::Int(IntTy::U8)));
+        let routine = BitRoutine { op, byte };
+        if !self.sh.pool.bitwise.contains(&routine) {
+            self.sh.pool.bitwise.push(routine);
+        }
+        let [entry, ca, cb] = routine.cells();
+        let dst = self.place_any(dest)?;
+        let a = self.operand(x)?;
+        let a = self.mat(a);
+        let b = self.operand(y)?;
+        let b = self.mat(b);
+        let at = self.code.len();
+        self.pass(&a, &Sym::Runtime(ca), src)?;
+        self.pass(&b, &Sym::Runtime(cb), "")?;
+        let comment = if self.code.len() == at { src } else { "" };
+        self.emit_c(Op::Jmp, Sym::Runtime(entry), comment);
+        let r = self.fresh("rr");
+        self.define(&r);
+        self.store(&dst, "")
+    }
+
+    /// `x << n` or `x >> n` by a routine (`runtime::shr`, `shl` and `shl8`): n is taken modulo the type's bits first,
+    /// as Rust's operators take it once their overflow check has passed (and without one, as `wrapping_shl` does).
+    /// `>>` of an i16, an i8, a u8 or a usize on a card; `<<` of an i16, which panics past a card, and of a u8.
+    pub(super) fn shift(
+        &mut self,
+        src: &str,
+        dest: &ir::Place,
+        left: bool,
+        x: &ir::Operand,
+        y: &ir::Operand,
+    ) -> Result<(), Fail> {
+        let name = if left { "<<" } else { ">>" };
+        let ty = match self.operand_ty(x) {
+            Some(Ty::Int(t)) => t,
+            _ => fail!("{name} is supported on integers: {src}"),
+        };
+        let (routine, bits) = match (left, ty) {
+            (false, IntTy::I16) => (Shift::Shr, 16),
+            (false, IntTy::I8 | IntTy::U8) => (Shift::Shr, 8),
+            (false, IntTy::Usize) if !self.is_huge(x) => (Shift::Shr, 64),
+            (true, IntTy::I16) => (Shift::Shl, 16),
+            (true, IntTy::U8) => (Shift::Shl8, 8),
+            _ => fail!("{name} by a variable is supported on i16 and u8, and >> on i8 and usize, not here: {src}"),
+        };
+        let [entry, ca] = match routine {
+            Shift::Shr => {
+                self.sh.pool.shr = true;
+                ["rt_shr_entry", "rt_shr_a"]
+            }
+            Shift::Shl => {
+                self.sh.pool.shl = true;
+                ["rt_shl_entry", "rt_shl_a"]
+            }
+            Shift::Shl8 => {
+                self.sh.pool.shl8 = true;
+                ["rt_shl8_entry", "rt_shl8_a"]
+            }
+        };
+        let dst = self.place_any(dest)?;
+        let a = self.operand(x)?;
+        let a = self.mat(a);
+        self.pass(&a, &Sym::Runtime(ca), src)?;
+        match y.int() {
+            Some((k, _)) => {
+                let n = self.konst(k.rem_euclid(bits) as i64);
+                self.emit(Op::Cla, n);
+            }
+            None => self.mask_acc("", y, bits as i64 - 1)?,
+        }
+        self.emit(Op::Jmp, Sym::Runtime(entry));
+        let r = self.fresh("rr");
+        self.define(&r);
         self.store(&dst, "")
     }
 

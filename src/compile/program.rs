@@ -230,6 +230,7 @@ fn explain(mir: &ir::File, e: String) -> String {
         || ADAPTERS.iter().any(|a| uses.path(&["iter", a]));
     // an array reference made a slice reference
     let slice = uses.unsize;
+    let object = uses.object;
     let plain = [
         (
             print,
@@ -252,6 +253,11 @@ fn explain(mir: &ir::File, e: String) -> String {
             "iterators other than ranges aren't supported: index the array in a `for i in 0..N` loop",
         ),
         (
+            object,
+            "this use of a trait object isn't supported: a `&dyn Trait` works where it is made of a reference to one of \
+             the program's structs, and a method called through it is one each struct's impl defines",
+        ),
+        (
             slice,
             "slices aren't supported: pass an array by reference, `&[i16; N]`",
         ),
@@ -268,11 +274,13 @@ fn explain(mir: &ir::File, e: String) -> String {
 }
 
 /// What a program's MIR names, for `explain`: every path in it, in every item, as its segments' names
-/// (`["std", "io", "_print"]`), and whether some cast makes an array pointer a slice pointer.
+/// (`["std", "io", "_print"]`), whether some cast makes an array pointer a slice pointer, and whether one makes a
+/// trait object.
 #[derive(Default)]
 struct Uses {
     paths: Vec<Vec<String>>,
     unsize: bool,
+    object: bool,
 }
 
 impl Uses {
@@ -321,7 +329,11 @@ impl Uses {
             .find("PointerCoercion(")
             .is_some_and(|at| text[at..].starts_with("PointerCoercion(Unsize"))
         {
-            self.unsize = true;
+            if text.contains(" as &dyn ") {
+                self.object = true;
+            } else {
+                self.unsize = true;
+            }
         }
     }
 }
@@ -352,6 +364,9 @@ impl VisitMut for Uses {
 
     fn visit_rvalue(&mut self, r: &mut ir::Rvalue) {
         match r {
+            ir::Rvalue::Cast(_, ir::Ty::Ref { to, .. }, ir::CastKind::Unsize(_)) if matches!(**to, ir::Ty::Dyn(_)) => {
+                self.object = true
+            }
             ir::Rvalue::Cast(_, _, ir::CastKind::Unsize(_)) => self.unsize = true,
             ir::Rvalue::Cast(_, _, ir::CastKind::Other(text)) => self.read(text),
             _ => {}

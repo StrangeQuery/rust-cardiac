@@ -1011,7 +1011,7 @@ fn closure_of(func: &Path, arg: &Operand, closures: &HashMap<String, String>) ->
     if c.starts_with("{closure@<i16 as Sum") || c.starts_with("{closure@<u8 as Sum") {
         return Some(Closure::Sum);
     }
-    matches!(arg, Operand::Constant(Const::Unit)).then(|| closures.get(c).cloned().map(Closure::Fn))?
+    matches!(arg, Operand::Constant(Const::ZeroSized(_))).then(|| closures.get(c).cloned().map(Closure::Fn))?
 }
 
 /// Methods of an iterator over an array or a range that rustc calls rather than inlines, as the loops they are:
@@ -1279,7 +1279,7 @@ pub fn iterator_methods(f: &mut Function, closures: &HashMap<String, String>) {
             }
             // `max()` and `min()` on a slice's iterator, a reduce with core's closure that keeps the greater (the
             // later of equals) or the lesser (the earlier): the index of the one kept, and a reference to it
-            ("reduce", [_, Operand::Constant(Const::Unit)]) if o.elements.is_some() && extreme(&func).is_some() => {
+            ("reduce", [_, Operand::Constant(Const::ZeroSized(_))]) if o.elements.is_some() && extreme(&func).is_some() => {
                 let a = o.elements.as_ref().unwrap();
                 let max = extreme(&func) == Some(true);
                 let Some(Ty::Path(option)) = types.get(&d) else { continue };

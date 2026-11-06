@@ -18,7 +18,9 @@
 //! teletype and halts. Without overflow checks, a value past -999..999 keeps the low three digits when stored, as a
 //! cell does.
 pub mod arith;
+pub mod bits;
 pub mod blocks;
+pub mod closures;
 pub mod copies;
 pub mod crates;
 pub mod enum_methods;
@@ -46,6 +48,7 @@ pub mod stack;
 pub mod structs;
 pub mod tails;
 pub mod hoist;
+pub mod indirect;
 pub mod util;
 pub mod wide;
 
@@ -663,7 +666,8 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named, statics) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
         return Err("no fn main in MIR".into());
     }
@@ -746,8 +750,10 @@ fn compile(
         slices::pointers_as_indexes(fns.get_mut(n).unwrap());
         slices::pointers_to_locals(fns.get_mut(n).unwrap());
     }
-    // abs, min and their kin, which rustc calls at opt-level 1 and s: the code it inlines at 2
+    // the bit methods' intrinsics; and abs, min and their kin, which rustc calls at opt-level 1 and s: what it
+    // inlines at 2
     for n in &names {
+        bits::inline_bit_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
         methods::inline_methods(fns.get_mut(n).unwrap());
         methods::inline_operators(fns.get_mut(n).unwrap());
     }

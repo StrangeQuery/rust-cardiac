@@ -603,7 +603,7 @@ fn searches(func: &Path) -> bool {
 }
 
 /// The value `binary_search`'s closure c compares with, `*r` of the `&x` it holds, and where c is built in block
-/// `at`: `c = {closure@..} { 0: copy r }`, a line the IR doesn't model, which names c and r.
+/// `at`: `c = {closure@..} { 0: copy r }`, as the IR reads it, or as the line the closure pass leaves unread.
 fn captured(f: &Function, types: &HashMap<Local, Ty>, at: usize, c: &Operand) -> Option<(Operand, usize)> {
     let c = c.local()?;
     let (si, r) = f.body.blocks[at]
@@ -614,6 +614,10 @@ fn captured(f: &Function, types: &HashMap<Local, Ty>, at: usize, c: &Operand) ->
         .find_map(|(si, s)| match s {
             Statement::Unsupported(u) => match u.locals.as_slice() {
                 [d, r] if *d == c => Some((si, *r)),
+                _ => None,
+            },
+            Statement::Assign(p, Rvalue::Closure(_, fields)) if p.as_local() == Some(c) => match fields.as_slice() {
+                [(_, o)] => o.local().map(|r| (si, r)),
                 _ => None,
             },
             _ => None,
