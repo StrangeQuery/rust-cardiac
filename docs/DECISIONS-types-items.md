@@ -76,3 +76,11 @@
   reads as any const table. Tables of `i8`, `usize` and `bool` are read as those of `i16` and `u8` are.
 - **The oracle.** The text keeps the body that works the value out, so such an item differs from the text's
   there; no test program has one.
+
+## 2026-11-05 · A call of a function to itself, as the last thing it does, is a loop
+
+- **Decision.** In the front end, `f`'s call of `f` whose result is `f`'s own and after which nothing but the way
+  to the return comes is each argument into a temporary, each temporary into its parameter, and a jump to the
+  function's start (a block of its own that the entry goes to). The parameters' cells hold the next round's values,
+  as the callee's would; nothing else of the caller is read after the call. Not where a parameter or an argument is
+  a reference or a pointer, which could point into the cells reused. Other recursion still needs a stack.

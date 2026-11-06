@@ -62,6 +62,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     // switch arms are read as their switch's type first: a discriminant's is isize
     switch_values(&mut file);
     cold_paths(&mut file);
+    tail_calls(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     file.visit(&mut I32IsI16);
@@ -414,6 +415,118 @@ fn cold_paths(file: &mut File) {
                     b.terminator = Terminator::Goto(*t);
                 }
             }
+        }
+    }
+}
+
+/// A function's call of itself whose result is its own, with nothing after it but the way to its return
+/// (`count(n - 1, acc + 2)` as the last thing `count` does): a loop. Each argument goes into a temporary, then each
+/// temporary into its parameter, and the call is a jump back to the start (a block of its own that the entry goes
+/// to, so the entry is entered once, as a loop's header isn't); the function's cells hold the next round's values,
+/// as they would the callee's. Only where no parameter or argument is a reference or a pointer,
+/// which could point into the cells being reused.
+fn tail_calls(file: &mut File) {
+    let pointer = |t: &Ty| matches!(t, Ty::Ref { .. } | Ty::Ptr { .. });
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        if !f.path.is_plain() || f.params.iter().any(|(_, t)| pointer(t)) {
+            continue;
+        }
+        if !f.body.blocks.iter().any(|b| b.name == super::ir::BasicBlock(0)) {
+            continue;
+        }
+        let name = f.path.to_string();
+        let types: HashMap<Local, Ty> = f
+            .params
+            .iter()
+            .cloned()
+            .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+            .collect();
+        // a block that only goes on, its way ending in the return
+        let returns = |start: super::ir::BasicBlock, blocks: &[Block]| {
+            let mut at = start;
+            for _ in 0..blocks.len() {
+                let Some(b) = blocks.iter().find(|b| b.name == at) else {
+                    return false;
+                };
+                let idle = b.statements.iter().all(|s| {
+                    matches!(
+                        s,
+                        Statement::StorageLive(_) | Statement::StorageDead(_) | Statement::Nop
+                    )
+                });
+                match (&b.terminator, idle) {
+                    (Terminator::Return, true) => return true,
+                    (Terminator::Goto(next), true) => at = *next,
+                    _ => return false,
+                }
+            }
+            false
+        };
+        let mut next = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+        let mut decls = vec![];
+        let blocks = f.body.blocks.clone();
+        let start = super::ir::BasicBlock(blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1);
+        let mut looped = false;
+        for b in f.body.blocks.iter_mut() {
+            let Terminator::Call {
+                dest,
+                func,
+                args,
+                target: Some(target),
+                unwind: super::ir::Unwind::Continue | super::ir::Unwind::Unreachable,
+            } = &b.terminator
+            else {
+                continue;
+            };
+            let arg_ty = |o: &Operand| match o {
+                Operand::Copy(p) | Operand::Move(p) => place_ty(&types, p),
+                Operand::Constant(_) => None,
+                _ => Some(Ty::Other(String::new())),
+            };
+            let self_call = func.is_plain() && func.to_string() == name && args.len() == f.params.len();
+            if !self_call || dest.as_local() != Some(Local(0)) || !returns(*target, &blocks) {
+                continue;
+            }
+            if args.iter().any(|a| arg_ty(a).is_some_and(|t| pointer(&t))) {
+                continue;
+            }
+            let mut temps = vec![];
+            for (a, (_, ty)) in args.iter().zip(&f.params) {
+                let t = Local(next);
+                next += 1;
+                decls.push(super::ir::Decl {
+                    local: t,
+                    mutable: false,
+                    ty: ty.clone(),
+                });
+                b.statements
+                    .push(Statement::Assign(Place::local(t), Rvalue::Use(a.clone())));
+                temps.push(t);
+            }
+            for (t, (p, _)) in temps.into_iter().zip(&f.params) {
+                b.statements.push(Statement::Assign(
+                    Place::local(*p),
+                    Rvalue::Use(Operand::Move(Place::local(t))),
+                ));
+            }
+            b.terminator = Terminator::Goto(start);
+            looped = true;
+        }
+        f.body.decls.extend(decls);
+        if looped {
+            let entry = f
+                .body
+                .blocks
+                .iter_mut()
+                .find(|b| b.name == super::ir::BasicBlock(0))
+                .unwrap();
+            let header = Block {
+                name: start,
+                statements: std::mem::take(&mut entry.statements),
+                terminator: std::mem::replace(&mut entry.terminator, Terminator::Goto(start)),
+            };
+            f.body.blocks.push(header);
         }
     }
 }
