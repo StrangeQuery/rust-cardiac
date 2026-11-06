@@ -25,6 +25,7 @@ use std::path::Path;
 use super::crates::{link, Crate};
 use super::enums::EnumDef;
 use super::ir::visit_mut::{walk_body, walk_path, walk_rvalue, walk_statement, walk_terminator, walk_ty, VisitMut};
+use super::structs::StructDef;
 use super::{cells, compile_mir, split_phases};
 use super::{ir, machine};
 
@@ -158,6 +159,8 @@ pub struct Mir {
     pub debug_assertions: bool,
     /// The enums the driver found for it and its crates.
     pub enums: Vec<EnumDef>,
+    /// The structs the driver found for it and its crates (`structs::StructDef`).
+    pub structs: Vec<StructDef>,
     /// Whether the compiler cuts main into phases itself (`compile_mir`): the program's `auto_overlay`.
     pub auto_overlay: bool,
 }
@@ -171,6 +174,7 @@ impl Mir {
         opt_level: OptLevel,
         debug_assertions: bool,
         enums: Vec<EnumDef>,
+        structs: Vec<StructDef>,
     ) -> Result<Mir, String> {
         let linked = link(&program, crates).map_err(|e| format!("{file}: {e}"))?;
         // a crate's enums are named in the program's MIR with the crate's name first (`kit::Colour`); another
@@ -188,12 +192,19 @@ impl Mir {
                 }
             }
         }
+        let mut structs = structs;
+        for s in crates.iter().flat_map(|c| &c.structs) {
+            if !structs.contains(s) {
+                structs.push(s.clone());
+            }
+        }
         Ok(Mir {
             program,
             linked,
             opt_level,
             debug_assertions,
             enums,
+            structs,
             auto_overlay: false,
         })
     }
@@ -570,6 +581,7 @@ pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path,
             mir.opt_level.passes(),
             mir.debug_assertions,
             &mir.enums,
+            &mir.structs,
             mir.auto_overlay,
         )
         .map_err(|e| hint(format!("{file}: {}", explain(linked, e)), mir.opt_level))?;
@@ -717,6 +729,7 @@ pub fn compile_test(file: &str, source: &Path, mir: &Mir) -> Result<String, Stri
         mir.opt_level.passes(),
         mir.debug_assertions,
         &mir.enums,
+        &mir.structs,
         mir.auto_overlay,
     )
     .map_err(|e| hint(format!("{file}: {}", explain(&mir.linked, e)), mir.opt_level))?

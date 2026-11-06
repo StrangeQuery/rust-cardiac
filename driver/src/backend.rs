@@ -46,6 +46,7 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         check::write_report(to, &check::report(tcx, &own, &renamed, &check::label(tcx)));
     }
     let enums = facts::enums(tcx, &local);
+    let structs = facts::structs(tcx, &local);
     if settings.mode == Mode::Test {
         // beside the program before anything else, so it is there when linking fails
         if let Err(e) = program::keep_mir(&program.source, &own) {
@@ -96,12 +97,13 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         crates.push(Crate {
             name: dep.name.clone(),
             enums: facts::enums(tcx, &defs),
+            structs: facts::structs(tcx, &defs),
             file,
         });
     }
     let opt_level = opt_level(tcx);
     let debug_assertions = tcx.sess.opts.debug_assertions;
-    let mut mir = match Mir::link(file, own, &crates, opt_level, debug_assertions, enums) {
+    let mut mir = match Mir::link(file, own, &crates, opt_level, debug_assertions, enums, structs) {
         Ok(m) => m,
         Err(e) => return Outcome::Failed(e),
     };
