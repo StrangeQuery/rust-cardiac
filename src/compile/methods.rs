@@ -10,6 +10,14 @@
 //! What a card can't hold needs no code: no card holds `i16::MIN`, so `abs` and `%` have no overflow to check, and
 //! none of these methods depends on the build's overflow checks. A check that is a panic in Rust whatever the
 //! profile, `rem_euclid`'s divisor of zero and `clamp`'s `min <= max`, stays.
+//!
+//! So do the operators a card has no instruction for (`inline_operators`), on an i16 and a u8: `!a`, `a << k`
+//! and `a >> k` by a constant, as the arithmetic they are in two's complement, and `a ^ b` of two bools, `a != b`.
+//! Rust's `!` and `<<` never panic over the value, but on an i16 each can make one no card holds (`!999` is
+//! -1000, `300 << 2` is 1200); there the program panics, with overflow checks on or off, rather than keep the low
+//! three digits.
+use std::collections::HashMap;
+
 use super::ir::{
     BasicBlock, BinOp, Block, BorrowKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection,
     Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
@@ -480,6 +488,180 @@ pub fn inline_range_contains(f: &mut Function) {
     }
 }
 
+/// The value a shift by a constant moves by, `2^k`: k up to 9 on an i16 (512 is the last power of two a card
+/// holds) and up to 7 on a u8.
+fn shift_factor(by: &Operand, ty: IntTy) -> Option<i128> {
+    let (k, _) = by.int()?;
+    let most = match ty {
+        IntTy::I16 => 9,
+        IntTy::U8 => 7,
+        _ => return None,
+    };
+    (0..=most).contains(&k).then(|| 1 << k)
+}
+
+/// The check that a value is one a card holds, whatever the profile: where Rust's value (it never panics) is one
+/// no card holds, the program panics, as it does for an i16 past a card.
+fn on_a_card(cond: Operand, expected: bool, target: BasicBlock) -> Terminator {
+    Terminator::Assert {
+        cond,
+        expected,
+        msg: super::runtime::NO_CARD.into(),
+        msg_args: vec![],
+        target,
+        unwind: Unwind::Continue,
+    }
+}
+
+/// The code of `dest = rv` for an operator a card has no instruction for, as the arithmetic it is in two's
+/// complement: the statements for the statement's own block and, where it needs more blocks, its new terminator
+/// (`back` makes the block the rest of the statement's block goes on in). None for any other statement.
+fn operator(
+    gains: &mut Gains,
+    types: &HashMap<Local, Ty>,
+    dest: &Place,
+    rv: &Rvalue,
+    back: impl FnOnce(&mut Gains) -> BasicBlock,
+) -> Option<(Vec<Statement>, Option<Terminator>)> {
+    use Rvalue::{BinaryOp, Use};
+    let ty = |o: &Operand| match o {
+        Operand::Constant(_) => o.int().map(|(_, t)| Ty::Int(t)),
+        Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => super::ranges::place_ty(types, p),
+        Operand::Aggregate(..) => None,
+    };
+    let int = |o: &Operand| match ty(o) {
+        Some(Ty::Int(t @ (IntTy::I16 | IntTy::U8))) => Some(t),
+        _ => None,
+    };
+    // an operand may be read more than once now: a copy, not a move
+    let copy = |o: &Operand| match o {
+        Operand::Move(p) => Operand::Copy(p.clone()),
+        o => o.clone(),
+    };
+    let assign = |v: Rvalue| Statement::Assign(dest.clone(), v);
+    let k = |v: i128, ty: IntTy| Operand::Constant(Const::Int { value: v, ty });
+    Some(match rv {
+        // !a is -1 - a: on a u8 255 - a; on an i16 -1000 for 999, which no card holds
+        Rvalue::UnaryOp(UnOp::Not, a) => {
+            let (t, a) = (int(a)?, copy(a));
+            if t == IntTy::U8 {
+                return Some((vec![assign(BinaryOp(BinOp::Sub, k(255, t), a))], None));
+            }
+            let back = back(gains);
+            let set = gains.set(dest, BinaryOp(BinOp::Sub, k(-1, t), a.clone()), back);
+            let fits = gains.local(Ty::Bool);
+            let test = Statement::Assign(Place::local(fits), BinaryOp(BinOp::Lt, a, k(999, t)));
+            let check = on_a_card(Operand::Move(Place::local(fits)), true, set);
+            (vec![test], Some(check))
+        }
+        // a ^ b of two bools is a != b
+        BinaryOp(BinOp::BitXor, a, b) if ty(a) == Some(Ty::Bool) || ty(b) == Some(Ty::Bool) => {
+            (vec![assign(BinaryOp(BinOp::Ne, a.clone(), b.clone()))], None)
+        }
+        // a << k is a * 2^k kept in the type's bits: on a u8 the low 8 - k bits of a times 2^k, which can't pass 255;
+        // on an i16 a product past a card, which Rust wraps in 16 bits and a card can't, panics
+        BinaryOp(BinOp::Shl, a, by) => {
+            let (t, a) = (int(a)?, copy(a));
+            let f = shift_factor(by, t)?;
+            if f == 1 {
+                return Some((vec![assign(Use(a))], None));
+            }
+            if t == IntTy::U8 {
+                let low = gains.local(Ty::Int(t));
+                let mask = Statement::Assign(Place::local(low), BinaryOp(BinOp::BitAnd, a, k(256 / f - 1, t)));
+                let times = assign(BinaryOp(BinOp::Mul, Operand::Copy(Place::local(low)), k(f, t)));
+                return Some((vec![mask, times], None));
+            }
+            let back = back(gains);
+            let pair = gains.local(Ty::Tuple(vec![Ty::Int(t), Ty::Bool]));
+            let set = gains.set(dest, Use(Operand::Copy(Place::field(pair, 0, Ty::Int(t)))), back);
+            let times = Statement::Assign(Place::local(pair), BinaryOp(BinOp::MulWithOverflow, a, k(f, t)));
+            let overflow = Operand::Move(Place::field(pair, 1, Ty::Bool));
+            (vec![times], Some(on_a_card(overflow, false, set)))
+        }
+        // a >> k is a / 2^k rounded down, a.div_euclid(2^k): the quotient of a not below 0, and of a below 0 -1 less
+        // the quotient of -1 - a, so that only values not below 0 are divided
+        BinaryOp(BinOp::Shr, a, by) => {
+            let (t, a) = (int(a)?, copy(a));
+            let f = shift_factor(by, t)?;
+            if f == 1 {
+                return Some((vec![assign(Use(a))], None));
+            }
+            let quotient = |a: Operand| BinaryOp(BinOp::UDiv, a, k(f, t));
+            if t == IntTy::U8 {
+                return Some((vec![assign(quotient(a))], None));
+            }
+            let back = back(gains);
+            let up = gains.set(dest, quotient(a.clone()), back);
+            let n = gains.local(Ty::Int(t));
+            let nv = Operand::Copy(Place::local(n));
+            let below = vec![
+                Statement::Assign(Place::local(n), BinaryOp(BinOp::Sub, k(-1, t), a.clone())),
+                Statement::Assign(Place::local(n), quotient(nv.clone())),
+                assign(BinaryOp(BinOp::Sub, k(-1, t), nv)),
+            ];
+            let down = gains.block(below, Terminator::Goto(back));
+            let (s, test) = gains.test(BinOp::Lt, &a, &k(0, t), down, up);
+            (vec![s], Some(test))
+        }
+        _ => return None,
+    })
+}
+
+/// Every `!a` on an integer, `a << k` and `a >> k` by a constant, and `a ^ b` of two bools in `f`, as the arithmetic
+/// it is (`operator`). Where that needs blocks of its own, the rest of the statement's block goes on in a new one.
+pub fn inline_operators(f: &mut Function) {
+    let types: HashMap<Local, Ty> = f
+        .params
+        .iter()
+        .cloned()
+        .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+        .collect();
+    let next_local = types
+        .keys()
+        .map(|l| l.0)
+        .filter(|l| *l != Local::UNIT.0)
+        .max()
+        .map_or(0, |l| l + 1);
+    let next_block = f.body.blocks.iter().map(|b| b.name.0).max().map_or(0, |b| b + 1);
+    let mut gains = Gains {
+        blocks: vec![],
+        decls: &mut f.body.decls,
+        next_local,
+        next_block,
+    };
+    let blocks = &mut f.body.blocks;
+    let mut bi = 0;
+    while bi < blocks.len() {
+        let mut found = None;
+        for (i, s) in blocks[bi].statements.iter().enumerate() {
+            let Statement::Assign(dest, rv) = s else { continue };
+            // the rest of the block, its terminator too, as a block of its own, made only when it is needed
+            let rest = |gains: &mut Gains| {
+                let b = &blocks[bi];
+                gains.block(b.statements[i + 1..].to_vec(), b.terminator.clone())
+            };
+            if let Some(code) = operator(&mut gains, &types, dest, rv, rest) {
+                found = Some((i, code));
+                break;
+            }
+        }
+        let Some((i, (statements, terminator))) = found else {
+            bi += 1;
+            continue;
+        };
+        let b = &mut blocks[bi];
+        let after = b.statements.split_off(i + 1);
+        b.statements.pop();
+        b.statements.extend(statements);
+        match terminator {
+            Some(t) => b.terminator = t,
+            None => b.statements.extend(after),
+        }
+        blocks.append(&mut gains.blocks);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -573,6 +755,62 @@ mod tests {
         assert_eq!(
             f.body.decls.last().map(|d| (d.local, d.ty.clone())),
             Some((Local(4), Ty::Bool))
+        );
+    }
+
+    fn operators(body: &str) -> Vec<String> {
+        let mut f = Function {
+            name: "main".into(),
+            params: vec![],
+            ret: Ty::Unit,
+            body: ir::parse_body(body),
+            results: vec![],
+        };
+        inline_operators(&mut f);
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|b| {
+                b.statements
+                    .iter()
+                    .map(|s| s.to_string())
+                    .chain([b.terminator.to_string()])
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_shift_is_split_out_of_its_block_and_the_rest_goes_on_after_it() {
+        let text = operators(
+            "let mut _0: ();\n let _1: i16;\n let _2: i16;\n let _3: i16;\n bb0: {\n _2 = Shl(copy _1, const 2_i16);\n _3 = copy _2;\n return;\n }\n",
+        );
+        assert_eq!(
+            text,
+            [
+                "_4 = MulWithOverflow(copy _1, const 4_i16);",
+                "assert(!move (_4.1: bool), \"the value doesn't fit on a card (-999 to 999)\") -> [success: bb2, unwind continue];",
+                "_3 = copy _2;",
+                "return;",
+                "_2 = copy (_4.0: i16);",
+                "goto -> bb1;",
+            ]
+        );
+    }
+
+    #[test]
+    fn bools_xor_is_not_equal_and_a_shift_too_far_stays() {
+        let text = operators(
+            "let mut _0: ();\n let _1: bool;\n let _2: bool;\n let _3: bool;\n let _4: u8;\n let _5: u8;\n let _6: i16;\n bb0: {\n _3 = BitXor(copy _1, copy _2);\n _5 = Shr(copy _4, const 8_i16);\n _6 = Shl(copy _6, const 10_i16);\n _5 = Not(move _4);\n return;\n }\n",
+        );
+        assert_eq!(
+            text,
+            [
+                "_3 = Ne(copy _1, copy _2);",
+                "_5 = Shr(copy _4, const 8_i16);",
+                "_6 = Shl(copy _6, const 10_i16);",
+                "_5 = Sub(const 255_u8, copy _4);",
+                "return;",
+            ]
         );
     }
 }

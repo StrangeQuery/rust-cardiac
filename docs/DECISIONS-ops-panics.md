@@ -1,3 +1,27 @@
+## 2026-11-05 · `!`, `<<` and `>>` by a constant on an i16 and a u8, and `^` of two bools, as arithmetic
+
+- **Decision.** `methods::inline_operators` writes each as the arithmetic it is in two's complement, before the
+  passes, so the range pass and the rest see ops they know. On a u8: `!a` is `255 - a`; `a << k` is the low
+  8 - k bits of a times 2^k (`(a & (2^(8-k) - 1)) * 2^k`, never past 255, so nothing wraps); `a >> k` is the
+  quotient by 2^k. On an i16: `a >> k` is `a.div_euclid(2^k)`, worked as the quotient of a for a not below 0 and
+  `-1 - (-1 - a) / 2^k` below it, so only values not below 0 are divided (one short unsigned loop, not the signed
+  divide and remainder routines: 46 cells for the row, where `div_euclid`'s own code took 81). `a ^ b` of two bools
+  is `a != b`. k goes up to 9 on an i16 (512 is the last power of two a card holds) and 7 on a u8; past that, by a
+  variable, and on a usize they stay refused, now with a message that says so.
+- **Where Rust's value is past a card.** Rust's `!` and `<<` never panic over the value (overflow checks look at
+  the shift amount only), but on an i16 they can make a value no card holds: `!999` is -1000, and `a << k` is
+  a * 2^k wrapped in 16 bits (`300 << 7` is -27136; `513 << 7` wraps all the way round to 128, which a card does
+  hold). A card can't keep 16 bits, so the result is checked against a card with overflow checks on and off
+  alike, and the program panics there (`the value doesn't fit on a card`), rather than keep the low three digits
+  as an unchecked `+` does: `!a` is `assert(a < 999)` and then `-1 - a`, and `a << k` is `MulWithOverflow(a,
+  2^k)` and its assert. So `a << k` panics wherever a * 2^k is past a card, even the few times the 16-bit wrap
+  lands back on one: a panic, never a wrong answer. The range pass drops either check where it can prove the
+  value fits (`!i` and `i << 3` of a loop counter 0..12 have none). `a >> k` is always on a card.
+- **Measured.** Every value a card holds, through every k, on both types, at opt-level 1 and 2 with overflow
+  checks on and off, compared with Rust's value: no wrong answer, and a panic only where Rust's value (for `<<`,
+  a * 2^k) is past a card. Five matrix rows refused before match at every setting; no test program or example
+  changed.
+
 ## 2026-11-05 · Literal panic messages go in the panic map; `assert_eq!` says Rust's first line
 
 - **Decision.** A panic whose message is a literal (`panic!("negative card")`, `assert!(a > 0, "...")`,

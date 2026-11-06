@@ -1073,7 +1073,7 @@ pub fn unwrapped(op: BinOp) -> BinOp {
 }
 
 /// The type of a place, from its local's through its projections, where the IR says.
-fn place_ty(locals: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
+pub(super) fn place_ty(locals: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
     let mut t = locals.get(&p.base_local()?)?.clone();
     for x in &p.projection {
         t = match (x, t) {

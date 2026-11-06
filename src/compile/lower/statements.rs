@@ -250,7 +250,7 @@ impl<'a> Lowering<'a> {
                 let ty = x.place().and_then(|p| self.place_ty(p));
                 let is_bool = ty == Some(Ty::Bool) || matches!(x, ir::Operand::Constant(Const::Bool(_)));
                 if !is_bool {
-                    fail!("Not on a non-bool: {src}")
+                    fail!("! is supported on bool, i16 and u8, not here: {src}")
                 }
                 self.emit_c(Op::Cla, Operand::CELL_00, src);
                 let x = self.arith(&a)?;
@@ -271,6 +271,11 @@ impl<'a> Lowering<'a> {
                     ),
                 };
                 self.mask(src, dest, x, m as i64)
+            }
+            Rvalue::BinaryOp(op @ (BinOp::Shl | BinOp::Shr), ..) => {
+                // those by a constant on an i16 or a u8 are arithmetic already (`methods::inline_operators`)
+                let name = if *op == BinOp::Shl { "<<" } else { ">>" };
+                fail!("{name} is supported by a constant, up to 9 on an i16 and 7 on a u8: {src}")
             }
             Rvalue::BinaryOp(op @ (BinOp::BitAnd | BinOp::BitOr), x, y) => {
                 // bools only (integers are above): and = a * b, or = a + b - a b
