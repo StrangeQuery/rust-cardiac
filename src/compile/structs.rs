@@ -42,6 +42,8 @@ pub struct StructDef {
     pub unit: bool,
     /// one of the program's own, not another crate's (core's `Skip`, `StepBy`)
     pub in_crate: bool,
+    /// its fields in order, each by the name a struct built of it gives (`x`, or `0` in a tuple struct) and its type
+    pub fields: Vec<(String, Ty)>,
 }
 
 /// A field of a struct: its name and type.
