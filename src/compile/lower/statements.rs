@@ -149,6 +149,13 @@ impl<'a> Lowering<'a> {
                 let (bad, done) = (self.fresh("ov"), self.fresh("d"));
                 let w = self.width.get(&d).copied();
                 let plain = plain_op(*op);
+                if w == Some(IntTy::U8) && plain == BinOp::Mul {
+                    // the product wraps, as a u8's does, but past a card it can't be held to be wrapped
+                    fail!(
+                        "a u8 product with its overflow flag (`overflowing_mul`, `checked_mul`) is not supported: \
+                         past a card it can't be wrapped"
+                    )
+                }
                 self.arith_acc(plain, a, b, w.map(|_| &bad), src)?;
                 self.emit(Op::Sto, f0.clone());
                 self.check_acc(w, &bad, plain)?;

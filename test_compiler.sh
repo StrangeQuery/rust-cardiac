@@ -148,8 +148,9 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
   case "$out" in *"constant out of range: 2000 is past what a card holds (-999 to 999): "*"would overflow a card, in main: \`_"*" = AddWithOverflow("*)
       echo "MATCH  const_range: rejected";;
     *) echo "DIFFER const_range: $out"; exit 1;; esac
-  # i16::MAX as a value is a constant past a card; midpoint, inlined, is a sum past one; `?` converting with From
-  # is core's from_residual where rustc calls it, which can't be written out without the conversion
+  # i16::MAX as a value is a constant past a card; midpoint, inlined, is a sum past one, and a u8's overflowing_mul
+  # a product past one; `?` converting with From is core's from_residual where rustc calls it, which can't be
+  # written out without the conversion
   out=$(./target/release/cargo-cardiac test $checked tests/programs/limit_value.rs 2>&1)
   case "$out" in *"constant out of range: i16::MAX (32767) is past what a card holds"*) echo "MATCH  limit_value: rejected";;
     *) echo "DIFFER limit_value: $out"; exit 1;; esac
@@ -157,6 +158,9 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
     out=$(./target/release/cargo-cardiac test $checked tests/programs/midpoint.rs 2>&1)
     case "$out" in *"core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow"*) echo "MATCH  midpoint: rejected";;
       *) echo "DIFFER midpoint: $out"; exit 1;; esac
+    out=$(./target/release/cargo-cardiac test $checked tests/programs/overflowing_mul_u8.rs 2>&1)
+    case "$out" in *"a u8 product with its overflow flag"*) echo "MATCH  overflowing_mul_u8: rejected";;
+      *) echo "DIFFER overflowing_mul_u8: $out"; exit 1;; esac
   else
     out=$(./target/release/cargo-cardiac test $checked tests/programs/try_from.rs 2>&1)
     case "$out" in *"from_residual"*"not supported"*) echo "MATCH  try_from: rejected";;
