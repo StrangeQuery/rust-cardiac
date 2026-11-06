@@ -159,6 +159,12 @@ pub fn exact_result(func: &Path) -> Option<[i128; 2]> {
     }
 }
 
+/// Whether a call is an i16's `pow`, whose u32 exponent may be a cell that holds a number equal to it modulo 2^32
+/// (`wide`): its code here takes one below 0 as the exponent past a card that it is.
+pub fn takes_exponent(func: &Path) -> bool {
+    called(func) == Some((Method::Pow, IntTy::I16))
+}
+
 /// `(a..b).contains(&x)` or `(a..=b).contains(&x)`, as rustc calls it at opt-level 1 and s:
 /// `core::ops::RangeInclusive::<i16>::contains::<i16>`, or through the trait,
 /// `<core::ops::RangeInclusive<i16> as RangeBounds<i16>>::contains::<i16>`. Inclusive or not, and the type.
@@ -556,6 +562,30 @@ impl<'a> Gains<'a> {
                 let quotient = self.block(parts, go);
                 let (check, assert) = self.nonzero(a, b, ty, DIVIDE_BY_ZERO, quotient);
                 (vec![check], assert)
+            }
+            // by a variable, the u32 a cell holding a number equal to it modulo 2^32 (`wide`): below 0 it is past a
+            // card (`n as u32` of an n below 0), and panics; else that many checked multiplications, counted down
+            (Method::Pow, [x, n]) if !matches!(n, Operand::Constant(_)) => {
+                let (left, r) = (self.local(Ty::Int(ty)), self.local(Ty::Int(ty)));
+                let (lv, rv) = (Operand::Copy(Place::local(left)), Operand::Copy(Place::local(r)));
+                let head = self.next_block();
+                let less = Statement::Assign(Place::local(left), BinaryOp(BinOp::Sub, lv.clone(), one.clone()));
+                let next = self.block(vec![less], Terminator::Goto(head));
+                let (s, t) = self.checked(BinOp::MulWithOverflow, &rv, x, &Place::local(r), next);
+                let body = self.block(vec![s], t);
+                let done = self.set(dest, copy(&rv), back);
+                let (s, t) = self.test(BinOp::Eq, &lv, &zero, done, body);
+                self.block_named(head, vec![s], t);
+                let start = self.block(
+                    vec![
+                        Statement::Assign(Place::local(left), copy(n)),
+                        Statement::Assign(Place::local(r), copy(&one)),
+                    ],
+                    Terminator::Goto(head),
+                );
+                let ok = self.local(Ty::Bool);
+                let check = Statement::Assign(Place::local(ok), BinaryOp(BinOp::Ge, n.clone(), card(0)));
+                (vec![check], on_a_card(Operand::Move(Place::local(ok)), true, start))
             }
             // by a constant k: k - 1 multiplications, each checked in every profile, as a product past a card can't
             // be held (with overflow checks off Rust's would wrap at 32768)

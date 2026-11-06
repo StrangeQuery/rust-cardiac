@@ -277,7 +277,15 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
         }
         match &b.terminator {
             Terminator::SwitchInt { discr, .. } if is(discr) => need(Needs::Exact),
-            Terminator::Call { dest, .. } if dest.as_local() == Some(w) => need(Needs::Either),
+            Terminator::Call { dest, func, args, .. } => {
+                if dest.as_local() == Some(w) {
+                    need(Needs::Either);
+                }
+                // an i16's `pow` by it, where a number below 0 is an exponent past a card (`methods`)
+                if super::methods::takes_exponent(func) && args.get(1).is_some_and(is) {
+                    need(Needs::Either);
+                }
+            }
             _ => {}
         }
     }
