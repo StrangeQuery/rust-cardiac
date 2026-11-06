@@ -459,6 +459,8 @@ fn shared_scalar_refs_by_value(fns: &mut Ordered<String, Function>) {
                         if let Some(r) = p.base_local().filter(|r| mine(*r)) {
                             let read = p.projection.as_slice() == [Projection::Deref];
                             let defined = matches!(s, Statement::Assign(d, _) if d == p);
+                            // (copied whole only into another such reference: a result, or a field of a struct
+                            // or an enum, that holds a reference holds its address)
                             let copied = matches!(s, Statement::Assign(d, Rvalue::Use(Operand::Copy(q) | Operand::Move(q)))
                                 if q == p && p.projection.is_empty() && d.as_local().is_some_and(mine));
                             if !(read || defined || copied) {
@@ -747,7 +749,9 @@ impl Shapes {
     /// Field k of struct s is of type t: a scalar, a struct, or an array of scalars.
     fn set(&mut self, fname: &str, s: &str, k: u32, t: &Ty) -> Result<(), Fail> {
         let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+        // (a raw pointer to a card's value is its address, one cell: a slice iterator's two pointers)
         let fine = scalar(t)
+            || matches!(t, Ty::Ptr { to, .. } if matches!(**to, Ty::Int(IntTy::I16 | IntTy::U8)))
             || matches!(t, Ty::Array(e, ArrayLen::Known(_)) if scalar(e))
             || self.strukt(t).is_some_and(|inner| inner != s);
         // (a type the pass never followed, a reference or a generic path, is left as it was)

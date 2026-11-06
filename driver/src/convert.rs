@@ -523,6 +523,10 @@ impl<'tcx> Convert<'tcx> {
             | K::FakeRead(..)
             | K::AscribeUserType { .. }
             | K::Nop => return None,
+            // `_t = const <uninit>`: a value written before it is read, no statement at all
+            K::Assign(_, pmir::Rvalue::Use(pmir::Operand::Constant(c), _)) if matches!(c.const_.kind(), pty::ConstantKind::Allocated(a) if !a.bytes.is_empty() && a.bytes.iter().all(Option::is_none)) => {
+                return None
+            }
             K::Assign(p, r) => {
                 let rvalue = match &internal.kind {
                     mmir::StatementKind::Assign(b) => Some(&b.1),
@@ -533,6 +537,14 @@ impl<'tcx> Convert<'tcx> {
                     .map(|(p, r)| ir::Statement::Assign(p, r))
             }
             K::Intrinsic(pmir::NonDivergingIntrinsic::Assume(o)) => self.operand(o, locals).map(ir::Statement::Assume),
+            K::Intrinsic(pmir::NonDivergingIntrinsic::CopyNonOverlapping(c)) => {
+                let (src, dst, count) = (
+                    self.operand(&c.src, locals)?,
+                    self.operand(&c.dst, locals)?,
+                    self.operand(&c.count, locals)?,
+                );
+                ir::Statement::copy_one(src, dst, count)
+            }
             _ => None,
         };
         Some(
@@ -617,6 +629,12 @@ impl<'tcx> Convert<'tcx> {
                     pmir::AggregateKind::Array(_) if !ops.is_empty() => ir::Rvalue::Array(ops),
                     // nor do `()` and `(copy _1,)`
                     pmir::AggregateKind::Tuple if ops.len() >= 2 => ir::Rvalue::Tuple(ops),
+                    // `*mut [T] from (p, n)`, a slice's pointer made of its parts
+                    pmir::AggregateKind::RawPtr(to, m) => {
+                        let [p, n] = ops.as_slice() else { return None };
+                        let mutable = *m == pmir::Mutability::Mut;
+                        ir::Rvalue::slice_from_parts(p.clone(), self.ty_read(*to, Paths::Full)?, mutable, n)?
+                    }
                     pmir::AggregateKind::Adt(def, variant, ..) => {
                         let mmir::Rvalue::Aggregate(internal_kind, _) = internal else {
                             return None;
@@ -741,6 +759,11 @@ impl<'tcx> Convert<'tcx> {
                     unwind: self.unwind(unwind, internal)?,
                 }
             }
+            T::Drop { place, target, unwind } => ir::Terminator::Drop {
+                place: self.place(place, locals)?,
+                target: bb(*target),
+                unwind: self.unwind(unwind, internal)?,
+            },
             _ => return None,
         })
     }
@@ -776,15 +799,20 @@ impl<'tcx> Convert<'tcx> {
                     offset: *offset,
                     min_length: *min_length,
                 },
+                pmir::ProjectionElem::Subslice {
+                    from,
+                    to,
+                    from_end: false,
+                } => ir::Projection::Subslice { from: *from, to: *to },
                 pmir::ProjectionElem::Downcast(v) => match ty.kind() {
                     pty::TyKind::RigidTy(pty::RigidTy::Adt(def, _)) => {
                         ir::Projection::Downcast(def.variant(*v)?.name())
                     }
                     _ => return None,
                 },
-                // `[-1 of 3]`, `[1:]`, `[1..3]` don't parse; an opaque type's cast (`(_1 as T)`) isn't modelled
+                // `[-1 of 3]` and a slice's `[1:-1]` don't parse; an opaque type's cast (`(_1 as T)`) isn't modelled
                 pmir::ProjectionElem::ConstantIndex { from_end: true, .. }
-                | pmir::ProjectionElem::Subslice { .. }
+                | pmir::ProjectionElem::Subslice { from_end: true, .. }
                 | pmir::ProjectionElem::OpaqueCast(_) => return None,
             });
             ty = e.ty(ty).ok()?;

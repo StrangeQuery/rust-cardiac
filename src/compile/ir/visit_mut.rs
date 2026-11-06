@@ -90,6 +90,7 @@ pub fn walk_terminator<V: VisitMut + ?Sized>(v: &mut V, t: &mut Terminator) {
                 v.visit_operand(a);
             }
         }
+        Terminator::Drop { place, .. } => v.visit_place(place),
         Terminator::Goto(_) | Terminator::Return | Terminator::Unreachable | Terminator::Unsupported(_) => {}
     }
 }
@@ -158,6 +159,7 @@ pub fn walk_place<V: VisitMut + ?Sized>(v: &mut V, p: &mut Place) {
             | Projection::Index(_)
             | Projection::IndexPlus(..)
             | Projection::ConstantIndex { .. }
+            | Projection::Subslice { .. }
             | Projection::Downcast(_) => {}
         }
     }

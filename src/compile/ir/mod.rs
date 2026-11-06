@@ -263,6 +263,12 @@ pub enum Projection {
     /// pass makes the field a local of its own.
     IndexPlace(Box<Place>),
     Downcast(String),
+    /// `xs[1..4]`: the elements from 1 up to 4 of an array, an array of their own (a rest pattern's, `[x, rest @
+    /// ..]`).
+    Subslice {
+        from: u64,
+        to: u64,
+    },
 }
 
 impl Place {
@@ -641,6 +647,13 @@ pub enum Terminator {
         target: BasicBlock,
         unwind: Unwind,
     },
+    /// `drop(_4) -> [return: bb7, unwind ...]`: the value's drop glue run, then on to the target. Only a drop the
+    /// passes know does nothing gets past them (`slices`, an array's `IntoIter`); any other is refused.
+    Drop {
+        place: Place,
+        target: BasicBlock,
+        unwind: Unwind,
+    },
     Unsupported(Unsupported),
 }
 
@@ -802,6 +815,7 @@ impl fmt::Display for Place {
                 Projection::ConstantIndex { offset, min_length } => format!("{s}[{offset} of {min_length}]"),
                 Projection::IndexPlace(p) => format!("{s}[{p}]"),
                 Projection::Downcast(v) => format!("({s} as {v})"),
+                Projection::Subslice { from, to } => format!("{s}[{from}..{to}]"),
             };
         }
         f.write_str(&s)
@@ -1018,6 +1032,7 @@ impl fmt::Display for Terminator {
                 }
                 write!(f, ") -> [success: {target}, {unwind}];")
             }
+            Terminator::Drop { place, target, unwind } => write!(f, "drop({place}) -> [return: {target}, {unwind}];"),
             Terminator::Unsupported(u) => f.write_str(&u.text),
         }
     }
