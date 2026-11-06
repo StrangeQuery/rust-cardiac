@@ -4,6 +4,20 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · A core method's i32 compiles where its values are on a card
+
+- **Decision.** `front::widened_in_core` refuses an integer method of core's, of a type other than i32, that rustc
+  inlined with i32 locals, only where those locals can hold a value past a card. What each of core's i32 locals
+  here can hold is worked out from its assignments, round after round until nothing grows: a constant, a cast from
+  a u8 (0 to 255), an i8 (-128 to 127) or an i16 (a card), and `+`, `-`, `*` and negation of those. Any other assignment, a write through a reference or a projection, or a call's result, may
+  hold anything. `u8::abs_diff` at opt-level 2 (the two u8s' difference in i32, then its absolute value: -255 to
+  255) compiles; `i16::midpoint` (the two i16s' sum in i32: -1998 to 1998) stays refused.
+- **Why.** Core works in i32 to reach past the narrower type, and a card is narrower than i32; but where every
+  value is on a card, i32's arithmetic and a card's agree, overflow checks or not. Of core's integer methods on
+  i8, u8, i16, u16, isize, usize and u32 (about 400 tried), only these two have i32 locals at opt-level 1 or 2.
+- **Cost.** A method whose i32 values stay on a card for reasons the spans can't see (`midpoint` of two small
+  numbers) is still refused.
+
 ## 2026-11-06 · An iterator's and a slice's methods that rustc calls are the loops they stand for
 
 - **Decision.** `iterators::iterator_methods`: on a slice iterator into one array, or a range of a card's type

@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use super::ir::visit_mut::{walk_const, walk_operand, walk_path, walk_rvalue, walk_terminator, walk_ty, VisitMut};
 use super::ir::{
-    ArrayLen, BinOp, Block, Body, Const, ConstItem, ConstValue, File, IntTy, Item, Local, Operand, Path, Place,
-    Projection, Rvalue, Segment, Statement, Terminator, Ty,
+    ArrayLen, BinOp, Block, Body, CastKind, Const, ConstItem, ConstValue, File, IntTy, Item, Local, Operand, Path,
+    Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp,
 };
 use super::structs::Function;
 use super::util::Ordered;
@@ -683,10 +683,11 @@ impl VisitMut for TupleStructConsts<'_> {
 }
 
 /// The functions into which rustc inlined an integer method of core's, of a type other than i32, that works in i32
-/// (a local of its is one), by the name `functions` gives them, each with that method's path. i32 is i16 on
-/// CARDIAC, which is right for a program's own (Rust's default integer, on a card either way, and its methods, such
-/// as a range's step); but core widens to i32 only to work past what the narrower type holds: `i16::midpoint` adds
-/// the two in i32, so that the sum can't overflow, and on a card it can.
+/// past what a card holds, by the name `functions` gives them, each with that method's path. i32 is i16 on CARDIAC,
+/// which is right for a program's own (Rust's default integer, on a card either way, and its methods, such as a
+/// range's step); but core widens to i32 only to work past what the narrower type holds: `i16::midpoint` adds the
+/// two in i32, so that the sum can't overflow, and on a card it can. Where every value the method's i32 locals can
+/// hold is on a card (`u8::abs_diff`'s difference of two u8s, -255 to 255), i32 is as good as i16, and it compiles.
 fn widened_in_core(file: &File) -> HashMap<String, Path> {
     let mut out = HashMap::new();
     let fns = functions(file);
@@ -705,11 +706,183 @@ fn widened_in_core(file: &File) -> HashMap<String, Path> {
                     .iter()
                     .any(|s| matches!(s, Segment::Impl(Ty::Int(t)) if *t != IntTy::I32))
         };
-        if let Some((_, p)) = f.body.inlined.iter().find(|(l, p)| i32_locals.contains(l) && widens(p)) {
-            out.insert(name.clone(), p.clone());
+        let widened: Vec<&(Local, Path)> = f
+            .body
+            .inlined
+            .iter()
+            .filter(|(l, p)| i32_locals.contains(l) && widens(p))
+            .collect();
+        if widened.is_empty() {
+            continue;
+        }
+        // all of core's i32s here, those of a scope within the method's (`<impl i32>::unsigned_abs`) among them
+        let core_i32s: Vec<Local> = i32_locals
+            .iter()
+            .copied()
+            .filter(|l| f.body.inlined.iter().any(|(m, _)| m == l))
+            .collect();
+        if !on_a_card(f, &core_i32s) {
+            out.insert(name.clone(), widened[0].1.clone());
         }
     }
     out
+}
+
+/// The values a local can hold, from `lo` to `hi`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Span {
+    lo: i128,
+    hi: i128,
+}
+
+impl Span {
+    const CARD: Span = Span { lo: -999, hi: 999 };
+    const ANYTHING: Span = Span {
+        lo: i128::MIN,
+        hi: i128::MAX,
+    };
+
+    fn on_a_card(self) -> bool {
+        Span::CARD.lo <= self.lo && self.hi <= Span::CARD.hi
+    }
+
+    fn join(self, o: Span) -> Span {
+        Span {
+            lo: self.lo.min(o.lo),
+            hi: self.hi.max(o.hi),
+        }
+    }
+
+    /// What a cell of the type holds: a u8 or i8 its own range, an i16 (and a program's i32) a card's; none for the
+    /// rest, whose cell may stand for a number past a card (a huge usize, a u16 or u32 of `wide`).
+    fn of(t: &Ty) -> Option<Span> {
+        match t {
+            Ty::Int(IntTy::U8) => Some(Span { lo: 0, hi: 255 }),
+            Ty::Int(IntTy::I8) => Some(Span { lo: -128, hi: 127 }),
+            Ty::Int(IntTy::I16 | IntTy::I32) => Some(Span::CARD),
+            _ => None,
+        }
+    }
+}
+
+/// Whether every value each of `locals` (i32s of core's) can hold is on a card, worked out from every assignment to
+/// it, over and over until nothing grows: a constant, a cast from a u8, an i8 or an i16, `+`, `-`, `*` and negation
+/// of such values. A local assigned any other way, or written through a reference or a projection, may hold anything.
+/// Every value inside a card, a card's arithmetic is i32's.
+fn on_a_card(f: &Function, locals: &[Local]) -> bool {
+    let types: HashMap<Local, &Ty> = f
+        .params
+        .iter()
+        .map(|(l, t)| (*l, t))
+        .chain(f.body.decls.iter().map(|d| (d.local, &d.ty)))
+        .collect();
+    let mut anything: Vec<Local> = vec![];
+    let mut assigned: Vec<(Local, &Rvalue)> = vec![];
+    let ours = |p: &Place| match p.base {
+        PlaceBase::Local(l) if locals.contains(&l) => Some(l),
+        _ => None,
+    };
+    for b in &f.body.blocks {
+        for s in &b.statements {
+            match s {
+                Statement::Assign(p, r) => {
+                    if let Some(l) = ours(p) {
+                        if p.projection.is_empty() {
+                            assigned.push((l, r));
+                        } else {
+                            anything.push(l);
+                        }
+                    }
+                    if let Rvalue::Ref(_, q) = r {
+                        anything.extend(ours(q));
+                    }
+                }
+                Statement::Unsupported(u) => anything.extend(u.locals.iter().filter(|l| locals.contains(l))),
+                _ => {}
+            }
+        }
+        match &b.terminator {
+            Terminator::Call { dest, .. } => anything.extend(ours(dest)),
+            Terminator::Unsupported(u) => anything.extend(u.locals.iter().filter(|l| locals.contains(l))),
+            _ => {}
+        }
+    }
+    // a local that may hold anything holds what no card does, and so does every local worked out from it
+    let mut spans: HashMap<Local, Span> = anything.iter().map(|l| (*l, Span::ANYTHING)).collect();
+    // each round grows a span, or nothing grows and every span is known; one past a card is as far as it need go.
+    // A few rounds settle the straight-line code core inlines; code that doesn't settle in 16 is refused.
+    for _ in 0..16 {
+        let mut grew = false;
+        let mut unknown = false;
+        for &(l, r) in assigned.iter().filter(|(l, _)| !anything.contains(l)) {
+            // none where a local it reads has no span yet
+            let Some(v) = span_of(r, &spans, locals, &types) else {
+                unknown = true;
+                continue;
+            };
+            let joined = spans.get(&l).map_or(v, |s| s.join(v));
+            if spans.get(&l) != Some(&joined) {
+                spans.insert(l, joined);
+                grew = true;
+            }
+        }
+        if !grew {
+            // an assignment whose span is never known may hold anything, and so may its local
+            return !unknown && spans.values().all(|s| s.on_a_card());
+        }
+        if spans.values().any(|s| !s.on_a_card()) {
+            return false;
+        }
+    }
+    false
+}
+
+/// The values `r` can have, where its operands' are known.
+fn span_of(r: &Rvalue, spans: &HashMap<Local, Span>, locals: &[Local], types: &HashMap<Local, &Ty>) -> Option<Span> {
+    let operand = |o: &Operand| match o {
+        Operand::Constant(Const::Int { value, .. }) => Some(Span { lo: *value, hi: *value }),
+        Operand::Copy(p) | Operand::Move(p) if p.projection.is_empty() => match p.base {
+            PlaceBase::Local(l) if locals.contains(&l) => spans.get(&l).copied(),
+            PlaceBase::Local(l) => types.get(&l).and_then(|t| Span::of(t)),
+            _ => None,
+        },
+        _ => None,
+    };
+    match r {
+        Rvalue::Use(o) => operand(o),
+        Rvalue::Cast(o, Ty::Int(IntTy::I32), CastKind::IntToInt) => Some(operand(o).unwrap_or(Span::ANYTHING)),
+        Rvalue::UnaryOp(UnOp::Neg, o) => operand(o).map(|a| Span {
+            lo: a.hi.saturating_neg(),
+            hi: a.lo.saturating_neg(),
+        }),
+        Rvalue::BinaryOp(op, a, b) => {
+            let (a, b) = (operand(a)?, operand(b)?);
+            match op {
+                BinOp::Add | BinOp::AddUnchecked | BinOp::AddWrapping => Some(Span {
+                    lo: a.lo.saturating_add(b.lo),
+                    hi: a.hi.saturating_add(b.hi),
+                }),
+                BinOp::Sub | BinOp::SubUnchecked | BinOp::SubWrapping => Some(Span {
+                    lo: a.lo.saturating_sub(b.hi),
+                    hi: a.hi.saturating_sub(b.lo),
+                }),
+                BinOp::Mul | BinOp::MulUnchecked | BinOp::MulWrapping => {
+                    let ends = [
+                        a.lo.saturating_mul(b.lo),
+                        a.lo.saturating_mul(b.hi),
+                        a.hi.saturating_mul(b.lo),
+                        a.hi.saturating_mul(b.hi),
+                    ];
+                    Some(Span {
+                        lo: *ends.iter().min().unwrap(),
+                        hi: *ends.iter().max().unwrap(),
+                    })
+                }
+                _ => Some(Span::ANYTHING),
+            }
+        }
+        _ => Some(Span::ANYTHING),
+    }
 }
 
 /// A char is the number it is, a code point, in a cell as a usize is: never negative, compared as numbers, `as u8`
