@@ -556,6 +556,7 @@ fn compile(
         // `for x in t` over an array by value: a range over its indexes
         iterators::array_into_iter(fns.get_mut(n).unwrap());
         iterators::enumerate_slices(fns.get_mut(n).unwrap());
+        iterators::slice_methods(fns.get_mut(n).unwrap());
         forloops::lower_for_loops(fns.get_mut(n).unwrap());
         // a range's contains(): its tests, while the range is a struct the struct pass will take apart
         methods::inline_range_contains(fns.get_mut(n).unwrap());
@@ -563,15 +564,22 @@ fn compile(
     // enums with data as structs of their cells, which the struct pass takes apart
     // Option's and Result's methods that rustc calls at opt-level 1 and s: the tests it inlines at 2
     let normalized = enums::normalized(enums);
-    // each closure's function, by the closure's type: its first parameter's
+    // each closure's function, by the closure's type: its first parameter's (or what it points to, for a closure
+    // called through `&mut self`, as an iterator's methods call theirs)
     let closures: HashMap<String, String> = fns
         .iter()
         .filter_map(|(name, f)| match f.params.first() {
             Some((_, ir::Ty::Other(t))) if t.starts_with("{closure@") => Some((t.clone(), name.clone())),
+            Some((_, ir::Ty::Ref { to, .. })) => match &**to {
+                ir::Ty::Other(t) if t.starts_with("{closure@") => Some((t.clone(), name.clone())),
+                _ => None,
+            },
             _ => None,
         })
         .collect();
     for n in &names {
+        // an iterator's fold, sum, all and kin, which rustc calls: the loops they are
+        iterators::iterator_methods(fns.get_mut(n).unwrap(), &closures);
         enum_methods::inline_checked(fns.get_mut(n).unwrap());
         enum_methods::inline_option_eq(fns.get_mut(n).unwrap(), &normalized);
         enum_methods::inline_enum_methods(fns.get_mut(n).unwrap(), &normalized, &closures);

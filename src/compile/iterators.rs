@@ -751,3 +751,652 @@ pub fn enumerate_slices(f: &mut Function) {
         );
     }
 }
+
+/// What an iterator a method consumes runs over: indexes from `lo` up to `hi`, of type `ty`, each item an
+/// element's address (`&t[i]`, the array's place given) or the index itself (a range's).
+struct Over {
+    lo: Operand,
+    hi: Operand,
+    ty: IntTy,
+    elements: Option<Place>,
+    /// the lines that made the iterator and borrowed it, which go
+    made: Vec<(usize, usize)>,
+}
+
+/// The iterator a method is called on (`move s`, or `move r` with `r = &mut s` in the call's block): a slice
+/// iterator into one array, or a range of a card's type built in the call's block from values nothing changes
+/// before the call. Its local is used only there.
+fn over(f: &Function, defs: &HashMap<Local, Vec<At>>, call: usize, recv: &Operand) -> Option<Over> {
+    let b = &f.body.blocks[call];
+    let mut s = recv.local()?;
+    let mut made = vec![];
+    let borrowed = b.statements.iter().enumerate().find_map(|(k, st)| match st {
+        Statement::Assign(d, Rvalue::Ref(BorrowKind::Mut, p)) if d.as_local() == Some(s) && p.projection.is_empty() => {
+            p.base_local().map(|t| (k, t))
+        }
+        _ => None,
+    });
+    if let Some((k, t)) = borrowed {
+        made.push((call, k));
+        if ir::occurrences(&f.body.blocks, s) != 2 {
+            return None;
+        }
+        s = t;
+    }
+    if ir::occurrences(&f.body.blocks, s) != 2 {
+        return None;
+    }
+    let [At::Line(bi, si)] = defs.get(&s)?.as_slice() else {
+        return None;
+    };
+    let Statement::Assign(_, Rvalue::Struct(p, fs)) = &f.body.blocks[*bi].statements[*si] else {
+        return None;
+    };
+    made.push((*bi, *si));
+    let ty = f.body.decls.iter().find(|d| d.local == s).map(|d| &d.ty)?;
+    if let Ty::Path(t) = ty {
+        if t.is_plain() && t.name().starts_with("slice_Iter") {
+            let [(_, ptr), (_, end)] = fs.as_slice() else {
+                return None;
+            };
+            let (a, from) = element_pointer(f, defs, ptr)?;
+            let (b, to) = element_pointer(f, defs, end)?;
+            return (a == b && from <= to).then(|| Over {
+                lo: usize_const(from),
+                hi: usize_const(to),
+                ty: IntTy::Usize,
+                elements: Some(a),
+                made,
+            });
+        }
+    }
+    // a range, `Range_T { start, end }` as the for-loop pass names it, in the call's block, its values unchanged
+    // until the call
+    let t = match p.is_plain().then(|| p.name()) {
+        Some("Range_i16") => IntTy::I16,
+        Some("Range_u8") => IntTy::U8,
+        Some("Range_usize") => IntTy::Usize,
+        _ => return None,
+    };
+    let [(st, lo), (en, hi)] = fs.as_slice() else {
+        return None;
+    };
+    if st != "start" || en != "end" || *bi != call {
+        return None;
+    }
+    let read = |o: &Operand| o.local();
+    let changed = b.statements[si + 1..]
+        .iter()
+        .filter_map(|x| x.def())
+        .any(|d| Some(d) == read(lo) || Some(d) == read(hi));
+    if changed
+        || ![lo, hi]
+            .iter()
+            .all(|o| matches!(o, Operand::Constant(_)) || o.local().is_some())
+    {
+        return None;
+    }
+    let copy = |o: &Operand| match o {
+        Operand::Move(p) => Operand::Copy(p.clone()),
+        o => o.clone(),
+    };
+    Some(Over {
+        lo: copy(lo),
+        hi: copy(hi),
+        ty: t,
+        elements: None,
+        made,
+    })
+}
+
+/// The iterator's own lines, gone (as `Nop`s, so the lines after keep their places until the pass is done).
+fn gone(f: &mut Function, lines: &[(usize, usize)]) {
+    for &(bi, si) in lines {
+        f.body.blocks[bi].statements[si] = Statement::Nop;
+    }
+}
+
+/// Fresh locals and blocks for the code a method becomes.
+struct Fresh {
+    local: u32,
+    block: u32,
+    decls: Vec<ir::Decl>,
+    blocks: Vec<ir::Block>,
+}
+
+impl Fresh {
+    fn of(f: &Function) -> Fresh {
+        let local = f
+            .body
+            .decls
+            .iter()
+            .map(|d| d.local.0)
+            .chain(f.params.iter().map(|(l, _)| l.0))
+            .max()
+            .unwrap_or(0);
+        let block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0);
+        Fresh {
+            local: local + 1,
+            block: block + 1,
+            decls: vec![],
+            blocks: vec![],
+        }
+    }
+
+    fn local(&mut self, ty: Ty) -> Local {
+        let l = Local(self.local);
+        self.local += 1;
+        self.decls.push(ir::Decl {
+            local: l,
+            mutable: true,
+            ty,
+        });
+        l
+    }
+
+    fn name(&mut self) -> BasicBlock {
+        let b = BasicBlock(self.block);
+        self.block += 1;
+        b
+    }
+
+    fn block(&mut self, name: BasicBlock, statements: Vec<Statement>, terminator: Terminator) {
+        self.blocks.push(ir::Block {
+            name,
+            statements,
+            terminator,
+        });
+    }
+}
+
+fn assign(l: Local, r: Rvalue) -> Statement {
+    Statement::Assign(Place::local(l), r)
+}
+
+fn copy_of(l: Local) -> Operand {
+    Operand::Copy(Place::local(l))
+}
+
+fn branch(c: Local, zero: BasicBlock, other: BasicBlock) -> Terminator {
+    Terminator::SwitchInt {
+        discr: Operand::Move(Place::local(c)),
+        arms: vec![(0, zero)],
+        otherwise: Some(other),
+    }
+}
+
+/// A call of a function by its name, returning to `target`.
+fn call(dest: Place, callee: &str, args: Vec<Operand>, target: BasicBlock) -> Terminator {
+    Terminator::Call {
+        dest,
+        func: Path {
+            qself: None,
+            segments: vec![Segment::Name {
+                name: callee.to_string(),
+                args: None,
+            }],
+        },
+        args,
+        target: Some(target),
+        unwind: Unwind::Continue,
+    }
+}
+
+/// `Option::<T>::Some(v)` or `Option::<T>::None`.
+fn variant(t: &Ty, some: Option<Operand>) -> Rvalue {
+    let segments = vec![
+        Segment::Name {
+            name: "Option".into(),
+            args: Some(GenericArgs {
+                turbofish: true,
+                args: vec![GenericArg::Ty(t.clone())],
+            }),
+        },
+        Segment::Name {
+            name: if some.is_some() { "Some" } else { "None" }.into(),
+            args: None,
+        },
+    ];
+    Rvalue::Variant(Path { qself: None, segments }, some.into_iter().collect())
+}
+
+/// The closure a method is given, by its type among the method's type arguments: its function, which captures
+/// nothing (the closure passed is `()`), or a closure of core's that sums.
+enum Closure {
+    Fn(String),
+    Sum,
+}
+
+fn closure_of(func: &Path, arg: &Operand, closures: &HashMap<String, String>) -> Option<Closure> {
+    let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
+        return None;
+    };
+    let Some(GenericArg::Ty(Ty::Other(c))) = g.args.last() else {
+        return None;
+    };
+    // `{closure@<i16 as Sum<&i16>>::sum<..>::{closure#0}}`, passed as a zero-sized constant
+    if c.starts_with("{closure@<i16 as Sum") || c.starts_with("{closure@<u8 as Sum") {
+        return Some(Closure::Sum);
+    }
+    matches!(arg, Operand::Constant(Const::Unit)).then(|| closures.get(c).cloned().map(Closure::Fn))?
+}
+
+/// Methods of an iterator over an array or a range that rustc calls rather than inlines, as the loops they are:
+/// `fold` (and `sum`, a fold with core's closure), `all`, `any` and `position` with a closure that captures nothing,
+/// and a range's `count`, `last` and `nth`. A closure is called as the closure's function is elsewhere; core's
+/// sum is an overflow-checked add, so a sum past a card panics (natively it panics only past the type's range, if
+/// overflow checks are on).
+pub fn iterator_methods(f: &mut Function, closures: &HashMap<String, String>) {
+    let mut fresh = Fresh::of(f);
+    let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
+    types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let Some(q) = &func.qself else { continue };
+        if q.as_trait
+            .as_ref()
+            .and_then(names)
+            .is_none_or(|t| t != ["Iterator"] && t != ["iter", "range", "RangeIteratorImpl"])
+        {
+            continue;
+        }
+        let Some(recv) = args.first() else { continue };
+        let defs = definitions(f);
+        let Some(o) = over(f, &defs, bi, recv) else { continue };
+        let Some(d) = dest.as_local() else { continue };
+        let it = Ty::Int(o.ty);
+        let set = |v: Rvalue| Statement::Assign(dest.clone(), v);
+        // without a loop: a slice's count, its length; a range's last, its end less one if it isn't empty
+        match (func.name(), args.len(), &o.elements) {
+            ("count", 1, Some(_)) => {
+                let (Some((lo, _)), Some((hi, _))) = (o.lo.int(), o.hi.int()) else {
+                    continue;
+                };
+                gone(f, &o.made);
+                let b = &mut f.body.blocks[bi];
+                b.statements.push(set(Rvalue::Use(usize_const((hi - lo) as u64))));
+                b.terminator = Terminator::Goto(ret);
+                continue;
+            }
+            ("last", 1, None) => {
+                let some = fresh.name();
+                let v = fresh.local(it.clone());
+                let c = fresh.local(Ty::Bool);
+                let one = Operand::Constant(Const::Int { value: 1, ty: o.ty });
+                fresh.block(
+                    some,
+                    vec![
+                        assign(v, Rvalue::BinaryOp(ir::BinOp::Sub, o.hi.clone(), one)),
+                        set(variant(&it, Some(Operand::Move(Place::local(v))))),
+                    ],
+                    Terminator::Goto(ret),
+                );
+                let none = fresh.name();
+                fresh.block(none, vec![set(variant(&it, None))], Terminator::Goto(ret));
+                gone(f, &o.made);
+                let b = &mut f.body.blocks[bi];
+                b.statements
+                    .push(assign(c, Rvalue::BinaryOp(ir::BinOp::Lt, o.lo.clone(), o.hi.clone())));
+                b.terminator = branch(c, none, some);
+                continue;
+            }
+            _ => {}
+        }
+        // the loop: i from lo while i < hi, the body at `body`, the step at `step`, out at `done`
+        let i = fresh.local(it.clone());
+        let (head, body, step) = (fresh.name(), fresh.name(), fresh.name());
+        let c = fresh.local(Ty::Bool);
+        let mut entry = vec![assign(i, Rvalue::Use(o.lo.clone()))];
+        let element = |p: &Place| {
+            let mut e = p.clone();
+            e.projection.push(Projection::Index(i));
+            e
+        };
+        let item = |fresh: &mut Fresh| -> (Local, Statement) {
+            match &o.elements {
+                Some(a) => {
+                    let elem = match &types.get(&a.base_local().unwrap()) {
+                        Some(Ty::Array(e, _)) => (**e).clone(),
+                        Some(Ty::Ref { to, .. }) => match &**to {
+                            Ty::Array(e, _) => (**e).clone(),
+                            _ => Ty::Int(IntTy::I16),
+                        },
+                        _ => Ty::Int(IntTy::I16),
+                    };
+                    let x = fresh.local(Ty::Ref {
+                        lifetime: None,
+                        mutable: false,
+                        to: Box::new(elem),
+                    });
+                    (x, assign(x, Rvalue::Ref(BorrowKind::Shared, element(a))))
+                }
+                None => {
+                    let x = fresh.local(Ty::Int(o.ty));
+                    (x, assign(x, Rvalue::Use(copy_of(i))))
+                }
+            }
+        };
+        let mut steps = vec![assign(
+            i,
+            Rvalue::BinaryOp(
+                ir::BinOp::Add,
+                copy_of(i),
+                Operand::Constant(Const::Int { value: 1, ty: o.ty }),
+            ),
+        )];
+        let done_block = |fresh: &mut Fresh, statements: Vec<Statement>| {
+            let b = fresh.name();
+            fresh.block(b, statements, Terminator::Goto(ret));
+            b
+        };
+        let bool_const = |b: bool| Rvalue::Use(Operand::Constant(Const::Bool(b)));
+        let method = func.name();
+        let looped = match (method, args.as_slice()) {
+            (m @ ("fold" | "sum"), [_, rest @ ..]) => {
+                // `sum::<T>()`, where rustc calls it (opt-level 1), is a fold from 0 with core's closure
+                let acc_ty = types.get(&d).cloned().unwrap_or(Ty::Int(IntTy::I16));
+                let (init, cl) = match (m, rest) {
+                    ("fold", [init, cl]) => {
+                        let Some(cl) = closure_of(&func, cl, closures) else {
+                            continue;
+                        };
+                        (init.clone(), cl)
+                    }
+                    ("sum", []) => {
+                        let Ty::Int(t) = acc_ty else { continue };
+                        (Operand::Constant(Const::Int { value: 0, ty: t }), Closure::Sum)
+                    }
+                    _ => continue,
+                };
+                let init = &init;
+                let acc = fresh.local(acc_ty.clone());
+                entry.push(assign(acc, Rvalue::Use(init.clone())));
+                let after = fresh.name();
+                match cl {
+                    Closure::Fn(callee) => {
+                        let (x, made) = item(&mut fresh);
+                        let r = fresh.local(acc_ty.clone());
+                        fresh.block(
+                            body,
+                            vec![made],
+                            call(
+                                Place::local(r),
+                                &callee,
+                                vec![Operand::Move(Place::local(acc)), Operand::Move(Place::local(x))],
+                                after,
+                            ),
+                        );
+                        steps.insert(0, assign(acc, Rvalue::Use(Operand::Move(Place::local(r)))));
+                        fresh.block(after, vec![], Terminator::Goto(step));
+                    }
+                    Closure::Sum => {
+                        let Ty::Int(t) = acc_ty else { continue };
+                        let v = fresh.local(Ty::Int(t));
+                        let read = match &o.elements {
+                            Some(a) => Rvalue::Use(Operand::Copy(element(a))),
+                            None => Rvalue::Use(copy_of(i)),
+                        };
+                        let pair = fresh.local(Ty::Tuple(vec![Ty::Int(t), Ty::Bool]));
+                        fresh.block(
+                            body,
+                            vec![
+                                assign(v, read),
+                                assign(
+                                    pair,
+                                    Rvalue::BinaryOp(ir::BinOp::AddWithOverflow, copy_of(acc), copy_of(v)),
+                                ),
+                            ],
+                            Terminator::Assert {
+                                cond: Operand::Move(Place::field(pair, 1, Ty::Bool)),
+                                expected: false,
+                                msg: "attempt to compute `{} + {}`, which would overflow".into(),
+                                msg_args: vec![copy_of(acc), copy_of(v)],
+                                target: after,
+                                unwind: Unwind::Continue,
+                            },
+                        );
+                        fresh.block(
+                            after,
+                            vec![assign(
+                                acc,
+                                Rvalue::Use(Operand::Move(Place::field(pair, 0, Ty::Int(t)))),
+                            )],
+                            Terminator::Goto(step),
+                        );
+                    }
+                }
+                Some(done_block(
+                    &mut fresh,
+                    vec![set(Rvalue::Use(Operand::Move(Place::local(acc))))],
+                ))
+            }
+            (m @ ("all" | "any" | "position"), [_, cl]) => {
+                let Some(Closure::Fn(callee)) = closure_of(&func, cl, closures) else {
+                    continue;
+                };
+                if m == "position" && o.elements.is_none() {
+                    continue;
+                }
+                let (x, made) = item(&mut fresh);
+                let r = fresh.local(Ty::Bool);
+                let tested = fresh.name();
+                fresh.block(
+                    body,
+                    vec![made],
+                    call(Place::local(r), &callee, vec![Operand::Move(Place::local(x))], tested),
+                );
+                let (hit, miss) = match m {
+                    "all" => (vec![set(bool_const(false))], vec![set(bool_const(true))]),
+                    "any" => (vec![set(bool_const(true))], vec![set(bool_const(false))]),
+                    _ => {
+                        let k = fresh.local(Ty::Int(IntTy::Usize));
+                        let at = Rvalue::BinaryOp(ir::BinOp::Sub, copy_of(i), o.lo.clone());
+                        (
+                            vec![
+                                assign(k, at),
+                                set(variant(&Ty::Int(IntTy::Usize), Some(Operand::Move(Place::local(k))))),
+                            ],
+                            vec![set(variant(&Ty::Int(IntTy::Usize), None))],
+                        )
+                    }
+                };
+                let hit = done_block(&mut fresh, hit);
+                // all: stop at the first false; any and position: at the first true
+                let t = if m == "all" {
+                    branch(r, hit, step)
+                } else {
+                    branch(r, step, hit)
+                };
+                fresh.block(tested, vec![], t);
+                Some(done_block(&mut fresh, miss))
+            }
+            ("count", [_]) if o.elements.is_none() => {
+                let n = fresh.local(Ty::Int(IntTy::Usize));
+                entry.push(assign(n, Rvalue::Use(usize_const(0))));
+                fresh.block(
+                    body,
+                    vec![assign(n, Rvalue::BinaryOp(ir::BinOp::Add, copy_of(n), usize_const(1)))],
+                    Terminator::Goto(step),
+                );
+                Some(done_block(
+                    &mut fresh,
+                    vec![set(Rvalue::Use(Operand::Move(Place::local(n))))],
+                ))
+            }
+            ("spec_nth" | "nth", [_, n]) if o.elements.is_none() => {
+                let k = fresh.local(Ty::Int(IntTy::Usize));
+                entry.push(assign(k, Rvalue::Use(n.clone())));
+                let z = fresh.local(Ty::Bool);
+                let found = done_block(&mut fresh, vec![set(variant(&it, Some(copy_of(i))))]);
+                let down = fresh.name();
+                fresh.block(
+                    body,
+                    vec![assign(z, Rvalue::BinaryOp(ir::BinOp::Eq, copy_of(k), usize_const(0)))],
+                    branch(z, down, found),
+                );
+                fresh.block(
+                    down,
+                    vec![assign(k, Rvalue::BinaryOp(ir::BinOp::Sub, copy_of(k), usize_const(1)))],
+                    Terminator::Goto(step),
+                );
+                Some(done_block(&mut fresh, vec![set(variant(&it, None))]))
+            }
+            _ => continue,
+        };
+        let Some(done) = looped else { continue };
+        fresh.block(
+            head,
+            vec![assign(c, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(i), o.hi.clone()))],
+            branch(c, done, body),
+        );
+        fresh.block(step, steps, Terminator::Goto(head));
+        gone(f, &o.made);
+        let b = &mut f.body.blocks[bi];
+        b.statements.extend(entry);
+        b.terminator = Terminator::Goto(head);
+    }
+    // the iterators' own lines, now nothing
+    for b in f.body.blocks.iter_mut() {
+        b.statements.retain(|s| *s != Statement::Nop);
+    }
+    f.body.decls.append(&mut fresh.decls);
+    f.body.blocks.append(&mut fresh.blocks);
+}
+
+/// A slice of an array the function knows (`slices` made it a reference to `[T; N]`): where the array is, and the
+/// indexes the slice covers.
+fn slice_at(f: &Function, defs: &HashMap<Local, Vec<At>>, o: &Operand) -> Option<(Place, u64, u64)> {
+    let l = o.local()?;
+    let ty = f
+        .params
+        .iter()
+        .find(|(p, _)| *p == l)
+        .map(|(_, t)| t)
+        .or_else(|| f.body.decls.iter().find(|d| d.local == l).map(|d| &d.ty))?;
+    let (Ty::Ref { to, .. } | Ty::Ptr { to, .. }) = ty else {
+        return None;
+    };
+    let Ty::Array(_, ArrayLen::Known(n)) = &**to else {
+        return None;
+    };
+    let (a, from) = element_pointer(f, defs, o)?;
+    Some((a, from, from + n))
+}
+
+/// A slice's `contains` and `fill` (rustc's `slice_contains` and `spec_fill` at opt-level 2), as loops over its
+/// elements.
+pub fn slice_methods(f: &mut Function) {
+    let mut fresh = Fresh::of(f);
+    for bi in 0..f.body.blocks.len() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(ret),
+            ..
+        } = f.body.blocks[bi].terminator.clone()
+        else {
+            continue;
+        };
+        let impl_of_slice = matches!(func.segments.as_slice(), [Segment::Name { name, .. }, Segment::Impl(Ty::Slice(_)), _] if name == "slice");
+        let contains = match (func.name(), args.as_slice()) {
+            ("contains", [s, x]) if impl_of_slice => Some((s, x)),
+            ("slice_contains", [x, s]) if func.qself.is_some() => Some((s, x)),
+            _ => None,
+        };
+        let fill = match (func.name(), args.as_slice()) {
+            ("fill", [s, v]) if impl_of_slice => Some((s, v)),
+            ("spec_fill", [s, v]) if func.qself.is_some() => Some((s, v)),
+            _ => None,
+        };
+        let defs = definitions(f);
+        let Some((s, other)) = contains.or(fill) else { continue };
+        let Some((a, from, to)) = slice_at(f, &defs, s) else {
+            continue;
+        };
+        let i = fresh.local(Ty::Int(IntTy::Usize));
+        let c = fresh.local(Ty::Bool);
+        let (head, body, step, done) = (fresh.name(), fresh.name(), fresh.name(), fresh.name());
+        let mut element = a.clone();
+        element.projection.push(Projection::Index(i));
+        let elem_ty = match f
+            .body
+            .decls
+            .iter()
+            .find(|d| Some(d.local) == a.base_local())
+            .map(|d| &d.ty)
+            .or_else(|| {
+                f.params
+                    .iter()
+                    .find(|(p, _)| Some(*p) == a.base_local())
+                    .map(|(_, t)| t)
+            }) {
+            Some(Ty::Array(e, _)) => (**e).clone(),
+            Some(Ty::Ref { to, .. }) => match &**to {
+                Ty::Array(e, _) => (**e).clone(),
+                _ => continue,
+            },
+            _ => continue,
+        };
+        // the value to find or to fill with, read once, before the loop
+        let v = fresh.local(elem_ty.clone());
+        let read = match (contains.is_some(), other) {
+            (true, x) => {
+                let Some(x) = x.local() else { continue };
+                Rvalue::Use(Operand::Copy(Place {
+                    base: PlaceBase::Local(x),
+                    projection: vec![Projection::Deref],
+                }))
+            }
+            (false, v) => Rvalue::Use(v.clone()),
+        };
+        let mut entry = vec![assign(v, read), assign(i, Rvalue::Use(usize_const(from)))];
+        if contains.is_some() {
+            let e = fresh.local(elem_ty.clone());
+            let eq = fresh.local(Ty::Bool);
+            let yes = fresh.name();
+            fresh.block(
+                body,
+                vec![
+                    assign(e, Rvalue::Use(Operand::Copy(element))),
+                    assign(eq, Rvalue::BinaryOp(ir::BinOp::Eq, copy_of(e), copy_of(v))),
+                ],
+                branch(eq, step, yes),
+            );
+            let set = |b: bool| Statement::Assign(dest.clone(), Rvalue::Use(Operand::Constant(Const::Bool(b))));
+            fresh.block(yes, vec![set(true)], Terminator::Goto(ret));
+            fresh.block(done, vec![set(false)], Terminator::Goto(ret));
+        } else {
+            fresh.block(
+                body,
+                vec![Statement::Assign(element, Rvalue::Use(copy_of(v)))],
+                Terminator::Goto(step),
+            );
+            fresh.block(done, vec![], Terminator::Goto(ret));
+        }
+        fresh.block(
+            head,
+            vec![assign(c, Rvalue::BinaryOp(ir::BinOp::Lt, copy_of(i), usize_const(to)))],
+            branch(c, done, body),
+        );
+        fresh.block(
+            step,
+            vec![assign(i, Rvalue::BinaryOp(ir::BinOp::Add, copy_of(i), usize_const(1)))],
+            Terminator::Goto(head),
+        );
+        let b = &mut f.body.blocks[bi];
+        b.statements.append(&mut entry);
+        b.terminator = Terminator::Goto(head);
+    }
+    f.body.decls.append(&mut fresh.decls);
+    f.body.blocks.append(&mut fresh.blocks);
+}

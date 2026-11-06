@@ -38,3 +38,21 @@
 - **Cost.** A copy of the array (its cells, and two instructions an element) where the loop's array is written
   again after the iterator is made. `enumerate` of anything but a slice iterator, and at opt-level 1, is still
   refused.
+
+## 2026-11-06 · An iterator's and a slice's methods that rustc calls are the loops they stand for
+
+- **Decision.** `iterators::iterator_methods`: on a slice iterator into one array, or a range of a card's type
+  built in the call's block, rustc's calls of `fold` (and `sum`, a fold with core's closure), `all`, `any` and
+  `position` with a closure that captures nothing, and a range's `count`, `last` and `nth`, are counted loops
+  written in the IR (`last` and a slice's `count` are no loop). The closure is called by its function's name, as
+  `Option::map`'s is; the closures found by type now include those taken by `&mut self`, as an iterator's are.
+  Core's sum is an overflow-checked add whatever the build's overflow checks, since the compiler isn't told them.
+  `iterators::slice_methods`: `contains` and `fill` on a slice of a known array (rustc's `slice_contains` and
+  `spec_fill` at opt-level 2) are loops over its elements. A closure type that names a function holding a brace
+  (core's, `{closure@<i16 as Sum>::sum<..>::{closure#0}}`) is lexed to its own closing brace.
+- **Why.** Each is a loop over `0..N` the compiler already compiles.
+- **Cost.** A closure is a call, not inlined: `t.iter().all(|&x| x < 10)` twice is 89 cells, the same loops with
+  the test written in them 53. `sum()` with overflow checks off takes the checked add's cells (39 for four
+  elements, where the index loop is 25). `fold` whose result passes a card panics or keeps three digits as the
+  index loop does; the support row array_iter_fold's input (3 -1 4 1 to 2941) passes one, so it reads as a
+  difference now where it was refused.

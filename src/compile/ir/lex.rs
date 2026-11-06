@@ -40,7 +40,13 @@ pub fn tokens(text: &str) -> Result<Vec<Token>, usize> {
             i += 1;
             continue;
         } else if b[i..].starts_with(b"{closure@") {
-            let Some(end) = text[i..].find('}') else {
+            // to its closing brace: a closure of core's names the function it is in, which can hold one
+            // (`{closure@<i16 as Sum>::sum<..>::{closure#0}}`)
+            let mut depth = 0;
+            let Some(end) = text[i..].find(|c| {
+                depth += (c == '{') as i32 - (c == '}') as i32;
+                depth == 0
+            }) else {
                 return Err(start);
             };
             i += end + 1;
