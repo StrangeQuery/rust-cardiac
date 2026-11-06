@@ -47,6 +47,8 @@ Usage:
       `{t} debug --help` says them.
   {t} asm [OPTION]... FILE
       Assemble a listing into a deck: carc, with carc's options. `{t} asm --help` says them.
+  {t} --version
+      Which cargo-cardiac this is.
 
 Resources, load_resource(\"NAME\"):
   A resource is the file resources/NAME beside the package's Cargo.toml (beside a single file, for one):
