@@ -645,6 +645,15 @@ impl Parser<'_> {
             self.pos += 2;
             return Ok(Const::Unit);
         }
+        // a tuple's value, `(10_i16,)` or `(1_i16, 2_i16)`
+        if self.eat_punct("(") {
+            let mut values = vec![self.constant()?];
+            while self.eat_punct(",") && !self.is_punct(")") {
+                values.push(self.constant()?);
+            }
+            self.punct(")")?;
+            return Ok(Const::Tuple(values));
+        }
         if let Some(Tok::Str(s)) = self.peek() {
             let s = s.clone();
             self.pos += 1;
@@ -775,11 +784,40 @@ impl Parser<'_> {
         {
             self.pos += 1;
             let mut items = vec![self.operand()?];
-            while self.eat_punct(",") {
+            // (a tuple of one is `(copy _2,)`)
+            while self.eat_punct(",") && !self.is_punct(")") {
                 items.push(self.operand()?);
             }
             self.punct(")")?;
             return Ok(Rvalue::Tuple(items));
+        }
+        // a closure built of what it captures: `{closure@src/main.rs:9:15: 9:18} { k: copy _5 }`
+        if let (Some(Tok::Closure(t)), Some(Tok::Punct("{"))) = (self.peek(), self.peek_at(1)) {
+            let t = Ty::Other(t.clone());
+            self.pos += 2;
+            let mut fields = vec![];
+            loop {
+                // (a capture is named by its variable, or numbered)
+                let name = match self.peek() {
+                    Some(Tok::Int { digits, suffix: None }) => {
+                        let n = digits.clone();
+                        self.pos += 1;
+                        n
+                    }
+                    _ => self.ident()?,
+                };
+                self.punct(":")?;
+                fields.push((name, self.operand()?));
+                if !self.eat_punct(",") {
+                    break;
+                }
+            }
+            self.punct("}")?;
+            return Ok(Rvalue::Closure(t, fields));
+        }
+        // a copy without a retag, which the compiler doesn't model: `no_retag copy ((*_1).0: &i16)`
+        if self.eat_ident("no_retag") {
+            return Ok(Rvalue::Use(self.operand()?));
         }
         if starts_operand(self)
             || self.is_punct("(")

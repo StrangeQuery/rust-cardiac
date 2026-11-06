@@ -61,7 +61,7 @@ impl Locals for Rvalue {
             }
             Rvalue::Ref(_, p) | Rvalue::Discriminant(p) => p.visit_locals(f),
             Rvalue::Array(os) | Rvalue::Tuple(os) | Rvalue::Variant(_, os) => os.iter().for_each(|o| o.visit_locals(f)),
-            Rvalue::Struct(_, fields) => fields.iter().for_each(|(_, o)| o.visit_locals(f)),
+            Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter().for_each(|(_, o)| o.visit_locals(f)),
             Rvalue::Sum(terms) => terms.iter().for_each(|(_, o)| o.visit_locals(f)),
             Rvalue::Lin(terms) => terms.iter().for_each(|(_, o)| o.visit_locals(f)),
         }
@@ -156,7 +156,7 @@ impl Rvalue {
             Rvalue::BinaryOp(_, a, b) => vec![a, b],
             Rvalue::Ref(..) | Rvalue::Discriminant(_) => vec![],
             Rvalue::Array(os) | Rvalue::Tuple(os) | Rvalue::Variant(_, os) => os.iter().collect(),
-            Rvalue::Struct(_, fields) => fields.iter().map(|(_, o)| o).collect(),
+            Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter().map(|(_, o)| o).collect(),
             Rvalue::Sum(terms) => terms.iter().map(|(_, o)| o).collect(),
             Rvalue::Lin(terms) => terms.iter().map(|(_, o)| o).collect(),
         }
@@ -230,7 +230,7 @@ impl Rvalue {
             Rvalue::BinaryOp(_, a, b) => vec![a, b],
             Rvalue::Ref(..) | Rvalue::Discriminant(_) => vec![],
             Rvalue::Array(os) | Rvalue::Tuple(os) | Rvalue::Variant(_, os) => os.iter_mut().collect(),
-            Rvalue::Struct(_, fields) => fields.iter_mut().map(|(_, o)| o).collect(),
+            Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter_mut().map(|(_, o)| o).collect(),
             Rvalue::Sum(terms) => terms.iter_mut().map(|(_, o)| o).collect(),
             Rvalue::Lin(terms) => terms.iter_mut().map(|(_, o)| o).collect(),
         }

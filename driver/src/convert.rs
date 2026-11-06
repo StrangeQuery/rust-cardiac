@@ -658,9 +658,8 @@ impl<'tcx> Convert<'tcx> {
     ) -> Option<ir::Rvalue> {
         use pmir::Rvalue as R;
         Some(match r {
-            // without a retag it prints `no_retag copy _1`, which the parser doesn't read
-            R::Use(o, pmir::WithRetag::Yes) => ir::Rvalue::Use(self.operand(o, locals)?),
-            R::Use(_, pmir::WithRetag::No) => return None,
+            // (without a retag it prints `no_retag copy _1`, which the parser reads as the copy)
+            R::Use(o, _) => ir::Rvalue::Use(self.operand(o, locals)?),
             R::Repeat(o, n) => ir::Rvalue::Repeat(self.operand(o, locals)?, n.eval_target_usize().ok()?),
             R::Ref(_, kind, p) => {
                 let kind = match kind {
@@ -727,8 +726,23 @@ impl<'tcx> Convert<'tcx> {
                 match kind {
                     // `[]` doesn't parse
                     pmir::AggregateKind::Array(_) if !ops.is_empty() => ir::Rvalue::Array(ops),
-                    // nor do `()` and `(copy _1,)`
-                    pmir::AggregateKind::Tuple if ops.len() >= 2 => ir::Rvalue::Tuple(ops),
+                    // nor does `()`
+                    pmir::AggregateKind::Tuple if !ops.is_empty() => ir::Rvalue::Tuple(ops),
+                    // a closure: its captures named as rustc's printer names them, by their variables
+                    pmir::AggregateKind::Closure(..) if !ops.is_empty() => {
+                        let mmir::Rvalue::Aggregate(internal_kind, _) = internal else {
+                            return None;
+                        };
+                        let mmir::AggregateKind::Closure(def, args) = **internal_kind else {
+                            return None;
+                        };
+                        let names: Vec<String> = match def.as_local().and_then(|d| self.tcx.upvars_mentioned(d)) {
+                            Some(upvars) => upvars.keys().map(|&v| self.tcx.hir_name(v).to_string()).collect(),
+                            None => (0..ops.len()).map(|k| k.to_string()).collect(),
+                        };
+                        let ty = self.ty(stable(mty::Ty::new_closure(self.tcx, def, args)), Paths::Full);
+                        ir::Rvalue::Closure(ty, names.into_iter().zip(ops).collect())
+                    }
                     // `*mut [T] from (p, n)`, a slice's pointer made of its parts
                     pmir::AggregateKind::RawPtr(to, m) => {
                         let [p, n] = ops.as_slice() else { return None };

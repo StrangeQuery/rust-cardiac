@@ -19,6 +19,7 @@
 //! cell does.
 pub mod arith;
 pub mod blocks;
+pub mod closures;
 pub mod copies;
 pub mod crates;
 pub mod enum_methods;

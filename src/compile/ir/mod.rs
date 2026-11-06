@@ -391,6 +391,8 @@ pub enum Const {
     /// A closure that captures nothing, as a value of its type: `ZeroSized: {closure@src/main.rs:4:13: 4:16}`. (A
     /// value of any other type with no bytes is `()`.)
     ZeroSized(Ty),
+    /// A tuple's value, `(10_i16,)`: what rustc passes a closure's `call` for its arguments.
+    Tuple(Vec<Const>),
 }
 
 impl Const {
@@ -399,7 +401,7 @@ impl Const {
         match self {
             Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
-            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) | Const::ZeroSized(_) => false,
+            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) | Const::ZeroSized(_) | Const::Tuple(_) => false,
         }
     }
 }
@@ -649,6 +651,9 @@ pub enum Rvalue {
     Struct(Path, Vec<(String, Operand)>),
     /// `Option::<i16>::Some(a)`: an enum variant built from its fields.
     Variant(Path, Vec<Operand>),
+    /// `{closure@src/main.rs:9:15: 9:18} { k: copy _5 }`: a closure built of what it captures, its type (as rustc
+    /// writes it) and each capture's name and value.
+    Closure(Ty, Vec<(String, Operand)>),
     /// An overflow-checked sum of signed terms, worked out in the accumulator and checked once at the end:
     /// `SumWithOverflow(+copy _1, -copy _2, +const 5_i16)`.
     Sum(Vec<(Sign, Operand)>),
@@ -959,6 +964,14 @@ impl fmt::Display for Const {
             }
             Const::Promoted(p, n) => write!(f, "{p}::promoted[{n}]"),
             Const::ZeroSized(t) => write!(f, "ZeroSized: {t}"),
+            Const::Tuple(cs) => {
+                f.write_str("(")?;
+                comma_list(f, cs)?;
+                if cs.len() == 1 {
+                    f.write_str(",")?;
+                }
+                f.write_str(")")
+            }
         }
     }
 }
@@ -999,7 +1012,20 @@ impl fmt::Display for Rvalue {
             Rvalue::Tuple(os) => {
                 f.write_str("(")?;
                 comma_list(f, os)?;
+                if os.len() == 1 {
+                    f.write_str(",")?;
+                }
                 f.write_str(")")
+            }
+            Rvalue::Closure(t, fields) => {
+                write!(f, "{t} {{ ")?;
+                for (i, (name, o)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{name}: {o}")?;
+                }
+                f.write_str(" }")
             }
             Rvalue::Struct(p, fields) => {
                 write!(f, "{p} {{ ")?;

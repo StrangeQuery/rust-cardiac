@@ -1,3 +1,31 @@
+## 2026-11-06 · A closure that captures is a struct of its captures; a call of it through `Fn` is a call of its function
+
+- **Decision.** The front end makes each closure that captures a struct (`closures::closures_as_structs`), named
+  after its function (`main_closure0_env`), built where rustc builds the closure (`{closure@..} { k: copy _5 }`,
+  which the IR now reads as `Rvalue::Closure`) and taken apart by the struct pass as any struct. A call of a closure
+  through its trait, `<{closure@..} as Fn<(i16,)>>::call(move _3, move _4)` (or `FnMut`'s `call_mut`), is a call of
+  its function with the struct and the arguments rustc tupled, one by one: a constant tuple's values, or the
+  operands of the tuple the block built just for the call. With that, a closure passed to one of the program's
+  generic functions is the generic function's instance for that closure's type (the entry on instances), a closure
+  returned as `impl Fn` is the struct returned, and one kept in a generic struct is a field of that struct's
+  instance. The IR also reads what these need and the parser didn't: a tuple of one (`(copy _2,)`, and the constant
+  `(10_i16,)`) and a copy without a retag (`no_retag copy ((*_1).0: &i16)`, which is the copy).
+- **Why.** Each closure is a type of its own, so rustc writes the code that takes one generically, through `Fn`,
+  and the instance machinery already makes a function of each instance; what was missing was the closure as a value
+  (its captures) and the call it makes through `Fn` (its function). A capture by reference is a reference field, an
+  address, as a slice iterator's pointers are; by value, the value.
+- **Refused, where the function that does it is compiled.** A closure called through `FnOnce::call_once`, or whose
+  function takes it by value; one that captures a field of a struct (`p.a`, which rustc captures as a place the
+  struct pass doesn't take apart); a closure defined in a module's function or a generic one; a tuple of one left
+  over; core's generic functions given a closure (`array::from_fn`, whose MIR is core's: the linker refuses it).
+- **Cost.** None to programs without such closures: the compiler's tests and the examples are unchanged.
+- **Evidence.** Support matrix: closure_passed, closure_returned, closure_stored and closure_generic_arg match at
+  every setting; and three rows the copy without a retag was all they lacked (array_get, option_as_ref,
+  option_copied). Probes matching native Rust at the four settings: an `FnMut` that adds to a captured variable,
+  called twice, and one called through `&mut F`; a `move` closure whose variable changes after it is made; a
+  closure capturing an array and indexing it; a closure passed down from one generic function to another by
+  reference; a closure made anew in each pass of a loop around a changing variable.
+
 ## 2026-11-06 · A `&dyn Trait` is an enum of the types the program makes one of; a method call through it a `match`
 
 - **Decision.** The front end makes each trait object an enum (`indirect::trait_objects`): for a trait the program

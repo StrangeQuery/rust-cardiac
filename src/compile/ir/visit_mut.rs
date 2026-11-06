@@ -125,6 +125,12 @@ pub fn walk_rvalue<V: VisitMut + ?Sized>(v: &mut V, r: &mut Rvalue) {
                 v.visit_operand(o);
             }
         }
+        Rvalue::Closure(t, fields) => {
+            v.visit_ty(t);
+            for (_, o) in fields {
+                v.visit_operand(o);
+            }
+        }
         Rvalue::Variant(p, os) => {
             v.visit_path(p);
             for o in os {
@@ -184,6 +190,11 @@ pub fn walk_const<V: VisitMut + ?Sized>(v: &mut V, c: &mut Const) {
         }
         Const::Variant(p, cs) => {
             v.visit_path(p);
+            for c in cs {
+                v.visit_const(c);
+            }
+        }
+        Const::Tuple(cs) => {
             for c in cs {
                 v.visit_const(c);
             }

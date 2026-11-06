@@ -67,6 +67,8 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     // be (after the promoteds, which may make them)
     super::indirect::function_pointers(&mut file);
     let objects = super::indirect::trait_objects(&mut file);
+    // a closure that captures, a struct; one called through its trait, a call of its function
+    super::closures::closures_as_structs(&mut file);
     super::panic_messages::literal_panics(&mut file);
     byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
