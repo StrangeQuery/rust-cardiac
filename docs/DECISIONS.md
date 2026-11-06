@@ -4,6 +4,42 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · `i16::ilog10` stays a call at every opt-level, and the compiler writes it
+
+- **Decision.** The driver keeps `i16::ilog10` a call at opt-level 2 and 3 too (`inline::provide_written`,
+  `WRITTEN_AT_EVERY_LEVEL`), as it keeps the methods the compiler writes at 1 and s; `methods` writes it as it
+  does there: a panic below 1, then tests against 10 and 100.
+- **Why.** What rustc inlines is core's `int_log10::less_than_5`: four additions of u32 constants (393206,
+  524188, 916504, 514288), two ands, an xor and a shift, a trick on the bits of a number below 100000. No card
+  holds the constants, and reading the trick back as compares would be pattern matching on core's code for a
+  method the compiler already writes.
+- **Cost.** None found: the row is 33 cells at every setting, as at opt-level 1. `checked_ilog10` and a u8's
+  `ilog10` stay refused (an `Option<u32>`, a `NonZero<u8>`).
+
+## 2026-11-06 · `div_euclid` is one divide: `(a + 1) / b` less b's sign for a below 0
+
+- **Decision.** `methods`: where rustc calls `i16::div_euclid`, it is `a / b` for a not below 0, and for a below
+  0 `(a + 1) / b`, one less for b above 0 and one more for b below. That is Rust's answer for every a below 0, b
+  dividing it or not (`(-7).div_euclid(7)` is -1, and so is -6 / 7 - 1; `(-8).div_euclid(7)` is -2, and so is
+  -7 / 7 - 1), and a + 1 of a number below 0 is on a card. It replaces the quotient and the remainder, the remainder's sign telling the fix.
+- **Why.** The divide routine once, not the divide and remainder routines both: the matrix's row by a variable is
+  88 cells, where it didn't fit in 96 (a `/` by a variable alone is 66), and by a constant 68 where it was 81.
+- **Cost.** Two tests of a's sign where there was one of the remainder's.
+
+## 2026-11-06 · A core method's i32 compiles where its values are on a card
+
+- **Decision.** `front::widened_in_core` refuses an integer method of core's, of a type other than i32, that rustc
+  inlined with i32 locals, only where those locals can hold a value past a card. What each of core's i32 locals
+  here can hold is worked out from its assignments, round after round until nothing grows: a constant, a cast from
+  a u8 (0 to 255), an i8 (-128 to 127) or an i16 (a card), and `+`, `-`, `*` and negation of those. Any other assignment, a write through a reference or a projection, or a call's result, may
+  hold anything. `u8::abs_diff` at opt-level 2 (the two u8s' difference in i32, then its absolute value: -255 to
+  255) compiles; `i16::midpoint` (the two i16s' sum in i32: -1998 to 1998) stays refused.
+- **Why.** Core works in i32 to reach past the narrower type, and a card is narrower than i32; but where every
+  value is on a card, i32's arithmetic and a card's agree, overflow checks or not. Of core's integer methods on
+  i8, u8, i16, u16, isize, usize and u32 (about 400 tried), only these two have i32 locals at opt-level 1 or 2.
+- **Cost.** A method whose i32 values stay on a card for reasons the spans can't see (`midpoint` of two small
+  numbers) is still refused.
+
 ## 2026-11-06 · An iterator's and a slice's methods that rustc calls are the loops they stand for
 
 - **Decision.** `iterators::iterator_methods`: on a slice iterator into one array, or a range of a card's type

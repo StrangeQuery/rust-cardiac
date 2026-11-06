@@ -6,7 +6,8 @@
 //!
 //! But for the methods of core that stay calls (`provide`): the integer methods the compiler writes itself
 //! (`methods::written_here`), which keep the code they had at these levels; and a few whose inlined body the
-//! compiler gets wrong today (`WRONG_INLINED`), which stay calls, and refused.
+//! compiler gets wrong today (`WRONG_INLINED`), which stay calls, and refused. A few of the ones it writes stay
+//! calls at every level (`provide_written`), where what rustc inlines works on numbers no card holds.
 use std::sync::OnceLock;
 
 use rustc_hir::attrs::InlineAttr;
@@ -23,6 +24,10 @@ use cargo_cardiac::compile::methods;
 /// opt-level 1 and s they stay refused as they are at 2. `midpoint` adds in an `i32` past a card, and
 /// `saturating_mul` picks between `i16::MIN` and `i16::MAX` as values.
 const WRONG_INLINED: [(&str, IntTy); 2] = [("midpoint", IntTy::I16), ("saturating_mul", IntTy::I16)];
+
+/// Integer methods the compiler writes itself (`methods::written_here`) whose inlined body works on numbers no
+/// card holds: kept calls at opt-level 2 and 3 too. `ilog10` is bit operations on u32 constants (`393206`).
+const WRITTEN_AT_EVERY_LEVEL: [(&str, IntTy); 1] = [("ilog10", IntTy::I16)];
 
 /// Whether the inliner should run where rustc wouldn't run it: opt-level 1, s or z, unless `-Zinline-mir` says.
 /// (At 0 the MIR is unoptimized and the compiler's passes are off; from 2 rustc runs it already.)
@@ -45,31 +50,42 @@ static METADATA: OnceLock<for<'tcx> fn(TyCtxt<'tcx>, DefId) -> CodegenFnAttrs> =
 pub fn provide(providers: &mut rustc_middle::util::Providers) {
     let _ = METADATA.set(providers.extern_queries.codegen_fn_attrs);
     providers.extern_queries.codegen_fn_attrs = |tcx, def_id| {
-        let mut attrs = METADATA.get().expect("set before any query runs")(tcx, def_id);
-        if stays_called(tcx, def_id) {
-            attrs.inline = InlineAttr::Never;
-        }
-        attrs
+        let called = |(name, ty): (&str, IntTy)| methods::written_here(name, ty) || WRONG_INLINED.contains(&(name, ty));
+        never_inlined_if(tcx, def_id, called)
     };
 }
 
-/// Whether `def_id` is an inherent method of `i16`, `u8` or `usize` that stays a call.
-fn stays_called(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    if tcx.def_kind(def_id) != DefKind::AssocFn {
-        return false;
+/// The same at the levels where rustc runs the inliner itself, for `WRITTEN_AT_EVERY_LEVEL` alone.
+pub fn provide_written(providers: &mut rustc_middle::util::Providers) {
+    let _ = METADATA.set(providers.extern_queries.codegen_fn_attrs);
+    providers.extern_queries.codegen_fn_attrs =
+        |tcx, def_id| never_inlined_if(tcx, def_id, |m: (&str, IntTy)| WRITTEN_AT_EVERY_LEVEL.contains(&m));
+}
+
+/// rustc's codegen attributes of `def_id`, with `#[inline(never)]` where it is an inherent method of `i16`, `u8`
+/// or `usize` that `called` says stays a call.
+fn never_inlined_if(tcx: TyCtxt<'_>, def_id: DefId, called: impl Fn((&str, IntTy)) -> bool) -> CodegenFnAttrs {
+    let mut attrs = METADATA.get().expect("set before any query runs")(tcx, def_id);
+    if int_method(tcx, def_id).is_some_and(|(name, ty)| called((name.as_str(), ty))) {
+        attrs.inline = InlineAttr::Never;
     }
-    let Some(parent) = tcx.opt_parent(def_id) else {
-        return false;
-    };
+    attrs
+}
+
+/// The name of `def_id` and the integer type, where it is an inherent method of `i16`, `u8` or `usize`.
+fn int_method(tcx: TyCtxt<'_>, def_id: DefId) -> Option<(rustc_span::Symbol, IntTy)> {
+    if tcx.def_kind(def_id) != DefKind::AssocFn {
+        return None;
+    }
+    let parent = tcx.opt_parent(def_id)?;
     if tcx.def_kind(parent) != (DefKind::Impl { of_trait: false }) {
-        return false;
+        return None;
     }
     let ty = match tcx.type_of(parent).instantiate_identity().skip_norm_wip().kind() {
         ty::Int(ty::IntTy::I16) => IntTy::I16,
         ty::Uint(ty::UintTy::U8) => IntTy::U8,
         ty::Uint(ty::UintTy::Usize) => IntTy::Usize,
-        _ => return false,
+        _ => return None,
     };
-    let name = tcx.item_name(def_id);
-    methods::written_here(name.as_str(), ty) || WRONG_INLINED.contains(&(name.as_str(), ty))
+    Some((tcx.item_name(def_id), ty))
 }
