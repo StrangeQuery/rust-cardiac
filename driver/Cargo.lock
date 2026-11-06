@@ -11,7 +11,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-cardiac"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "heartburn",
  "serde_json",
@@ -19,9 +19,9 @@ dependencies = [
 
 [[package]]
 name = "heartburn"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb1a67631427c8a0888daac1eed87fa92db86222226e0c3a07ad7aadf4bedea8"
+checksum = "292edbff3633456f3aa1c58db6304b732e79e833fff51e530b73df039d3a523a"
 
 [[package]]
 name = "itoa"
