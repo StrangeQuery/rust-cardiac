@@ -746,6 +746,14 @@ impl<'tcx> Convert<'tcx> {
             return structural;
         }
         let konst: mmir::Const<'tcx> = internal(self.tcx, c);
+        // a pointer to a static, as the text names it, `{alloc1: &[i16; 4]}`: the text gives `&[u8; N]`'s as
+        // `<static(DefId(..))>`, which it can't read, so this is one place the two differ
+        if let mmir::Const::Val(mmir::ConstValue::Scalar(mmir::interpret::Scalar::Ptr(ptr, _)), ty) = konst {
+            let alloc = ptr.provenance.alloc_id();
+            if let Some(mmir::interpret::GlobalAlloc::Static(_)) = self.tcx.try_get_global_alloc(alloc) {
+                return Some(ir::Const::Alloc(alloc.to_string(), self.ty(stable(ty), Paths::Trimmed)));
+            }
+        }
         match ir::parse_operand(&self.full(format!("const {konst}"))) {
             Ok(ir::Operand::Constant(c)) => Some(c),
             _ => None,

@@ -74,6 +74,9 @@ pub struct Shared {
     /// each test of a bool kept in a cell (`CLA b / SUB 00 / TAC`), by the variable's name where it has one: what
     /// `cardiac::Flag` would make an instruction less
     pub bool_tests: Vec<Option<String>>,
+    /// the program's statics, and those a function points into, in the order they are first used
+    pub statics: super::front::Statics,
+    pub statics_used: Vec<String>,
 }
 
 impl Shared {
@@ -349,7 +352,9 @@ impl<'a> Lowering<'a> {
                 Ty::Ref { lifetime: None, to, .. } => {
                     card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
                 }
-                Ty::Ptr { to, .. } => card(to),
+                Ty::Ptr { to, .. } => {
+                    card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
+                }
                 _ => false,
             };
             if one_cell {

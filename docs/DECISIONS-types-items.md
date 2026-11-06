@@ -55,3 +55,16 @@
   and its borrow, as a promoted constant is built.
 - **Cost.** N cells a use, and in a function other than main's opening blocks N stores.
 
+## 2026-11-05 · A static is a fixed run of cells, as every variable on CARDIAC is
+
+- **Decision.** The IR reads a static (`Item::Static`), the allocation rustc says is its (`Item::Alloc`,
+  `alloc1 (static: T, ..)`), and a pointer into an allocation (`Const::Alloc`, `{alloc1: &[i16; 4]}`). A static
+  whose first value is a literal of numbers or bools (or an array of them) is cells in the data section, with
+  those values, `static_NAME`; a pointer to it is the constant holding its address, so every read and write goes
+  through it, from any function, as through any raw pointer. `static mut` is the same cells: a call that changes
+  one is seen by its caller, since no pass keeps what a pointer read gave across anything.
+- **Why.** Every CARDIAC variable is a fixed cell already; a static is one no function owns.
+- **Cost.** Each access is through the address (self-modifying code), a few cells and steps more than a local's.
+  A dependency's statics have no MIR in its metadata, and stay refused; so does one rustc works out otherwise.
+- **The oracle.** rustc's text writes a pointer to a static `&[u8; N]` as `<static(DefId(..))>`, which it can't
+  read: the driver gives it as the allocation, as for any other type, and the two differ there.

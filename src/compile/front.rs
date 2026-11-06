@@ -40,8 +40,17 @@ const CORE_MODULES: [&str; 14] = [
     "clone",
 ];
 
-/// What the front end makes of a file: the file, its functions by name, and the named scalar consts' values.
-pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>);
+/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, and its
+/// statics.
+pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>, Statics);
+
+/// The program's statics, each a fixed run of cells, as every variable on CARDIAC is: what each holds first, by the
+/// static's name, and the static each allocation a body points into is (`{alloc1: *mut i16}`).
+#[derive(Clone, Debug, Default)]
+pub struct Statics {
+    pub values: Ordered<String, Vec<i64>>,
+    pub of_alloc: HashMap<String, String>,
+}
 
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
@@ -61,11 +70,12 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     file.visit(&mut OffsetIsAdd);
     file.visit(&mut NoUnwinding);
     let named = scalar_consts(&file)?;
+    let statics = statics(&file);
     inline_struct_consts(&mut file);
     inline_array_consts(&mut file);
     join_module_paths(&mut file);
     let fns = functions(&file);
-    Ok((file, fns, named))
+    Ok((file, fns, named, statics))
 }
 
 /// `<T as PartialEq>::ne(a, b)`, which rustc calls at opt-level 1 and s for a derived `!=`: `PartialEq`'s own `ne`,
@@ -591,6 +601,47 @@ impl VisitMut for OffsetIsAdd {
         }
         walk_rvalue(self, r)
     }
+}
+
+/// The statics whose first value is a literal: a number or a bool (`static mut COUNT: i16 = 0`), or an array of them
+/// (`static T: [i16; 4] = [11, 22, 33, 44]`); each by its name, as the allocations a body points into name it. A
+/// static whose value rustc works out otherwise is left out, and a pointer to it is refused where it is used.
+fn statics(file: &File) -> Statics {
+    let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::I8 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+    let value = |o: &Operand| match o {
+        Operand::Constant(Const::Int { value, .. }) => Some(*value as i64),
+        Operand::Constant(Const::Bool(b)) => Some(*b as i64),
+        _ => None,
+    };
+    let mut out = Statics::default();
+    for item in &file.items {
+        let Item::Static(s) = item else { continue };
+        let Some(name) = s.path.single().filter(|_| s.path.is_plain()) else {
+            continue;
+        };
+        let values = match (&s.ty, result_value(&s.body).next()) {
+            (t, Some(Rvalue::Use(o))) if scalar(t) => value(o).map(|v| vec![v]),
+            (Ty::Array(e, ArrayLen::Known(n)), Some(Rvalue::Array(os))) if scalar(e) && os.len() as u64 == *n => {
+                os.iter().map(value).collect()
+            }
+            (Ty::Array(e, ArrayLen::Known(n)), Some(Rvalue::Repeat(o, k))) if scalar(e) && k == n => {
+                value(o).map(|v| vec![v; *n as usize])
+            }
+            _ => None,
+        };
+        if let Some(values) = values {
+            out.values.set(name.to_string(), values);
+        }
+    }
+    for item in &file.items {
+        let Item::Alloc(a) = item else { continue };
+        if let Some(name) = a.of_static.as_ref().and_then(|p| p.single()) {
+            if out.values.has(name) {
+                out.of_alloc.insert(a.name.clone(), name.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// `const LIMIT: i16 = const 40_i16;`: a const of one name and a scalar value. Its value must be a u8, i16, usize or

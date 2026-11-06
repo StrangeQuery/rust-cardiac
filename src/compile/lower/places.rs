@@ -227,6 +227,17 @@ impl<'a> Lowering<'a> {
                     }
                     return Ok(Value::Const(v));
                 }
+                // a static's address: the cell holding it, a constant (see `front::Statics`)
+                Const::Alloc(alloc, _) => {
+                    let Some(name) = self.sh.statics.of_alloc.get(alloc).cloned() else {
+                        fail!("unsupported place {c}: a pointer into memory this backend doesn't have (a static's is, when its first value is a literal of numbers or bools)")
+                    };
+                    if !self.sh.statics_used.contains(&name) {
+                        self.sh.statics_used.push(name.clone());
+                    }
+                    let a = self.addr(Cell::from(Sym::Static(name)));
+                    return Ok(Value::At(Cell::from(a)));
+                }
                 // i16::MIN and MAX only turn up in rustc's own overflow checks; no card can equal them
                 Const::Path(p) if p.is_path(&["i16", "MIN"]) => return Ok(Value::Const(-32768)),
                 Const::Path(p) if p.is_path(&["i16", "MAX"]) => return Ok(Value::Const(32767)),

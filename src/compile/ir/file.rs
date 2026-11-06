@@ -39,6 +39,8 @@ pub struct File {
 pub enum Item {
     Fn(FnItem),
     Const(ConstItem),
+    Static(StaticItem),
+    Alloc(AllocItem),
     /// An item the compiler does not read, as rustc wrote it.
     Other(String),
 }
@@ -65,6 +67,24 @@ pub struct ConstItem {
     pub path: ItemPath,
     pub ty: Ty,
     pub value: ConstValue,
+}
+
+/// `static NAME: T = { body }`, or `static mut`: the body works out its first value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StaticItem {
+    pub path: ItemPath,
+    pub ty: Ty,
+    pub mutable: bool,
+    pub body: Body,
+}
+
+/// An allocation's bytes, as rustc writes them after a body that points into it: `alloc1 (static: T, size: 8,
+/// align: 2) { 0b 00 16 00 .. }`. Its name and, for a static's, the static; the bytes are kept as text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AllocItem {
+    pub name: String,
+    pub of_static: Option<ItemPath>,
+    pub text: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,10 +160,11 @@ impl FnItem {
 }
 
 impl File {
-    /// Every body in the file, functions' and consts', in order.
+    /// Every body in the file, functions', consts' and statics', in order.
     pub fn bodies(&self) -> impl Iterator<Item = &Body> {
         self.items.iter().filter_map(|i| match i {
             Item::Fn(f) => Some(&f.body),
+            Item::Static(s) => Some(&s.body),
             Item::Const(ConstItem {
                 value: ConstValue::Body(b),
                 ..
@@ -155,6 +176,7 @@ impl File {
     pub fn bodies_mut(&mut self) -> impl Iterator<Item = &mut Body> {
         self.items.iter_mut().filter_map(|i| match i {
             Item::Fn(f) => Some(&mut f.body),
+            Item::Static(s) => Some(&mut s.body),
             Item::Const(ConstItem {
                 value: ConstValue::Body(b),
                 ..
@@ -182,7 +204,11 @@ impl File {
                         ConstValue::Other(_) => {}
                     }
                 }
-                Item::Other(_) => {}
+                Item::Static(s) => {
+                    v.visit_ty(&mut s.ty);
+                    v.visit_body(&mut s.body);
+                }
+                Item::Alloc(_) | Item::Other(_) => {}
             }
         }
     }
@@ -249,6 +275,39 @@ fn item(head: &str, body: &str) -> Item {
             ret: ty_or_other(ret),
             body: parse_body(body),
         });
+    }
+    if let Some(rest) = head.strip_prefix("static ") {
+        let (mutable, rest) = match rest.strip_prefix("mut ") {
+            Some(rest) => (true, rest),
+            None => (false, rest),
+        };
+        let Some((path, rest)) = item_path(rest) else {
+            return other();
+        };
+        let Some(ty) = rest.strip_prefix(": ").and_then(|r| r.strip_suffix(" = {")) else {
+            return other();
+        };
+        return Item::Static(StaticItem {
+            path,
+            ty: ty_or_other(ty),
+            mutable,
+            body: parse_body(body),
+        });
+    }
+    // `alloc1 (static: T, size: 8, align: 2) {`
+    if let Some((name, rest)) = head.split_once(" (") {
+        if name.starts_with("alloc") && name[5..].bytes().all(|b| b.is_ascii_digit()) && head.ends_with('{') {
+            let of_static = rest
+                .strip_prefix("static: ")
+                .and_then(|r| r.split_once(", "))
+                .and_then(|(path, _)| parse_item_path(path));
+            let Item::Other(text) = other() else { unreachable!() };
+            return Item::Alloc(AllocItem {
+                name: name.to_string(),
+                of_static,
+                text,
+            });
+        }
     }
     if let Some(rest) = head.strip_prefix("const ") {
         let Some((path, rest)) = item_path(rest) else {
@@ -377,12 +436,23 @@ impl fmt::Display for ConstItem {
     }
 }
 
+impl fmt::Display for StaticItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mutable = if self.mutable { "mut " } else { "" };
+        writeln!(f, "static {mutable}{}: {} = {{", self.path, self.ty)?;
+        write!(f, "{}", self.body)?;
+        writeln!(f, "}}")
+    }
+}
+
 impl fmt::Display for Item {
     /// The item's lines, each ended.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Item::Fn(x) => write!(f, "{x}"),
             Item::Const(x) => write!(f, "{x}"),
+            Item::Static(x) => write!(f, "{x}"),
+            Item::Alloc(x) => writeln!(f, "{}", x.text),
             Item::Other(text) => writeln!(f, "{text}"),
         }
     }

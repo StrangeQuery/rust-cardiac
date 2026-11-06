@@ -545,7 +545,7 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics) = front::front_end(file.clone(), debug_assertions, enums)?;
     if !fns.has("main") {
         return Err("no fn main in MIR".into());
     }
@@ -683,6 +683,8 @@ fn compile(
         named,
         resources: vec![],
         bool_tests: vec![],
+        statics,
+        statics_used: vec![],
     };
     struct Ready {
         name: String,
@@ -875,6 +877,21 @@ fn compile(
         names::comments(&mut code, &shown);
         listing.extend(code);
         data.extend(cells);
+    }
+    // each static a function points into: its cells, with its first values
+    for name in &sh.statics_used {
+        let values = sh.statics.values.get(name).cloned().unwrap_or_default();
+        if let Some(v) = values.iter().find(|v| !(-999..=999).contains(*v)) {
+            return Err(format!("static {name}: {v} is past what a card holds (-999 to 999)"));
+        }
+        for (k, v) in values.iter().enumerate() {
+            let value = machine::Arg::Num(v.to_string());
+            data.push(if k == 0 {
+                Line::data_cell(&Sym::Static(name.clone()).to_string(), value)
+            } else {
+                Line::new(Kind::Dat(None, value))
+            });
+        }
     }
     let (routines, runtime_data) = runtime::runtime(&sh.pool, &sh.consts);
     listing.extend(routines);

@@ -558,6 +558,18 @@ impl Parser<'_> {
             self.pos += 1;
             return Ok(Const::Str(s));
         }
+        // a pointer into an allocation: `{alloc1: &[i16; 4]}`
+        if let (true, Some(Tok::Ident(name)), Some(Tok::Punct(":"))) =
+            (self.is_punct("{"), self.peek_at(1), self.peek_at(2))
+        {
+            if name.starts_with("alloc") {
+                let name = name.clone();
+                self.pos += 3;
+                let ty = self.ty()?;
+                self.punct("}")?;
+                return Ok(Const::Alloc(name, ty));
+            }
+        }
         if let Some(Tok::Bytes(bs)) = self.peek() {
             let bs = bs.clone();
             self.pos += 1;
