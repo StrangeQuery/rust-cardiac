@@ -12,6 +12,7 @@ pub mod compile;
 pub mod driver;
 pub mod panics;
 pub mod tape;
+pub mod update;
 
 /// The tool's name: the cargo subcommand is `cargo NAME`, its binary `cargo-NAME`.
 pub const TOOL: &str = "cardiac";

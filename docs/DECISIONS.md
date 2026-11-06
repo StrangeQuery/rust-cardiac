@@ -4,6 +4,21 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · cargo-cardiac says when a newer version is out
+
+- **Decision.** After `build`, `run` and `view`, cargo-cardiac says in one line when crates.io has a newer version
+  than itself (`note: cargo-cardiac 0.1.4 is out (you have 0.1.3): cargo install cargo-cardiac`, or `brew upgrade
+  cargo-cardiac` for Homebrew's copy), as rustup and gh do (`src/update.rs`). At most once a day it fetches its
+  entry in crates.io's sparse index with curl, in the background, into `.cardiac/cargo-cardiac.index`, and what it
+  says comes from the last answer. `CARGO_CARDIAC_NO_UPDATE_CHECK=1` turns it off, and it is off with `-q`,
+  `--message-format=json` and when standard error isn't a terminal.
+- **Why.** `cargo install` never looks again at what it installed, so nothing told a user that a new version was
+  out unless they used Homebrew or watched the releases.
+- **Considered.** Checking before the build and waiting for the answer: a build would wait on the network once a
+  day, and offline for curl's timeout. A crate for HTTP: the driver's download already uses curl.
+- **Cost.** One small request a day, of the public index only; the first build after a release says nothing, and
+  the one after it does.
+
 ## 2026-11-06 · A generic struct's instance is a struct of its own
 
 - **Decision.** Before the struct pass, each instance of one of the program's generic structs (`Pair<i16>`, built

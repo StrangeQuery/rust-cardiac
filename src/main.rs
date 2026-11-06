@@ -84,6 +84,12 @@ How much build and run say:
                     with its kind in \"reason\", as cargo's: compiling, compiled, note, error.
                     --message-format=human, the default, is lines for a person
 
+New versions:
+  At most once a day, build, run and view look up cargo-cardiac's newest version in crates.io's public index,
+  in the background, and say so after the build when there is a newer one. Nothing is sent but the request.
+  CARGO_CARDIAC_NO_UPDATE_CHECK=1 turns it off; it is off with -q, --message-format=json and when standard
+  error isn't a terminal.
+
 For developing cargo-cardiac:
   {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--edition YEAR]
           FILE.rs [-- INPUT...]
@@ -837,6 +843,11 @@ fn note_empty(b: &Built, dir: &Path) {
     }
 }
 
+/// After a build, run or view: whether a newer cargo-cardiac is out (`cargo_cardiac::update`).
+fn update_note() {
+    cargo_cardiac::update::note(verbosity() < 0 || json());
+}
+
 fn main() -> ExitCode {
     let a = args();
     match a.command.as_str() {
@@ -860,12 +871,22 @@ fn main() -> ExitCode {
             for f in &a.files {
                 build_single(f, &a.rustc, a.auto_overlay, a.emit);
             }
+            update_note();
         }
         "build" => {
             build(&pkgs(), &a.bins, profile, a.emit);
+            update_note();
         }
-        "run" => return run(&a),
-        "view" => return view(&a),
+        "run" => {
+            let ran = run(&a);
+            update_note();
+            return ran;
+        }
+        "view" => {
+            let viewed = view(&a);
+            update_note();
+            return viewed;
+        }
         "test" => {
             if a.files.len() > 1 {
                 bad_usage("test takes one FILE.rs; its input goes after --")
