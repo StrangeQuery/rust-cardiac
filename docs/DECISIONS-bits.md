@@ -1,3 +1,16 @@
+## 2026-11-06 · Without overflow checks, the checks of core's inlined code are not made
+
+- **Decision.** In a build without overflow checks, the driver makes an `assert` of an overflow of `+`, `-`, `*`, a
+  negation or a shift go straight on to its target (`front::drop_inherited_overflow_checks`), and the checked
+  operation it read the flag of, where nothing else reads it, is the plain one. rustc writes no such check in such a
+  build, but keeps those of core's code it inlines that inherits the caller's overflow checks
+  (`#[rustc_inherit_overflow_checks]`), and codegen leaves them out (`is_optional_overflow_check`). A divide's
+  checks stay.
+- **Why.** `u8::next_power_of_two(200)` is 0 natively without overflow checks, and panicked on CARDIAC at its
+  `+ 1`.
+- **Cost.** None found; an i16 past a card keeps three digits there, as `a + b` does in the program's own code
+  without overflow checks.
+
 ## 2026-11-06 · `&`, `|` and `^` between integers, and shifts by a variable, are routines
 
 - **Decision.** `a & b`, `a | b` and `a ^ b` of two integers (i16, i8, u8, a usize on a card), but for `x & m` by a

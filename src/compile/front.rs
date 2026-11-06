@@ -54,6 +54,76 @@ pub struct Statics {
     pub of_alloc: HashMap<String, String>,
 }
 
+/// The overflow checks that codegen leaves out where the build's overflow checks are off: `+`, `-`, `*`, a
+/// negation and the shifts. rustc writes none in a crate built without them, but it keeps those of core's code it
+/// inlines that inherits the caller's (`#[rustc_inherit_overflow_checks]`, as `next_power_of_two`'s `+ 1` does),
+/// and the build that runs natively doesn't check them. A divide's are always made.
+const INHERITED_CHECKS: [&str; 6] = [
+    "attempt to compute `{} + {}`, which would overflow",
+    "attempt to compute `{} - {}`, which would overflow",
+    "attempt to compute `{} * {}`, which would overflow",
+    "attempt to negate `{}`, which would overflow",
+    "attempt to shift left by `{}`, which would overflow",
+    "attempt to shift right by `{}`, which would overflow",
+];
+
+/// For a build without overflow checks (the driver knows the session's): each of those checks goes on to its
+/// target, as the native build does. The checked operation it read the flag of is then the plain one, into the
+/// pair's value, where nothing else reads the flag (a u8's then wraps, `ranges::mark_wrapping`).
+pub fn drop_inherited_overflow_checks(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let body = &mut f.body;
+        for bi in 0..body.blocks.len() {
+            let Terminator::Assert { cond, msg, target, .. } = &body.blocks[bi].terminator else {
+                continue;
+            };
+            if !INHERITED_CHECKS.contains(&msg.as_str()) {
+                continue;
+            }
+            // the flag, `_t.1`
+            let flag = cond
+                .place()
+                .filter(|p| matches!(p.projection.as_slice(), [Projection::Field(1, _)]))
+                .and_then(|p| p.base_local());
+            body.blocks[bi].terminator = Terminator::Goto(*target);
+            let Some(t) = flag else { continue };
+            let read_whole_or_flag = body.blocks.iter().any(|b| {
+                // what each statement reads: its places but the one an assignment writes
+                let read = b.statements.iter().flat_map(|s| {
+                    let skip = usize::from(matches!(s, Statement::Assign(..)));
+                    s.places().into_iter().skip(skip)
+                });
+                read.chain(b.terminator.places()).any(|p| {
+                    p.base_local() == Some(t) && !matches!(p.projection.first(), Some(Projection::Field(0, _)))
+                })
+            });
+            let Some(Ty::Tuple(fields)) = body.decls.iter().find(|d| d.local == t).map(|d| &d.ty) else {
+                continue;
+            };
+            let (false, Some(value)) = (read_whole_or_flag, fields.first().cloned()) else {
+                continue;
+            };
+            for s in &mut body.blocks[bi].statements {
+                if let Statement::Assign(d, Rvalue::BinaryOp(op, a, c)) = s {
+                    let plain = match op {
+                        BinOp::AddWithOverflow => BinOp::Add,
+                        BinOp::SubWithOverflow => BinOp::Sub,
+                        BinOp::MulWithOverflow => BinOp::Mul,
+                        _ => continue,
+                    };
+                    if d.as_local() == Some(t) {
+                        *s = Statement::Assign(
+                            Place::field(t, 0, value.clone()),
+                            Rvalue::BinaryOp(plain, a.clone(), c.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
