@@ -1,8 +1,9 @@
-//! The methods of `Option` and `Result` that rustc leaves as calls at opt-level 1 and s: `x.unwrap_or(0)`,
-//! `x.is_some()`, the `?` operator's `Try::branch` and `FromResidual::from_residual`. At opt-level 2 rustc inlines
-//! them into a test of the discriminant and the variants' fields; here each call becomes that, as blocks of the
-//! caller's own, before the enum pass (`enums::data_enums`) lays the enums out in cells. A variant's number comes
-//! from the enum's definition, as the driver gave it.
+//! The methods of `Option` and `Result` where rustc leaves them as calls: `x.unwrap_or(0)`, `x.is_some()`, the `?`
+//! operator's `Try::branch` and `FromResidual::from_residual`. rustc's inliner, which the driver runs from opt-level
+//! 1 up (`driver/src/inline.rs`), inlines most of them into a test of the discriminant and the variants' fields;
+//! where it doesn't (a body past its threshold, or a build with `-Zinline-mir=no`) each call becomes that here, as
+//! blocks of the caller's own, before the enum pass (`enums::data_enums`) lays the enums out in cells. A variant's
+//! number comes from the enum's definition, as the driver gave it.
 //!
 //! ```text
 //!     _5 = Option::<i16>::unwrap_or(move _6, const -5_i16) -> [return: bb4, unwind continue];

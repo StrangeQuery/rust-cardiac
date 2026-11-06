@@ -38,6 +38,7 @@ mod backend;
 mod check;
 mod convert;
 mod facts;
+mod inline;
 mod trimmed;
 
 use cargo_cardiac::compile::program::CFG;
@@ -62,6 +63,14 @@ impl rustc_driver::Callbacks for Driver {
         config.opts.trimmed_def_paths = true;
         config.override_queries = Some(|_session, providers| trimmed::provide(providers));
         self.cardiac = config.crate_cfg.iter().any(|c| c == CFG);
+        if self.cardiac && inline::wanted(&config.opts) {
+            // opt-level 1, s or z: rustc's MIR inliner, as at 2, but for the calls the compiler keeps
+            inline::enable(&mut config.opts);
+            config.override_queries = Some(|_session, providers| {
+                trimmed::provide(providers);
+                inline::provide(providers);
+            });
+        }
         let source = match &config.input {
             Input::File(path) => std::fs::canonicalize(path).ok(),
             Input::Str { .. } => None,

@@ -63,6 +63,13 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
     })
 }
 
+/// Whether the method `name` of the integer type `ty` is one this file writes where rustc calls it. At opt-level 1
+/// and s the driver keeps rustc's inliner off these (`driver/src/inline.rs`), so they are calls written here as
+/// before, and not what rustc would inline (for `signum` and a u8's `abs_diff`, something refused).
+pub fn written_here(name: &str, ty: IntTy) -> bool {
+    method(name, ty).is_some()
+}
+
 /// The method a call is to, and the integer type it is on, from the callee's path: `core::num::<impl i16>::abs`,
 /// `<u8 as Ord>::min`, `core::cmp::max::<usize>`, or `std::intrinsics::saturating_sub::<usize>`, which is what
 /// `saturating_sub` is at opt-level 2.
