@@ -150,13 +150,20 @@ impl<'a> Lowering<'a> {
                 let w = self.width.get(&d).copied();
                 let plain = plain_op(*op);
                 self.arith_acc(plain, a, b, w.map(|_| &bad), src)?;
-                self.emit(Op::Sto, f0);
+                self.emit(Op::Sto, f0.clone());
                 self.check_acc(w, &bad, plain)?;
                 let z = self.konst(0);
                 self.emit(Op::Cla, z);
                 self.emit(Op::Sto, f1.clone());
                 self.emit(Op::Jmp, done.clone());
                 self.define(&bad);
+                if w == Some(IntTy::U8) && plain != BinOp::Mul {
+                    // a u8's sum or difference wraps, as Rust's does (`overflowing_add` reads it): -255..=510 is on
+                    // a card
+                    self.emit(Op::Cla, f0.clone());
+                    self.wrap_u8(plain == BinOp::Sub);
+                    self.emit(Op::Sto, f0);
+                }
                 let one = self.konst(1);
                 self.emit(Op::Cla, one);
                 self.emit(Op::Sto, f1);
