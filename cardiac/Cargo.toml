@@ -1,10 +1,10 @@
 [package]
 name = "cardiac"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 # the [lints] table
 rust-version = "1.74"
-description = "The built-ins of a Rust program for CARDIAC: inp(), out() and friends. They run on your machine with cargo run, and cargo-cardiac compiles them to CARDIAC instructions."
+description = "Rust language package for cargo-cardiac. Install that, not this."
 license = "MIT"
 repository.workspace = true
 homepage.workspace = true

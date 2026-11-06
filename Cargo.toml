@@ -1,10 +1,10 @@
 [package]
 name = "cargo-cardiac"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 # the compiler reads the MIR text that rustc 1.97 prints, so that is the rustc it needs, to build and to run
 rust-version = "1.97"
-description = "Rust for CARDIAC: a cargo subcommand that compiles a Rust program to a CARDIAC deck, for burn or Cardigan to run"
+description = "Compile Rust to CARDIAC, the 1968 Bell Labs cardboard computer."
 license = "MIT"
 repository.workspace = true
 homepage.workspace = true
@@ -64,7 +64,7 @@ debug-assertions = true
 [dependencies]
 serde_json = "1"
 # CARDIAC itself: the emulator, tapes, the assembler and CARDIASM
-heartburn = { version = "0.1.0", git = "https://github.com/StrangeQuery/cardiaq", rev = "89c2776526431224b4bd830d8758def3b8952f2c" }
+heartburn = "0.1.1"
 
 [workspace]
 members = ["cardiac", "examples", "examples/collatz"]
