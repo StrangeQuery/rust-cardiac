@@ -601,8 +601,10 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
 
 /// `a.checked_add(b)`, `checked_sub` and `checked_mul` on an i16, which rustc calls at opt-level 1 and s
 /// (`core::num::<impl i16>::checked_add`): what it inlines at 2, the overflow-checked op and a test of its flag,
-/// `Some` of the value or `None`. On CARDIAC the op overflows past a card (999), as every i16 op does.
+/// `Some` of the value or `None`. On CARDIAC the op overflows past a card (999), as every i16 op does. Then
+/// `checked_pow` (`checked_pows`).
 pub fn inline_checked(f: &mut Function) {
+    checked_pows(f);
     let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
     types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
     types.insert(Local(0), f.ret.clone());
@@ -689,6 +691,98 @@ pub fn inline_checked(f: &mut Function) {
         };
     }
     f.body.blocks.extend(extra);
+}
+
+/// `a.checked_pow(k)` on an i16, by a constant k up to 10, which rustc calls at every opt-level. Its `None` is
+/// Rust's, where the power is past an i16 (32767, or -32768 for an odd k), which a's bounds say without the power
+/// (`None` above 31 and below -32 for k = 3); else it is `Some` of the power, whose multiplications are checked
+/// against the card in every profile. A power past a card but within an i16 (`10.checked_pow(3)`) is a `Some` no
+/// card holds, and panics: no i16 overflows here where Rust's doesn't.
+fn checked_pows(f: &mut Function) {
+    use super::methods::Gains;
+    let types = super::front::local_types(&f.params, &f.body.decls);
+    let mut gains = Gains::new(&f.params, &f.body.blocks, &mut f.body.decls);
+    for b in f.body.blocks.iter_mut() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(back),
+            ..
+        } = &b.terminator
+        else {
+            continue;
+        };
+        let checked_pow = match (&func.qself, func.segments.as_slice()) {
+            (
+                None,
+                [Segment::Name { name: c, .. }, Segment::Name { name: n, .. }, Segment::Impl(Ty::Int(IntTy::I16)), Segment::Name { name: m, args: None }],
+            ) => (c == "core" || c == "std") && n == "num" && m == "checked_pow",
+            _ => false,
+        };
+        let ([x, k], Some(option), true) = (
+            args.as_slice(),
+            dest.as_local().and_then(|d| types.get(&d)),
+            checked_pow,
+        ) else {
+            continue;
+        };
+        let (Some(some), Some(none)) = (variant_path(option, "Some"), variant_path(option, "None")) else {
+            continue;
+        };
+        let Some(k) = k.int().map(|(k, _)| k as u32).filter(|k| *k <= 10) else {
+            continue;
+        };
+        // x is read more than once now: a copy, not a move
+        let x = match x {
+            Operand::Move(p) => Operand::Copy(p.clone()),
+            x => x.clone(),
+        };
+        let (dest, back) = (dest.clone(), *back);
+        let card = |v: i128| {
+            Operand::Constant(Const::Int {
+                value: v,
+                ty: IntTy::I16,
+            })
+        };
+        let power = gains.local(Ty::Int(IntTy::I16));
+        let found = gains.set(
+            &dest,
+            Rvalue::Variant(some, vec![Operand::Copy(Place::local(power))]),
+            back,
+        );
+        let first = match k {
+            0 | 1 => gains.block(
+                vec![Statement::Assign(
+                    Place::local(power),
+                    Rvalue::Use(if k == 0 { card(1) } else { x }),
+                )],
+                Terminator::Goto(found),
+            ),
+            _ => {
+                // p2 = x * x, p3 = p2 * x, .. into the power: built from the last
+                let (mut next, mut into) = (found, Place::local(power));
+                for i in (1..k).rev() {
+                    let r = (i > 1).then(|| Place::local(gains.local(Ty::Int(IntTy::I16))));
+                    let left = r.clone().map_or(x.clone(), Operand::Copy);
+                    let (s, t) = gains.on_a_card(BinOp::MulWithOverflow, &left, &x, &into, next);
+                    next = gains.block(vec![s], t);
+                    into = r.unwrap_or(into);
+                }
+                // the bounds of an a whose power is within an i16
+                let within = |m: i128| (-32768..=32767).contains(&m.pow(k));
+                let hi = (0..).take_while(|&m| within(m)).last().expect("0 is");
+                let lo = (0..).map(|m: i128| -m).take_while(|&m| within(m)).last().expect("0 is");
+                let nothing = gains.set(&dest, Rvalue::Variant(none, vec![]), back);
+                let (s, t) = gains.test(BinOp::Lt, &x, &card(lo), nothing, next);
+                let below = gains.block(vec![s], t);
+                let (s, t) = gains.test(BinOp::Gt, &x, &card(hi), nothing, below);
+                gains.block(vec![s], t)
+            }
+        };
+        b.terminator = Terminator::Goto(first);
+    }
+    f.body.blocks.append(&mut gains.blocks);
 }
 
 /// `a == b` and `a != b` of two `Option`s of a scalar, which rustc calls at opt-level 1 and s

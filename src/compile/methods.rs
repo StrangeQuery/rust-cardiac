@@ -289,6 +289,37 @@ impl<'a> Gains<'a> {
         dest: &Place,
         back: BasicBlock,
     ) -> (Statement, Terminator) {
+        let msg = match op {
+            BinOp::SubWithOverflow => "attempt to compute `{} - {}`, which would overflow",
+            _ => "attempt to compute `{} * {}`, which would overflow",
+        };
+        self.flagged(op, a, b, dest, back, msg.into(), vec![a.clone(), b.clone()])
+    }
+
+    /// The same, where Rust's own operation doesn't overflow there (a power `checked_pow` gives as a `Some`, a
+    /// saturating sum) and the flag says that the value is past a card: the panic says so.
+    pub(super) fn on_a_card(
+        &mut self,
+        op: BinOp,
+        a: &Operand,
+        b: &Operand,
+        dest: &Place,
+        back: BasicBlock,
+    ) -> (Statement, Terminator) {
+        self.flagged(op, a, b, dest, back, super::runtime::NO_CARD.into(), vec![])
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn flagged(
+        &mut self,
+        op: BinOp,
+        a: &Operand,
+        b: &Operand,
+        dest: &Place,
+        back: BasicBlock,
+        msg: String,
+        msg_args: Vec<Operand>,
+    ) -> (Statement, Terminator) {
         let pair = self.local(Ty::Tuple(vec![Ty::Int(IntTy::I16), Ty::Bool]));
         let field = |k: u32, t: Ty| Place {
             base: Place::local(pair).base,
@@ -296,17 +327,13 @@ impl<'a> Gains<'a> {
         };
         let value = Rvalue::Use(Operand::Move(field(0, Ty::Int(IntTy::I16))));
         let set = self.set(dest, value, back);
-        let msg = match op {
-            BinOp::SubWithOverflow => "attempt to compute `{} - {}`, which would overflow",
-            _ => "attempt to compute `{} * {}`, which would overflow",
-        };
         (
             Statement::Assign(Place::local(pair), Rvalue::BinaryOp(op, a.clone(), b.clone())),
             Terminator::Assert {
                 cond: Operand::Move(field(1, Ty::Bool)),
                 expected: false,
-                msg: msg.into(),
-                msg_args: vec![a.clone(), b.clone()],
+                msg,
+                msg_args,
                 target: set,
                 unwind: Unwind::Continue,
             },
