@@ -34,6 +34,7 @@ pub mod lower;
 pub mod machine;
 pub mod methods;
 pub mod names;
+pub mod nested;
 pub mod ordering;
 pub mod panic_messages;
 pub mod peephole;
@@ -676,6 +677,8 @@ fn compile(
     for n in &names {
         methods::inline_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
     }
+    // an array of arrays, one array
+    nested::arrays_of_arrays(&mut fns);
     // rustc's u8 + - and * wrap, before the passes write plain ops of their own
     for n in &names {
         let f = fns.get_mut(n).unwrap();
