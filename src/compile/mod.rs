@@ -20,6 +20,7 @@
 pub mod arith;
 pub mod bits;
 pub mod blocks;
+pub mod chars;
 pub mod closures;
 pub mod copies;
 pub mod crates;

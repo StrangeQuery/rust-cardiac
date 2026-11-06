@@ -136,13 +136,15 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     // function pointers as numbers, and trait objects as enums, with calls through them as calls of what they can
     // be (after the promoteds, which may make them)
     super::indirect::function_pointers(&mut file);
-    let objects = super::indirect::trait_objects(&mut file);
+    let mut objects = super::indirect::trait_objects(&mut file);
     // a closure that captures, a struct; one called through its trait, a call of its function
     super::closures::closures_as_structs(&mut file);
     super::panic_messages::literal_panics(&mut file);
     strings_as_bytes(&mut file);
     byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
+    // a char's to_digit and from_digit, written out (with the `Option<u8>` the first returns)
+    objects.extend(super::chars::char_digits(&mut file, enums));
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
     // switch arms are read as their switch's type first: a discriminant's is isize

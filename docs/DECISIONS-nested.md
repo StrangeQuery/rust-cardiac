@@ -39,3 +39,21 @@
   out whole; a literal array of tuples indexed; a `((i16, i16), i16)` parameter given a tuple built and a tuple
   local; `(usize, u8)` and `(bool, (u8, i16))` returned; an array of `((i16, i16), i16)` set whole and read by
   field; an array of `(u8, i16)` wrapping its u8s.
+
+## 2026-11-06 · `char::to_digit` and `char::from_digit` are written here, their u32s cells
+
+- **Decision.** `chars::char_digits`, in the front end after a char is a usize: a call of either with a constant
+  radix from 2 to 36 is the tests core's makes, written in the function. `c.to_digit(R)` is `Some(c - '0')` for c
+  in '0'..'0' + R (up to '9'), `Some(c - 'a' + 10)` and `Some(c - 'A' + 10)` for the letters below R, else `None`;
+  its `Option<u32>` is an `Option<u8>` (the definition made from the program's `Option<u32>`), and each read of its
+  digit a u8 cast to u32, which `wide` holds as a cell, its value 0..=255. That is done only where the result is
+  read by its discriminant and its digit alone; anything else done with it stays refused. `char::from_digit(n, R)`
+  is `Some` of '0' + n (or 'a' + n - 10) for n below R, else `None`: n is compared with R and cast to a u8, which
+  `wide` does with a cell that holds n modulo 2^32, and below R the cell is n. An enum's field that is a char is a
+  usize, as every char is by then.
+- **Why.** The digit and its u32 are on a card; only the types weren't.
+- **Cost.** to_digit is 4 instructions a range it tests (one for radix 10 or less, three above), and a u8's cast
+  of the digit; the matrix's rows are 48 and 32 cells. A radix that isn't a constant stays refused.
+- **Evidence.** char_to_digit and char_from_digit match at every setting. Every byte 0..=255 through `to_digit`
+  with radix 2, 8, 10, 16 and 36, and every n from -40 to 40 (and 500, 999, -999) through `from_digit` with the
+  same radixes, match native Rust at the four settings; so does a digit unwrapped and one compared with `Some(3)`.
