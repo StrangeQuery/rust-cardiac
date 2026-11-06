@@ -1,8 +1,9 @@
 # The Rust that cargo-cardiac compiles
 
-> **0.1.2 compiles more than this page says.** It was written for 0.1.1. Since then, among other things, `assert_eq!`,
-> panics with a message, `!`, `<<` and `>>` by a constant, `Ordering` and `cmp`, `char`, `i8`, unit structs, statics,
-> enum variants with named fields and most `Option` and `Result` methods work, and opt-level 1 compiles what
+> **cargo-cardiac compiles more than this page says.** It was written for 0.1.1. Since then, among other things,
+> `assert_eq!`, panics with a message, `!`, `<<` and `>>` by a constant, `Ordering` and `cmp`, `char`, `i8`, unit
+> structs, statics, enum variants with named fields, most `Option` and `Result` methods, `for x in array`, `.iter()`
+> and the array methods, and generic functions rustc doesn't inline all work, and opt-level 1 compiles what
 > opt-level 2 does. An updated list is on its way; until then, try it: the compiler refuses what it can't compile.
 
 What compiles for CARDIAC and what doesn't, in three groups: what works well, what works but costs more than it
