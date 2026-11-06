@@ -52,7 +52,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     switch_values(&mut file);
     cold_paths(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
-    file.visit(&mut TupleStructConsts(enums));
+    file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     file.visit(&mut I32IsI16);
     file.visit(&mut PastACardDivisor);
     file.visit(&mut StdIsCore);
@@ -386,13 +386,20 @@ impl VisitMut for PastACardDivisor {
 
 /// A tuple struct's constant, `const Flag(-1_i16)`, and its building, `Flag(move _1)`, read as a variant's
 /// (`Err(-9_i16)`): where the path names no enum's variant they are the struct's, its fields `0`, `1`, ... as a
-/// tuple struct's are named.
-struct TupleStructConsts<'a>(&'a [super::enums::EnumDef]);
+/// tuple struct's are named. An enum is looked for as the MIR names it and as the C-like enums pass has made it
+/// (`Option::<i16>` for `Option::<Colour>`): the definitions as given, and normalized.
+struct TupleStructConsts<'a>(&'a [super::enums::EnumDef], &'a [super::enums::EnumDef]);
+
+impl TupleStructConsts<'_> {
+    fn names_a_variant(&self, p: &Path) -> bool {
+        super::enums::names_a_variant(self.0, p) || super::enums::names_a_variant(self.1, p)
+    }
+}
 
 impl VisitMut for TupleStructConsts<'_> {
     fn visit_rvalue(&mut self, r: &mut Rvalue) {
         if let Rvalue::Variant(p, ops) = r {
-            if !ops.is_empty() && !super::enums::names_a_variant(self.0, p) {
+            if !ops.is_empty() && !self.names_a_variant(p) {
                 let fields = ops.drain(..).enumerate().map(|(i, o)| (i.to_string(), o)).collect();
                 *r = Rvalue::Struct(p.clone(), fields);
             }
@@ -402,7 +409,7 @@ impl VisitMut for TupleStructConsts<'_> {
 
     fn visit_const(&mut self, c: &mut Const) {
         if let Const::Variant(p, cs) = c {
-            if !cs.is_empty() && !super::enums::names_a_variant(self.0, p) {
+            if !cs.is_empty() && !self.names_a_variant(p) {
                 let fields = cs.drain(..).enumerate().map(|(i, c)| (i.to_string(), c)).collect();
                 *c = Const::Adt(p.clone(), fields);
             }
