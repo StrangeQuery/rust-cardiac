@@ -128,3 +128,17 @@
 - **Evidence.** option_get_or_insert matches at every setting (42 and 54 cells). A probe with an `Option<i16>`
   that was and wasn't `Some`, the value changed after the call, written through the `&mut`, and an `Option<u8>`'s
   added to, matches native Rust at the four settings.
+
+## 2026-11-06 · `core::array::from_fn(f)` is the loop `t[i] = f(i)`
+
+- **Decision.** `closures::array_from_fns`, before the closures are made structs: rustc inlines `from_fn` into a
+  call of core's `try_from_fn` given core's closure that wraps f (`NeverShortCircuit::wrap_mut_1`), and reads the
+  result, a `NeverShortCircuit<[T; N]>`, as its field `.0`. That is the loop core's makes: for i from 0 up to N,
+  `t[i] = f(i)`, f called through `FnMut` as rustc calls a closure (which the closure pass then makes a call of
+  its function, given its captures), and the result is the array itself. Only where the wrapper is built in the
+  call's block of f alone and the result is read only as its field.
+- **Why.** core's generic body is never compiled; what it does is a counted loop of calls.
+- **Cost.** None to other programs. f a closure that captures nothing (passed as a constant) stays refused.
+- **Evidence.** array_from_fn matches at every setting (76 and 87 cells). Probes matching native Rust at the four
+  settings: a closure that outputs i as it is called (in order), one making a `[bool; 4]`, and one that panics
+  part-way through.

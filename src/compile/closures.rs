@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use super::front::closure_name;
 use super::ir::visit_mut::{walk_ty, VisitMut};
 use super::ir::{
-    occurrences, Const, File, GenericArg, Item, Local, Locals, Operand, Path, Rvalue, Segment, Statement, Terminator,
-    Ty, Unsupported,
+    occurrences, Const, File, GenericArg, Item, Local, Locals, Operand, Path, Place, Rvalue, Segment, Statement,
+    Terminator, Ty, Unsupported,
 };
 
 /// A closure's function: the name the compiler reads it by, and whether it reads the closure.
@@ -24,6 +24,7 @@ struct Closure {
 
 /// Each closure that captures as a struct, and each call of a closure through its trait as a call of its function.
 pub fn closures_as_structs(file: &mut File) {
+    array_from_fns(file);
     let mut closures: HashMap<String, Closure> = HashMap::new();
     for item in &file.items {
         let Item::Fn(f) = item else { continue };
@@ -249,5 +250,222 @@ fn main() -> () {
         );
         let env = main.body.decls.iter().find(|d| d.local == Local(2)).unwrap();
         assert_eq!(env.ty, Ty::Path(named("main_closure0_env")));
+    }
+}
+
+/// `core::array::from_fn(f)`, which rustc inlines into `try_from_fn` given core's closure that wraps f
+/// (`NeverShortCircuit::wrap_mut_1`), its result a `NeverShortCircuit<[T; N]>` read as its field `.0`: the loop
+/// core's makes, `t[i] = f(i)` for i from 0 up to N, f called through `FnMut` as rustc calls a closure, which the
+/// pass above then makes a call of its function. The result is the array itself.
+fn array_from_fns(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut next_local = f
+            .params
+            .iter()
+            .map(|(l, _)| l.0)
+            .chain(f.body.decls.iter().map(|d| d.local.0))
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1;
+        let mut extra = vec![];
+        for bi in 0..f.body.blocks.len() {
+            let Terminator::Call {
+                dest,
+                func,
+                args,
+                target: Some(ret),
+                unwind,
+            } = &f.body.blocks[bi].terminator
+            else {
+                continue;
+            };
+            let Some(Segment::Name { name, args: Some(g) }) = func.segments.last() else {
+                continue;
+            };
+            let [GenericArg::Ty(Ty::Path(never)), GenericArg::Const(n), GenericArg::Ty(Ty::Other(wrap))] =
+                g.args.as_slice()
+            else {
+                continue;
+            };
+            let wraps = wrap.starts_with("{closure@ops::try_trait::NeverShortCircuit<")
+                && wrap.contains(">::wrap_mut_1<usize, ");
+            if name != "try_from_fn" || never.name() != "NeverShortCircuit" || !wraps {
+                continue;
+            }
+            let ([Operand::Move(w)], Some(result)) = (args.as_slice(), dest.as_local()) else {
+                continue;
+            };
+            let Some(w) = w.as_local() else { continue };
+            // the wrapper, built in this block of f alone
+            let Some(at) = f.body.blocks[bi].statements.iter().position(|s| matches!(s, Statement::Assign(d, Rvalue::Closure(_, fs)) if d.as_local() == Some(w) && fs.len() == 1)) else {
+                continue;
+            };
+            let Statement::Assign(_, Rvalue::Closure(_, fs)) = &f.body.blocks[bi].statements[at] else {
+                unreachable!()
+            };
+            let Some(user) = fs[0].1.local() else { continue };
+            let types = super::front::local_types(&f.params, &f.body.decls);
+            let (Some(Ty::Other(closure)), Some(Ty::Path(nsc))) = (types.get(&user), types.get(&result)) else {
+                continue;
+            };
+            let Some(GenericArg::Ty(array @ Ty::Array(element, _))) = nsc.segments.last().and_then(|s| match s {
+                Segment::Name { args: Some(g), .. } => g.args.first(),
+                _ => None,
+            }) else {
+                continue;
+            };
+            // the result read only as its field, `(_10.0: [i16; 4])`
+            let field = |p: &Place| {
+                p.base_local() == Some(result)
+                    && matches!(p.projection.as_slice(), [super::ir::Projection::Field(0, _)])
+            };
+            let mut reads = 0;
+            for b in &f.body.blocks {
+                for s in &b.statements {
+                    s.places().iter().filter(|p| field(p)).for_each(|_| reads += 1);
+                }
+            }
+            let named: usize = f
+                .body
+                .blocks
+                .iter()
+                .flat_map(|b| b.lines())
+                .map(|x| x.count(result))
+                .sum();
+            let wrapper_named: usize = f.body.blocks.iter().flat_map(|b| b.lines()).map(|x| x.count(w)).sum();
+            let storage = f
+                .body
+                .blocks
+                .iter()
+                .flat_map(|b| &b.statements)
+                .filter(
+                    |s| matches!(s, Statement::StorageLive(l) | Statement::StorageDead(l) if *l == result || *l == w),
+                )
+                .count();
+            if named + wrapper_named != reads + 1 + 2 + storage {
+                continue;
+            }
+            let (closure, element, array, ret, unwind, n) = (
+                closure.clone(),
+                (**element).clone(),
+                array.clone(),
+                *ret,
+                unwind.clone(),
+                *n,
+            );
+            let mut local = |ty: Ty| {
+                next_local += 1;
+                f.body.decls.push(super::ir::Decl {
+                    local: Local(next_local - 1),
+                    mutable: true,
+                    ty,
+                });
+                Local(next_local - 1)
+            };
+            let usize_ty = Ty::Int(super::ir::IntTy::Usize);
+            let (i, c, r, t, v) = (
+                local(usize_ty.clone()),
+                local(Ty::Bool),
+                local(Ty::Ref {
+                    lifetime: None,
+                    mutable: true,
+                    to: Box::new(Ty::Other(closure.clone())),
+                }),
+                local(Ty::Tuple(vec![usize_ty.clone()])),
+                local(element),
+            );
+            for d in f.body.decls.iter_mut().filter(|d| d.local == result) {
+                d.ty = array.clone();
+            }
+            let mut name = || {
+                next_block += 1;
+                super::ir::BasicBlock(next_block - 1)
+            };
+            let (head, body, step) = (name(), name(), name());
+            let int = |k: u64| {
+                Operand::Constant(Const::Int {
+                    value: k as i128,
+                    ty: super::ir::IntTy::Usize,
+                })
+            };
+            let copy = |l: Local| Operand::Copy(super::ir::Place::local(l));
+            let assign = |l: Local, rv: Rvalue| Statement::Assign(super::ir::Place::local(l), rv);
+            let fn_mut = Path {
+                qself: Some(Box::new(super::ir::QSelf {
+                    ty: Ty::Other(closure),
+                    as_trait: Some(Path {
+                        qself: None,
+                        segments: vec![Segment::Name {
+                            name: "FnMut".into(),
+                            args: Some(super::ir::GenericArgs {
+                                turbofish: false,
+                                args: vec![GenericArg::Ty(Ty::Tuple(vec![usize_ty]))],
+                            }),
+                        }],
+                    }),
+                })),
+                segments: vec![Segment::Name {
+                    name: "call_mut".into(),
+                    args: None,
+                }],
+            };
+            extra.push(super::ir::Block {
+                name: head,
+                statements: vec![assign(c, Rvalue::BinaryOp(super::ir::BinOp::Lt, copy(i), int(n)))],
+                terminator: Terminator::SwitchInt {
+                    discr: Operand::Move(super::ir::Place::local(c)),
+                    arms: vec![(0, ret)],
+                    otherwise: Some(body),
+                },
+            });
+            extra.push(super::ir::Block {
+                name: body,
+                statements: vec![
+                    assign(
+                        r,
+                        Rvalue::Ref(super::ir::BorrowKind::Mut, super::ir::Place::local(user)),
+                    ),
+                    assign(t, Rvalue::Tuple(vec![copy(i)])),
+                ],
+                terminator: Terminator::Call {
+                    dest: super::ir::Place::local(v),
+                    func: fn_mut,
+                    args: vec![
+                        Operand::Move(super::ir::Place::local(r)),
+                        Operand::Move(super::ir::Place::local(t)),
+                    ],
+                    target: Some(step),
+                    unwind,
+                },
+            });
+            let element_at = Place {
+                base: super::ir::PlaceBase::Local(result),
+                projection: vec![super::ir::Projection::Index(i)],
+            };
+            extra.push(super::ir::Block {
+                name: step,
+                statements: vec![
+                    Statement::Assign(element_at, Rvalue::Use(Operand::Move(super::ir::Place::local(v)))),
+                    assign(i, Rvalue::BinaryOp(super::ir::BinOp::Add, copy(i), int(1))),
+                ],
+                terminator: Terminator::Goto(head),
+            });
+            let b = &mut f.body.blocks[bi];
+            b.statements[at] = assign(i, Rvalue::Use(int(0)));
+            b.terminator = Terminator::Goto(head);
+            // the result's field is the result
+            for b in f.body.blocks.iter_mut() {
+                for s in b.statements.iter_mut() {
+                    s.places_mut(&mut |p| {
+                        if field(p) {
+                            p.projection.clear();
+                        }
+                    });
+                }
+            }
+        }
+        f.body.blocks.extend(extra);
     }
 }
