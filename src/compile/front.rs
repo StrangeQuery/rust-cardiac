@@ -824,7 +824,10 @@ fn inline_array_consts(file: &mut File) {
         let Some(name) = path.single().filter(|_| path.is_plain()) else {
             continue;
         };
-        if !matches!(**elem, Ty::Int(IntTy::I16 | IntTy::U8)) {
+        if !matches!(
+            **elem,
+            Ty::Int(IntTy::I16 | IntTy::I8 | IntTy::U8 | IntTy::Usize) | Ty::Bool
+        ) {
             continue;
         }
         let constant = |o: &Operand| matches!(o, Operand::Constant(c) if !matches!(c, Const::Adt(..)));

@@ -25,6 +25,7 @@
 //! it uses: `1` reports on standard error, a path appends the report to that file.
 #![feature(rustc_private)]
 
+extern crate rustc_abi;
 extern crate rustc_driver;
 extern crate rustc_hir;
 extern crate rustc_interface;

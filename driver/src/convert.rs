@@ -135,7 +135,11 @@ pub fn items(tcx: TyCtxt<'_>, defs: &[DefId], krate: Option<&str>) -> (ir::File,
             items.push(c.trivial_const(def, val, ty));
         } else {
             c.made.set(items.len());
-            items.extend(c.body_items(tcx.instance_mir(mty::InstanceKind::Item(def)), true));
+            let mut made = c.body_items(tcx.instance_mir(mty::InstanceKind::Item(def)), true);
+            if let Some(ir::Item::Const(k)) = made.first_mut() {
+                c.evaluated_array(def, k);
+            }
+            items.extend(made);
         }
     }
     (ir::File { items }, c.renamed.into_inner())
@@ -332,6 +336,79 @@ impl<'tcx> Convert<'tcx> {
             ty: self.ty(stable(ty), Paths::Trimmed),
             value,
         })
+    }
+
+    /// A const array of numbers or bools whose body works it out (`[A, B, A + B]`, a const fn's table): its body
+    /// is made the literal rustc evaluates it to, `_0 = [const 12_i16, ..]`, as the compiler reads a const table. The
+    /// text keeps the body that works it out, so this is one place the two differ.
+    fn evaluated_array(&self, def: DefId, k: &mut ir::ConstItem) {
+        let ir::ConstValue::Body(body) = &k.value else { return };
+        let ir::Ty::Array(elem, ir::ArrayLen::Known(n)) = &k.ty else {
+            return;
+        };
+        let literal = |r: &ir::Rvalue| match r {
+            ir::Rvalue::Array(os) => os.iter().all(|o| matches!(o, ir::Operand::Constant(_))),
+            ir::Rvalue::Repeat(ir::Operand::Constant(_), _) => true,
+            _ => false,
+        };
+        let assigned = body.blocks.iter().flat_map(|b| &b.statements).find_map(|s| match s {
+            ir::Statement::Assign(p, r) if p.as_local() == Some(ir::Local(0)) => Some(r),
+            _ => None,
+        });
+        if assigned.is_some_and(literal) {
+            return;
+        }
+        let (size, ty) = match &**elem {
+            ir::Ty::Int(t) => (int_size(*t), Some(*t)),
+            ir::Ty::Bool => (1, None),
+            _ => return,
+        };
+        let Ok(value) = self.tcx.const_eval_poly(def) else {
+            return;
+        };
+        let konst: pty::MirConst = stable(mmir::Const::Val(
+            value,
+            self.tcx.type_of(def).instantiate_identity().skip_normalization(),
+        ));
+        let pty::ConstantKind::Allocated(alloc) = konst.kind() else {
+            return;
+        };
+        let little = self.tcx.data_layout.endian == rustc_abi::Endian::Little;
+        let mut values = vec![];
+        for e in 0..*n as usize {
+            let Some(bytes) = alloc.bytes.get(e * size..(e + 1) * size) else {
+                return;
+            };
+            let Some(mut bytes) = bytes.iter().copied().collect::<Option<Vec<u8>>>() else {
+                return;
+            };
+            if little {
+                bytes.reverse();
+            }
+            let bits = bytes.iter().fold(0u128, |v, b| v << 8 | *b as u128);
+            let c = match ty {
+                Some(t) => int_const(bits, t),
+                None => Some(ir::Const::Bool(bits != 0)),
+            };
+            let Some(c) = c else { return };
+            values.push(ir::Operand::Constant(c));
+        }
+        k.value = ir::ConstValue::Body(ir::Body {
+            decls: vec![ir::Decl {
+                local: ir::Local(0),
+                mutable: true,
+                ty: k.ty.clone(),
+            }],
+            debug: vec![],
+            blocks: vec![ir::Block {
+                name: ir::BasicBlock(0),
+                statements: vec![ir::Statement::Assign(
+                    ir::Place::local(ir::Local(0)),
+                    ir::Rvalue::Array(values),
+                )],
+                terminator: ir::Terminator::Return,
+            }],
+        });
     }
 
     // ---- bodies ----
@@ -853,6 +930,18 @@ fn uint_ty(t: pty::UintTy) -> ir::IntTy {
 /// name (`i16::MAX`, `u8::MAX`, `i8::MIN`; an unsigned 0 is `0_u8`, not `u8::MIN`), and the parser reads one a card
 /// holds as its number (`u8::MAX` is 255_u8) and keeps the others as names (`ir::limit_on_a_card`). A value past an
 /// i128 (a u128's) doesn't parse.
+/// The bytes an integer of this type takes.
+fn int_size(ty: ir::IntTy) -> usize {
+    use ir::IntTy as I;
+    match ty {
+        I::I8 | I::U8 => 1,
+        I::I16 | I::U16 => 2,
+        I::I32 | I::U32 => 4,
+        I::I64 | I::U64 | I::Isize | I::Usize => 8,
+        I::I128 | I::U128 => 16,
+    }
+}
+
 fn int_const(bits: u128, ty: ir::IntTy) -> Option<ir::Const> {
     use ir::IntTy as I;
     let width = match ty {

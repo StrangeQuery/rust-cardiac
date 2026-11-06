@@ -68,3 +68,11 @@
   A dependency's statics have no MIR in its metadata, and stay refused; so does one rustc works out otherwise.
 - **The oracle.** rustc's text writes a pointer to a static `&[u8; N]` as `<static(DefId(..))>`, which it can't
   read: the driver gives it as the allocation, as for any other type, and the two differ there.
+
+## 2026-11-05 · A const table rustc works out is the literal it works out to
+
+- **Decision.** For a const array of numbers or bools whose body works it out (`[A, B, A + B]`, a const fn's
+  table), the driver gives the body as the literal rustc evaluates it to (`const_eval_poly`), which the front end
+  reads as any const table. Tables of `i8`, `usize` and `bool` are read as those of `i16` and `u8` are.
+- **The oracle.** The text keeps the body that works the value out, so such an item differs from the text's
+  there; no test program has one.
