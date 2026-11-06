@@ -626,6 +626,13 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
             }
             let n = match t {
                 Ty::Tuple(ts) => ts.len(),
+                // a reference to one: to the struct, which a shared reference is by value
+                Ty::Ref { to, .. } => {
+                    if let Some(s) = strukt(to) {
+                        **to = s;
+                    }
+                    return;
+                }
                 _ => return,
             };
             if let Some(s) = strukt(t) {

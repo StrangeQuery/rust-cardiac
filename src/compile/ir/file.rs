@@ -126,11 +126,15 @@ impl FnItem {
                 Segment::Name { args: None, .. } => false,
             })
         }
-        // a tuple of numbers and bools, `fn join(p: (i16, i16))`, is read: the struct pass takes it apart
-        let scalars = |t: &Ty| match t {
-            Ty::Tuple(ts) => ts.len() >= 2 && ts.iter().all(|t| matches!(t, Ty::Int(_) | Ty::Bool)),
-            _ => false,
-        };
+        // a tuple of numbers and bools, `fn join(p: (i16, i16))`, is read, and a reference to one: the struct pass
+        // takes it apart
+        fn scalars(t: &Ty) -> bool {
+            match t {
+                Ty::Tuple(ts) => ts.len() >= 2 && ts.iter().all(|t| matches!(t, Ty::Int(_) | Ty::Bool)),
+                Ty::Ref { to, .. } => scalars(to),
+                _ => false,
+            }
+        }
         self.params.iter().any(|(_, t)| tuple(t) && !scalars(t)) || matches!(&self.ret, Ty::Other(t) if t.contains('{'))
     }
 }
