@@ -2,9 +2,9 @@
 #[inline(never)]
 pub fn out(_v: i16) {}
 
-/// `?` converting the error with From, into a Result whose error is another type. At opt-level 2 rustc inlines
-/// `from_residual` and the conversion; at 1 it calls core's, which can't be written out without the conversion, so
-/// it is refused.
+/// `?` converting the error with From, into a Result whose error is another type. rustc's MIR inliner, which the
+/// driver turns on at every opt-level, inlines `from_residual` and the conversion; a call of core's that is left (an
+/// error type rustc doesn't inline) can't be written out without the conversion, so it is refused.
 struct Small(i16);
 struct Big(i16);
 
