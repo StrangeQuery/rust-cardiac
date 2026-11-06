@@ -43,6 +43,7 @@ pub mod structs;
 pub mod tails;
 pub mod hoist;
 pub mod util;
+pub mod wide;
 
 use std::collections::{HashMap, HashSet};
 
@@ -567,6 +568,7 @@ fn compile(
         .collect();
     for n in &names {
         enum_methods::inline_checked(fns.get_mut(n).unwrap());
+        methods::inline_pair_methods(fns.get_mut(n).unwrap());
         enum_methods::inline_option_eq(fns.get_mut(n).unwrap(), &normalized);
         enum_methods::inline_enum_methods(fns.get_mut(n).unwrap(), &normalized, &closures);
     }

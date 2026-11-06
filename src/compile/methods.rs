@@ -4,17 +4,22 @@
 //! (`min`, `max` and `clamp` it calls at every level.) Each call becomes here what rustc would have inlined: the
 //! same tests and arithmetic, as blocks of the caller's own, so every pass after sees them as it sees the program's
 //! own code (the range pass knows `x.abs()` is 0 or more, say, and a check on it can go). What rustc inlines at
-//! opt-level 2 into something refused stays refused there: a u8's `abs_diff` becomes a subtraction in i32. (`signum`
-//! becomes a three-way compare, `Cmp`, which `ordering` makes two tests.)
+//! opt-level 2 is compiled as the program's own code: `signum` becomes a three-way compare, `Cmp`, which `ordering`
+//! makes two tests, and a u8's `abs_diff` a subtraction in i32 and casts through a u32 (`wide`).
 //!
-//! What a card can't hold needs no code: no card holds `i16::MIN`, so `abs` and `%` have no overflow to check, and
-//! none of these methods depends on the build's overflow checks. A check that is a panic in Rust whatever the
-//! profile, `rem_euclid`'s divisor of zero and `clamp`'s `min <= max`, stays.
+//! What a card can't hold needs no code: no card holds `i16::MIN`, so `abs`, `/` and `%` have no overflow to check.
+//! None of these methods depends on the build's overflow checks. A check that is a panic in Rust whatever the
+//! profile, a divisor of zero, `clamp`'s `min <= max` and `ilog10`'s argument below 1, stays. A result that may be
+//! past a card is checked in every profile, as there is no cell for the answer: an i16's `abs_diff` (999 and -999
+//! are 1998 apart) and `pow`.
 use super::ir::{
     BasicBlock, BinOp, Block, BorrowKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection,
     Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
 };
 use super::structs::Function;
+
+const DIVIDE_BY_ZERO: &str = "attempt to divide `{}` by zero";
+const REMAINDER_BY_ZERO: &str = "attempt to calculate the remainder of `{}` with a divisor of zero";
 
 /// A method this file knows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,17 +39,25 @@ enum Method {
     Clamp,
     AbsDiff,
     SaturatingSub,
+    SaturatingAdd,
+    Midpoint,
+    Ilog10,
+    WrappingDiv,
+    OverflowingDiv,
+    Pow,
 }
 
 /// The types it compiles them for: the card's own number for the signed methods, and every integer type for the
 /// ones that only compare (`min`, `max`, `clamp`) or can't leave the type's range (`abs_diff`, `saturating_sub` of
-/// an unsigned type). The rest, on u8 or usize, wrap or saturate where a card does not (at 256, at 2^64).
+/// an unsigned type). A u8's `saturating_add` and `midpoint` work in an i16, whose cell holds the sum of two u8s.
+/// The rest, on u8 or usize, wrap or saturate where a card does not (at 256, at 2^64). On an i16, `abs_diff` and
+/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`).
 fn method(name: &str, ty: IntTy) -> Option<Method> {
     use Method::*;
     let signed = ty == IntTy::I16;
     let unsigned = matches!(ty, IntTy::U8 | IntTy::Usize);
     Some(match name {
-        "abs" | "wrapping_abs" if signed => Abs,
+        "abs" | "wrapping_abs" | "unsigned_abs" if signed => Abs,
         "signum" if signed => Signum,
         "is_negative" if signed => IsNegative,
         "is_positive" if signed => IsPositive,
@@ -57,15 +70,21 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
         "min" if signed || unsigned => Min,
         "max" if signed || unsigned => Max,
         "clamp" if signed || unsigned => Clamp,
-        "abs_diff" if unsigned => AbsDiff,
+        "abs_diff" if signed || unsigned => AbsDiff,
         "saturating_sub" if unsigned => SaturatingSub,
+        "saturating_add" if ty == IntTy::U8 => SaturatingAdd,
+        "midpoint" if ty == IntTy::U8 => Midpoint,
+        "ilog10" if signed => Ilog10,
+        "wrapping_div" if signed => WrappingDiv,
+        "overflowing_div" if signed => OverflowingDiv,
+        "pow" if signed => Pow,
         _ => return None,
     })
 }
 
 /// The method a call is to, and the integer type it is on, from the callee's path: `core::num::<impl i16>::abs`,
 /// `<u8 as Ord>::min`, `core::cmp::max::<usize>`, or `std::intrinsics::saturating_sub::<usize>`, which is what
-/// `saturating_sub` is at opt-level 2.
+/// `saturating_sub` is at opt-level 2 (and `saturating_add` likewise).
 fn called(func: &Path) -> Option<(Method, IntTy)> {
     let int = |t: &Ty| match t {
         Ty::Int(t) => Some(*t),
@@ -103,11 +122,24 @@ fn called(func: &Path) -> Option<(Method, IntTy)> {
         }
         (None, [c, i, f]) if std(c) && named(i, &["intrinsics"]) => {
             let (m, t) = generic(f)?;
-            (method(m, t).filter(|m| *m == Method::SaturatingSub)?, t)
+            (
+                method(m, t).filter(|m| matches!(m, Method::SaturatingSub | Method::SaturatingAdd))?,
+                t,
+            )
         }
         _ => return None,
     };
     Some((m, ty))
+}
+
+/// The bounds of what a call to one of these methods returns in a u16 or a u32, where it is on a card (its code
+/// here makes sure of that): the cells `wide` may hold such a result in.
+pub fn exact_result(func: &Path) -> Option<[i128; 2]> {
+    match called(func)? {
+        (Method::Abs | Method::AbsDiff, IntTy::I16) => Some([0, 999]),
+        (Method::Ilog10, IntTy::I16) => Some([0, 2]),
+        _ => None,
+    }
 }
 
 /// `(a..b).contains(&x)` or `(a..=b).contains(&x)`, as rustc calls it at opt-level 1 and s:
@@ -214,6 +246,58 @@ impl<'a> Gains<'a> {
         )
     }
 
+    /// `t = op(a, b)` overflow-checked, as rustc writes it: the statement, and the assert of its flag, which goes
+    /// on to a block that sets `dest` from the pair and goes to `back`.
+    fn checked(
+        &mut self,
+        op: BinOp,
+        a: &Operand,
+        b: &Operand,
+        dest: &Place,
+        back: BasicBlock,
+    ) -> (Statement, Terminator) {
+        let pair = self.local(Ty::Tuple(vec![Ty::Int(IntTy::I16), Ty::Bool]));
+        let field = |k: u32, t: Ty| Place {
+            base: Place::local(pair).base,
+            projection: vec![Projection::Field(k, t)],
+        };
+        let value = Rvalue::Use(Operand::Move(field(0, Ty::Int(IntTy::I16))));
+        let set = self.set(dest, value, back);
+        let msg = match op {
+            BinOp::SubWithOverflow => "attempt to compute `{} - {}`, which would overflow",
+            _ => "attempt to compute `{} * {}`, which would overflow",
+        };
+        (
+            Statement::Assign(Place::local(pair), Rvalue::BinaryOp(op, a.clone(), b.clone())),
+            Terminator::Assert {
+                cond: Operand::Move(field(1, Ty::Bool)),
+                expected: false,
+                msg: msg.into(),
+                msg_args: vec![a.clone(), b.clone()],
+                target: set,
+                unwind: Unwind::Continue,
+            },
+        )
+    }
+
+    /// A check that `b` isn't zero, as `/` and `%` have in every profile, going on to `then`: the statement and the
+    /// assert.
+    fn nonzero(&mut self, a: &Operand, b: &Operand, ty: IntTy, msg: &str, then: BasicBlock) -> (Statement, Terminator) {
+        let z = self.local(Ty::Bool);
+        let zero = Operand::Constant(Const::Int { value: 0, ty });
+        (
+            Statement::Assign(Place::local(z), Rvalue::BinaryOp(BinOp::Eq, b.clone(), zero)),
+            Terminator::Assert {
+                cond: Operand::Move(Place::local(z)),
+                expected: false,
+                msg: msg.into(),
+                msg_args: vec![a.clone()],
+                target: then,
+                unwind: Unwind::Continue,
+            },
+        )
+    }
+
     /// A block that sets the call's destination and goes back to where the call went on to.
     pub(super) fn set(&mut self, dest: &Place, v: Rvalue, back: BasicBlock) -> BasicBlock {
         self.block(vec![Statement::Assign(dest.clone(), v)], Terminator::Goto(back))
@@ -232,6 +316,14 @@ impl<'a> Gains<'a> {
         use Rvalue::{BinaryOp, Use};
         let zero = Operand::Constant(Const::Int { value: 0, ty });
         let int = |v: i128| Operand::Constant(Const::Int { value: v, ty });
+        let one = int(1);
+        // a card's own number, where a u8's method works in one
+        let card = |v: i128| {
+            Operand::Constant(Const::Int {
+                value: v,
+                ty: IntTy::I16,
+            })
+        };
         let assign = |v: Rvalue| Statement::Assign(dest.clone(), v);
         let go = Terminator::Goto(back);
         let copy = |o: &Operand| Use(o.clone());
@@ -292,31 +384,29 @@ impl<'a> Gains<'a> {
                     return Some((vec![], Terminator::Goto(rest)));
                 }
                 // `%`'s check, in every profile
-                let z = self.local(Ty::Bool);
-                let check = Statement::Assign(Place::local(z), BinaryOp(BinOp::Eq, b.clone(), zero));
-                let assert = Terminator::Assert {
-                    cond: Operand::Move(Place::local(z)),
-                    expected: false,
-                    msg: "attempt to calculate the remainder of `{}` with a divisor of zero".into(),
-                    msg_args: vec![a.clone()],
-                    target: rest,
-                    unwind: Unwind::Continue,
-                };
+                let (check, assert) = self.nonzero(a, b, ty, REMAINDER_BY_ZERO, rest);
                 (vec![check], assert)
             }
-            // by a constant: q = a / b, and where a % b is below 0, one less for b above 0, one more below
+            // q = a / b, and where a % b is below 0, one less for b above 0, one more below; by a variable, with
+            // `/`'s check (no card holds i16::MIN, so `/` has no overflow to check)
             (Method::DivEuclid, [a, b]) => {
-                let k = b.int().map(|(k, _)| k).filter(|k| *k != 0)?;
                 let q = self.local(Ty::Int(ty));
                 let r = self.local(Ty::Int(ty));
                 let (qv, rv) = (Operand::Copy(Place::local(q)), Operand::Copy(Place::local(r)));
                 let done = self.set(dest, copy(&qv), back);
-                let step = if k > 0 { BinOp::Sub } else { BinOp::Add };
-                let one = Operand::Constant(Const::Int { value: 1, ty });
-                let fix = self.block(
-                    vec![Statement::Assign(Place::local(q), BinaryOp(step, qv.clone(), one))],
-                    Terminator::Goto(done),
-                );
+                let mut step = |op: BinOp| {
+                    let s = Statement::Assign(Place::local(q), BinaryOp(op, qv.clone(), int(1)));
+                    self.block(vec![s], Terminator::Goto(done))
+                };
+                let fix = match b.int() {
+                    Some((0, _)) => return None,
+                    Some((k, _)) => step(if k > 0 { BinOp::Sub } else { BinOp::Add }),
+                    None => {
+                        let (down, up) = (step(BinOp::Sub), step(BinOp::Add));
+                        let (s, t) = self.test(BinOp::Gt, b, &zero, down, up);
+                        self.block(vec![s], t)
+                    }
+                };
                 let (s, t) = self.test(BinOp::Lt, &rv, &zero, fix, done);
                 let parts = vec![
                     Statement::Assign(Place::local(q), BinaryOp(BinOp::Div, a.clone(), b.clone())),
@@ -324,7 +414,11 @@ impl<'a> Gains<'a> {
                     s,
                 ];
                 let rest = self.block(parts, t);
-                (vec![], Terminator::Goto(rest))
+                if b.int().is_some() {
+                    return Some((vec![], Terminator::Goto(rest)));
+                }
+                let (check, assert) = self.nonzero(a, b, ty, DIVIDE_BY_ZERO, rest);
+                (vec![check], assert)
             }
             // Ord's: the first of two equal values is min's, the second max's (for integers, the same value)
             (Method::Min | Method::Max, [a, b]) => {
@@ -359,12 +453,98 @@ impl<'a> Gains<'a> {
                 };
                 (vec![check], assert)
             }
-            // the larger less the smaller
+            // the larger less the smaller; of two i16s that may be past a card (999 - -999), so it is checked
+            (Method::AbsDiff, [a, b]) if ty == IntTy::I16 => {
+                let (s, t) = self.checked(BinOp::SubWithOverflow, b, a, dest, back);
+                let up = self.block(vec![s], t);
+                let (s, t) = self.checked(BinOp::SubWithOverflow, a, b, dest, back);
+                let down = self.block(vec![s], t);
+                let (s, t) = self.test(BinOp::Lt, a, b, up, down);
+                (vec![s], t)
+            }
             (Method::AbsDiff, [a, b]) => {
                 let up = self.set(dest, BinaryOp(BinOp::Sub, b.clone(), a.clone()), back);
                 let down = self.set(dest, BinaryOp(BinOp::Sub, a.clone(), b.clone()), back);
                 let (s, t) = self.test(BinOp::Lt, a, b, up, down);
                 (vec![s], t)
+            }
+            // a + b in an i16, which holds it (at most 510), or 255 where that is past a u8
+            (Method::SaturatingAdd, [a, b]) => {
+                let sum = self.local(Ty::Int(IntTy::I16));
+                let sv = Operand::Copy(Place::local(sum));
+                let top = self.set(dest, copy(&int(255)), back);
+                let keep = self.set(dest, copy(&sv), back);
+                let (s, t) = self.test(BinOp::Gt, &sv, &card(255), top, keep);
+                let add = Statement::Assign(Place::local(sum), BinaryOp(BinOp::Add, a.clone(), b.clone()));
+                (vec![add, s], t)
+            }
+            // (a + b) / 2, rounded down, the sum in an i16, which holds it
+            (Method::Midpoint, [a, b]) => {
+                let sum = self.local(Ty::Int(IntTy::I16));
+                let sv = Operand::Copy(Place::local(sum));
+                let add = Statement::Assign(Place::local(sum), BinaryOp(BinOp::Add, a.clone(), b.clone()));
+                (vec![add, assign(BinaryOp(BinOp::Div, sv, card(2)))], go)
+            }
+            // a panic below 1, as in Rust; then 0, 1 or 2, by tests against 10 and 100 (a card is below 1000). The
+            // u32 result is an i16 by now (`wide`)
+            (Method::Ilog10, [x]) => {
+                let out = |v: i128| Use(card(v));
+                let (one, two) = (self.set(dest, out(1), back), self.set(dest, out(2), back));
+                let nought = self.set(dest, out(0), back);
+                let (s, t) = self.test(BinOp::Lt, x, &int(100), one, two);
+                let tens = self.block(vec![s], t);
+                let (s, t) = self.test(BinOp::Lt, x, &int(10), nought, tens);
+                let rest = self.block(vec![s], t);
+                let ok = self.local(Ty::Bool);
+                let check = Statement::Assign(Place::local(ok), BinaryOp(BinOp::Gt, x.clone(), zero));
+                let assert = Terminator::Assert {
+                    cond: Operand::Move(Place::local(ok)),
+                    expected: true,
+                    msg: "argument of integer logarithm must be positive".into(),
+                    msg_args: vec![],
+                    target: rest,
+                    unwind: Unwind::Continue,
+                };
+                (vec![check], assert)
+            }
+            // `/` with its check of b; no card holds i16::MIN, so it never wraps
+            (Method::WrappingDiv, [a, b]) => {
+                let quotient = self.set(dest, BinaryOp(BinOp::Div, a.clone(), b.clone()), back);
+                let (check, assert) = self.nonzero(a, b, ty, DIVIDE_BY_ZERO, quotient);
+                (vec![check], assert)
+            }
+            // the same, in the pair's first field, and false in its second
+            (Method::OverflowingDiv, [a, b]) => {
+                let field = |k: u32, t: Ty| {
+                    let mut p = dest.clone();
+                    p.projection.push(Projection::Field(k, t));
+                    p
+                };
+                let parts = vec![
+                    Statement::Assign(field(0, Ty::Int(ty)), BinaryOp(BinOp::Div, a.clone(), b.clone())),
+                    Statement::Assign(field(1, Ty::Bool), Use(Operand::Constant(Const::Bool(false)))),
+                ];
+                let quotient = self.block(parts, go);
+                let (check, assert) = self.nonzero(a, b, ty, DIVIDE_BY_ZERO, quotient);
+                (vec![check], assert)
+            }
+            // by a constant k: k - 1 multiplications, each checked in every profile, as a product past a card can't
+            // be held (with overflow checks off Rust's would wrap at 32768)
+            (Method::Pow, [x, k]) => {
+                let k = k.int().map(|(k, _)| k).filter(|k| (0..=10).contains(k))?;
+                if k <= 1 {
+                    return Some((vec![assign(copy(if k == 0 { &one } else { x }))], go));
+                }
+                // r2 = x * x, r3 = r2 * x, .. into dest: built from the last
+                let (mut next, mut into) = (back, dest.clone());
+                for i in (1..k).rev() {
+                    let r = (i > 1).then(|| Place::local(self.local(Ty::Int(ty))));
+                    let left = r.clone().map_or(x.clone(), Operand::Copy);
+                    let (s, t) = self.checked(BinOp::MulWithOverflow, &left, x, &into, next);
+                    next = self.block(vec![s], t);
+                    into = r.unwrap_or(into);
+                }
+                (vec![], Terminator::Goto(next))
             }
             // a - b, or 0 where that is below 0
             (Method::SaturatingSub, [a, b]) => {
@@ -380,6 +560,16 @@ impl<'a> Gains<'a> {
 
 /// Every call in `f` to one of the methods becomes the code rustc would have inlined for it.
 pub fn inline_methods(f: &mut Function) {
+    inline(f, false);
+}
+
+/// Every call in `f` to a method that returns a pair, `overflowing_div`'s `(i16, bool)`: done before the struct
+/// pass, which takes the pair apart into its fields' cells.
+pub fn inline_pair_methods(f: &mut Function) {
+    inline(f, true);
+}
+
+fn inline(f: &mut Function, pairs: bool) {
     let mut gains = Gains::new(&f.params, &f.body.blocks, &mut f.body.decls);
     for b in f.body.blocks.iter_mut() {
         let Terminator::Call {
@@ -392,7 +582,7 @@ pub fn inline_methods(f: &mut Function) {
         else {
             continue;
         };
-        let Some((m, ty)) = called(func) else {
+        let Some((m, ty)) = called(func).filter(|(m, _)| (*m == Method::OverflowingDiv) == pairs) else {
             continue;
         };
         // each argument is read more than once now: a copy, not a move
@@ -503,6 +693,14 @@ mod tests {
                 Method::SaturatingSub,
                 IntTy::U8,
             ),
+            ("core::num::<impl i16>::abs_diff", Method::AbsDiff, IntTy::I16),
+            ("core::num::<impl i16>::unsigned_abs", Method::Abs, IntTy::I16),
+            ("core::num::<impl i16>::pow", Method::Pow, IntTy::I16),
+            (
+                "core::intrinsics::saturating_add::<u8>",
+                Method::SaturatingAdd,
+                IntTy::U8,
+            ),
         ];
         for (p, m, t) in known {
             let f = callee(p);
@@ -510,8 +708,6 @@ mod tests {
         }
         for p in [
             "core::num::<impl u8>::abs_diff::<u8>",
-            "core::num::<impl i16>::abs_diff",
-            "core::num::<impl i16>::pow",
             "core::num::<impl usize>::wrapping_add",
             "core::num::<impl i16>::saturating_add",
             "core::num::<impl i16>::min",

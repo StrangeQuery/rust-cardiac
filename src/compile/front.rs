@@ -55,6 +55,8 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::ordering::three_way_compares(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums));
+    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
+    super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
     file.visit(&mut PastACardDivisor);
     file.visit(&mut PastACardBound);

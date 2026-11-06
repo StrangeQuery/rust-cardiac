@@ -35,3 +35,29 @@
 - **Cost.** A cast the range pass can't settle is about 12 instructions and a pass of a three-instruction loop
   per 256 (at most four). `TryFrom` at opt-level 1, where rustc calls `try_from`, is still refused: the call
   builds a `Result` whose `Err` holds a `TryFromIntError`, a struct the enum pass has no cells for.
+
+## 2026-11-05 · u16 and u32 locals as cells, where the program can't tell; more integer methods
+
+- **Decision.** A u16 or u32 local (not a parameter or a result) is an i16 cell in one of two ways (`wide`). Where
+  its value is known to be on a card, 0..=999 (a constant, a cast of a u8 or a bool, a sum, difference or quotient
+  by a constant of such values whose bounds stay on the card, or the result of `abs_diff`, `unsigned_abs` or
+  `ilog10` on an i16), the cell holds the value and the local is used as any number is. Otherwise, where it is a
+  cast of an i16, an i32 or a usize, or a sum or difference of such, the cell holds a number equal to it modulo
+  2^16 (2^32): `-500i16 as u16`, 65036, is -500. Such a local may only be cast to i16 or u8, or added to or
+  subtracted from into another, which keep the equality; each of those sums and differences is overflow-checked
+  in every profile, so a cell never holds a wrong number. Anything else (a comparison, a division, a wider cast, a
+  call) and the local keeps its type, which the lowering refuses. The methods, where rustc calls them: on an i16,
+  `abs_diff` (the subtraction checked, as 999 and -999 are 1998 apart), `unsigned_abs` (`abs`), `ilog10` (a panic
+  below 1, then tests against 10 and 100), `wrapping_div` and `overflowing_div` (`/` and its check of a zero
+  divisor; no card holds i16::MIN), `div_euclid` by a variable, and `pow` by a constant up to 10 (its
+  multiplications checked in every profile); on a u8, `saturating_add` (also the intrinsic, at opt-level 2) and
+  `midpoint`, whose sum an i16 cell holds.
+- **Why.** These methods' answers fit on a card; what was refused was the wider type rustc works in, or the call.
+  A wider type can hold what a card can't (`-500i16 as u16` is 65036, and core's `abs_diff` relies on it wrapping
+  back), so it is only a cell where the program can't tell the difference, and only with the checks that keep
+  the cell's number right.
+- **Cost.** Where Rust's answer is past a card, CARDIAC panics in every profile, though Rust wouldn't (`(-999).
+  abs_diff(999)` is 1998; `10.pow(3)` with overflow checks off). A `pow` costs the multiply routine. Still refused:
+  `ilog10` at opt-level 2 (rustc inlines bit operations on constants past a card), and a u16 compared or divided
+  where it may have come from a negative i16. `div_euclid` by a variable compiles but costs the divide routine
+  and the remainder routine both: the matrix's row doesn't fit in 96 cells.
