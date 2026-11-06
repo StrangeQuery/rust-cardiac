@@ -21,8 +21,8 @@
 use std::collections::HashMap;
 
 use super::ir::{
-    BasicBlock, BinOp, Block, BorrowKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place, Projection,
-    Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
+    BasicBlock, BinOp, Block, BorrowKind, CastKind, Const, Decl, GenericArg, IntTy, Local, Operand, Path, Place,
+    Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp, Unwind,
 };
 use super::structs::Function;
 
@@ -48,6 +48,7 @@ enum Method {
     AbsDiff,
     SaturatingSub,
     SaturatingAdd,
+    SaturatingMul,
     Midpoint,
     Ilog10,
     WrappingDiv,
@@ -60,7 +61,8 @@ enum Method {
 /// ones that only compare (`min`, `max`, `clamp`) or can't leave the type's range (`abs_diff`, `saturating_sub` of
 /// an unsigned type). A u8's `saturating_add` and `midpoint` work in an i16, whose cell holds the sum of two u8s.
 /// The rest, on u8 or usize, wrap or saturate where a card does not (at 256, at 2^64). On an i16, `abs_diff` and
-/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`).
+/// `unsigned_abs` return a u16 and `ilog10` a u32, which are cells for what these return (`wide`). A u8's
+/// `saturating_mul` is a sum of b a's that stops at 255.
 fn method(name: &str, ty: IntTy) -> Option<Method> {
     use Method::*;
     let signed = ty == IntTy::I16;
@@ -82,6 +84,7 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
         "abs_diff" if signed || unsigned => AbsDiff,
         "saturating_sub" if unsigned => SaturatingSub,
         "saturating_add" if ty == IntTy::U8 => SaturatingAdd,
+        "saturating_mul" if ty == IntTy::U8 => SaturatingMul,
         "midpoint" if ty == IntTy::U8 => Midpoint,
         "ilog10" if signed => Ilog10,
         "wrapping_div" if signed => WrappingDiv,
@@ -529,6 +532,29 @@ impl<'a> Gains<'a> {
                 let down = self.set(dest, BinaryOp(BinOp::Sub, a.clone(), b.clone()), back);
                 let (s, t) = self.test(BinOp::Lt, a, b, up, down);
                 (vec![s], t)
+            }
+            // b a's added up, stopping at 255: the product of two u8s (up to 65025) is no card, and the sum stays
+            // on one (at most 510)
+            (Method::SaturatingMul, [a, b]) => {
+                let [sum, count, each] = [(); 3].map(|_| self.local(Ty::Int(IntTy::I16)));
+                let [sv, cv, ev] = [sum, count, each].map(|l| Operand::Copy(Place::local(l)));
+                let top = self.set(dest, copy(&int(255)), back);
+                let done = self.set(dest, copy(&sv), back);
+                let head = self.next_block();
+                let less = Statement::Assign(Place::local(count), BinaryOp(BinOp::Sub, cv.clone(), card(1)));
+                let next = self.block(vec![less], Terminator::Goto(head));
+                let (s, t) = self.test(BinOp::Gt, &sv, &card(255), top, next);
+                let add = Statement::Assign(Place::local(sum), BinaryOp(BinOp::Add, sv.clone(), ev));
+                let body = self.block(vec![add, s], t);
+                let (s, t) = self.test(BinOp::Eq, &cv, &card(0), done, body);
+                self.block_named(head, vec![s], t);
+                let widen = |o: &Operand| Rvalue::Cast(o.clone(), Ty::Int(IntTy::I16), CastKind::IntToInt);
+                let start = vec![
+                    Statement::Assign(Place::local(sum), copy(&card(0))),
+                    Statement::Assign(Place::local(count), widen(b)),
+                    Statement::Assign(Place::local(each), widen(a)),
+                ];
+                (start, Terminator::Goto(head))
             }
             // a + b in an i16, which holds it (at most 510), or 255 where that is past a u8
             (Method::SaturatingAdd, [a, b]) => {
@@ -1108,6 +1134,7 @@ mod tests {
                 Method::SaturatingAdd,
                 IntTy::U8,
             ),
+            ("core::num::<impl u8>::saturating_mul", Method::SaturatingMul, IntTy::U8),
             ("core::num::<impl i16>::isqrt", Method::Isqrt, IntTy::I16),
         ];
         for (p, m, t) in known {

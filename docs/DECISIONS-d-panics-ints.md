@@ -47,3 +47,25 @@
   too, and `isize::MAX`, which no card holds, is refused or settled as `i16::MAX` is.
 - **Cost.** Past a card it panics or keeps three digits as an i16 does, where Rust's isize goes on to 2^63. The
   matrix's int_isize matches at every setting; nothing else changed.
+
+## 2026-11-06 · `isqrt`, `pow` by a variable, `checked_pow` and a u8's `saturating_mul`, written here
+
+- **Decision.** `methods` writes these where rustc calls them, and the driver keeps `isqrt` and a u8's
+  `saturating_mul` calls at opt-level 2 too (`WRITTEN_AT_EVERY_LEVEL`): what rustc inlines is core's root of a
+  u16, and a u8 product with its overflow flag. `i16::isqrt` panics below 0, as Rust's does, and is then the odd
+  numbers 1, 3, 5, .. taken away while they last (their sums are the squares): at most 31 rounds, all on a card,
+  no multiply. `i16::pow` by a variable is that many checked multiplications, counted down; its u32 exponent is a
+  `wide` cell, which may hold a number equal to it modulo 2^32, and one below 0 (`n as u32` of an n below 0) is
+  an exponent past a card, which panics. `i16::checked_pow` by a constant up to 10 (`enum_methods::checked_pows`)
+  is `None` where Rust's is, where the power is past an i16, which the base's bounds say without the power (above
+  31 or below -32 for a cube), and else `Some` of the power, its multiplications checked against the card in
+  every profile. A u8's `saturating_mul` is a sum of b a's that stops past 255, so nothing past 510 is ever held.
+- **Why.** Each is exact wherever Rust's answer is on a card. `checked_pow` gives Rust's `None` where it is
+  `None`, which a check of the card alone would not: `10.checked_pow(3)` is `Some(1000)` in Rust, a value no card
+  holds, so it panics rather than say `None`. A u8's product reaches 65025, which no card holds and the multiply
+  routine refuses, so `saturating_mul` doesn't multiply.
+- **Cost.** A panic where Rust's value is past a card (`10.pow(3)`, and `2.pow(16)` without overflow checks,
+  which Rust wraps to 0), and for `pow` with an exponent past a card even where Rust's answer is on one
+  (`1.pow(-3i16 as u32)`). `checked_pow` by a variable stays refused, and by 7 or more doesn't fit in the cells.
+  `saturating_mul` of a u8 takes up to 255 rounds. The four matrix rows match at every setting (isqrt 35 cells,
+  pow by a variable 78, checked_pow 79, saturating_mul 69); nothing else changed.
