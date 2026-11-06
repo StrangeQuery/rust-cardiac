@@ -1,9 +1,9 @@
 //! What cargo-cardiac says about a program, each message with a code, as rustc's errors have: `error[RCE0002]` for
 //! an error or a refusal, `warning[RCW0001]` for a warning and `note[RCI0001]` for information. The message is one
 //! line; what it means on CARDIAC, why, and what to write instead is the code's explanation, which `cargo cardiac
-//! explain CODE` prints and the website has a page of (`/rust-cardiac/messages/CODE/`). The table below is the only
+//! help CODE` prints and the website has a page of (`/rust-cardiac/messages/CODE/`). The table below is the only
 //! place either is written: every message about a program is made by one of its constructors, and the website's
-//! pages are made from `cargo cardiac explain --json`. A usage error (a bad flag) and the tool's own failures (no
+//! pages are made from `cargo cardiac help --json`. A usage error (a bad flag) and the tool's own failures (no
 //! driver, a file it can't write) are no code's: `Diag::tool`, said as a plain `error:`.
 //!
 //! ## Adding a code
@@ -18,7 +18,7 @@
 //!   ` ```rust ` block. The website reads paragraphs, lists, code blocks, `code` and **bold**, nothing more.
 //! - Each message is `name(param: Type, ...) "text with {param}"`, one line in rustc's style: lowercase, no full
 //!   stop, the operand or line it is about at the end. It makes a `Diag`: `return Err(codes::name(...))`.
-//! - Then regenerate the website's copy: `cargo cardiac explain --json > rust_cardiac_codes.json` in the site's
+//! - Then regenerate the website's copy: `cargo cardiac help --json > rust_cardiac_codes.json` in the site's
 //!   repository. The tests below check the table's shape.
 use std::fmt::{self, Display};
 
@@ -183,7 +183,7 @@ pub fn more_information(said: &[&'static Code]) -> Option<String> {
     let first = codes.first()?;
     let word = first.kind.word();
     let (tool, id) = (crate::TOOL, first.id);
-    let try_it = format!("try `cargo {tool} explain {id}`, or see {PAGE}{id}/");
+    let try_it = format!("try `cargo {tool} help {id}`, or see {PAGE}{id}/");
     if codes.len() == 1 {
         return Some(format!("For more information about this {word}, {try_it}"));
     }
@@ -204,6 +204,15 @@ pub fn more_information(said: &[&'static Code]) -> Option<String> {
 /// The code of this name, in any case: `rce0002` is RCE0002.
 pub fn find(id: &str) -> Option<&'static Code> {
     ALL.iter().copied().find(|c| c.id.eq_ignore_ascii_case(id))
+}
+
+/// Whether a word has a code's shape, in any case: RC, then E, W or I, then four digits. It may still be no code here.
+pub fn looks_like_a_code(word: &str) -> bool {
+    let w = word.as_bytes();
+    w.len() == 7
+        && w[..2].eq_ignore_ascii_case(b"RC")
+        && matches!(w[2].to_ascii_uppercase(), b'E' | b'W' | b'I')
+        && w[3..].iter().all(u8::is_ascii_digit)
 }
 
 /// The whole table as JSON, for the website: each code's kind, title, messages and explanation.
@@ -1118,7 +1127,7 @@ mod tests {
         assert_eq!(
             more_information(&[&RCE0013, &RCI0003]).as_deref(),
             Some(
-                "For more information about this error, try `cargo cardiac explain RCE0013`, or see \
+                "For more information about this error, try `cargo cardiac help RCE0013`, or see \
                  https://lab.strangequery.com/rust-cardiac/messages/RCE0013/"
             )
         );
@@ -1126,10 +1135,12 @@ mod tests {
             more_information(&[&RCW0001, &RCE0013, &RCE0002, &RCE0013]).as_deref(),
             Some(
                 "Some errors and warnings have detailed explanations: RCE0002, RCE0013, RCW0001.\n\
-                 For more information about an error, try `cargo cardiac explain RCE0002`, or see \
+                 For more information about an error, try `cargo cardiac help RCE0002`, or see \
                  https://lab.strangequery.com/rust-cardiac/messages/RCE0002/"
             )
         );
         assert!(more_information(&[&RCW0001]).unwrap().starts_with("For more information about this warning"));
+        assert!(looks_like_a_code("rcw0001") && looks_like_a_code("RCE9999"));
+        assert!(!looks_like_a_code("RCX0001") && !looks_like_a_code("RCE001") && !looks_like_a_code("build"));
     }
 }

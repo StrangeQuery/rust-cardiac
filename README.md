@@ -303,13 +303,14 @@ and [FPGA](http://www.drdobbs.com/embedded-systems/paper-to-fpga/240155922) vers
     cargo cardiac build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
     cargo cardiac build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
     cargo cardiac build --emit deck,listing,map,asm ...
-    cargo cardiac explain [--open] CODE
+    cargo cardiac help [COMMAND | CODE]
 
 `new` is `cargo new`, with `cardiac` added and the countdown as `src/main.rs`. `setup` fetches the driver and its
 nightly. `run` builds as `build` does and runs the deck, input from after `--` or from standard input, with the
 build's messages on standard error, so standard output is the program's. `debug` is heartburn's debugger and
 profiler, ekg, on a listing or a deck, and `asm` is its assembler, carc, which makes a deck of a listing. Each
-takes the options the program of its own does, and `--help` says them.
+takes the options the program of its own does, and `--help` says them. `help` says the usage, `help COMMAND` a
+command's part of it (for `debug` and `asm`, ekg's and carc's own), and `help CODE` what a message's code means.
 
 The settings are cargo's. A package is built with the `dev` profile, `--release` with `release`, and `--profile
 NAME` with a profile of the workspace's `Cargo.toml`, resolved by cargo itself. Its `opt-level` is rustc's, and it
@@ -324,11 +325,11 @@ The default is `deck,map`. `-q` says only errors, `-v` also says where the cells
 `--message-format=json` says it all as JSON Lines on standard error, as cargo does.
 
 Each message about a program has a code, as rustc's errors do: `error[RCE0013]` for an error, `warning[RCW0001]`
-for a warning and `note[RCI0001]` for a note. The message is one line; `cargo cardiac explain CODE` says what it
+for a warning and `note[RCI0001]` for a note. The message is one line; `cargo cardiac help CODE` says what it
 means on CARDIAC and what to write instead, as `rustc --explain` does, and so does the code's page in
-[the message codes](https://lab.strangequery.com/rust-cardiac/messages/), which `explain --open CODE` opens. After
-a build with errors or warnings, the last line says where their codes are explained, as rustc's does. In JSON the
-code is the message's `code`.
+[the message codes](https://lab.strangequery.com/rust-cardiac/messages/), whose address it ends with. After a build
+with errors or warnings, the last line says where their codes are explained, as rustc's does. In JSON the code is
+the message's `code`.
 
 The target is `cardiac-unknown-none`, a notional triple: rustc doesn't know it, so there is no `--target` to give,
 and `cargo build` builds natively. `cargo cardiac` is what builds for CARDIAC, with the CARDIAC driver as rustc.

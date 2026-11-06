@@ -17,54 +17,19 @@ use serde_json::{json, Value};
 
 fn usage() -> String {
     let t = format!("cargo {TOOL}");
+    let part = |name| command_usage(name).unwrap_or_default();
+    let commands: String = COMMANDS.iter().filter(|c| **c != "test").map(|c| part(c)).collect();
     format!(
         "\
 {t}: Rust for CARDIAC
 
 Usage:
-  {t} new NAME [OPTION]...
-      Make a CARDIAC program, as `cargo new NAME` makes a Rust one (its options are cargo new's), with cardiac
-      {CARDIAC} as a dependency and src/main.rs a countdown from the number it reads.
-  {t} setup
-      Fetch what the first build needs, now rather than then: the CARDIAC driver for this platform (about
-      1 MB) and the nightly it runs on, {nightly}, in rustup's minimal profile (about 550 MB on disk).
-      When both are here already, it says so.
-  {t} build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
-      Compile the package's programs (its binary targets, or the ones named) for CARDIAC: the package here,
-      or the workspace member -p names. Each gets its deck, NAME.cqb (and NAME.2.cqb, ... for a program in
-      phases), and its panic map, NAME.map, next to its source.
-  {t} build --emit LIST ...
-      What build writes, as rustc's --emit: any of deck, listing, map and asm (deck,map when not given).
-      listing is the program in Brian Stuart's six columns, NAME.cq (NAME.2.cq, ...), which asm assembles.
-  {t} build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay]
-            [--edition YEAR] FILE.rs...
-      The same for single files that use no other crate, not even cardiac: such a file defines the
-      built-ins it calls itself, as stubs (`#[inline(never)] pub fn out(_v: i16) {{}}`). It is Rust's
-      2021 edition unless --edition names another, as rustc's does.
-  {t} run [build's options] [--bin NAME] [-- INPUT...]
-      Build the program as build does, then run its deck, each phase's deck in turn, with its panic map
-      beside it: a program that panics says why, and exits 101, as `cargo run` does. The input is the
-      numbers after --, or standard input. A package with more than one program runs the one --bin names.
-      Its build's messages go to standard error, so standard output is the program's alone.
-  {t} view [build's options] [--bin NAME] [-- INPUT...]
-      Build the program as run does, and open it in Cardigan, the CARDIAC IDE, in your browser: stopped at the
-      start, the input in its reader, to step through. The program goes in the address, which stays on this machine.
-  {t} debug [OPTION]... FILE [INPUT]...
-      Debug a listing (NAME.cq) or a deck, or profile it with --profile: ekg, with ekg's options.
-      `{t} debug --help` says them.
-  {t} asm [OPTION]... FILE
-      Assemble a listing into a deck: carc, with carc's options. `{t} asm --help` says them.
-  {t} explain [--open] CODE
-      What a code in a message means, as `rustc --explain` says it: error[RCE0002] is explained by
-      `{t} explain RCE0002`. Each is on the web too, at {codes_page}CODE/, which --open opens in your
-      browser.
-      `{t} explain --json` gives every code, its kind, title, messages and explanation, as JSON.
-  {t} --version
+{commands}  {t} --version
       Which cargo-cardiac this is.
 
 Messages:
   What build says about a program has a code, as rustc's errors do: error[RCE....] for an error,
-  warning[RCW....] for a warning, note[RCI....] for a note. `{t} explain CODE` says what it means.
+  warning[RCW....] for a warning, note[RCI....] for a note. `{t} help CODE` says what it means.
 
 Resources, load_resource(\"NAME\"):
   A resource is the file resources/NAME beside the package's Cargo.toml (beside a single file, for one):
@@ -103,15 +68,91 @@ New versions:
   error isn't a terminal.
 
 For developing cargo-cardiac:
-  {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--edition YEAR]
+{test}",
+        test = part("test"),
+    )
+}
+
+/// The commands, in the usage's order: `help COMMAND` says one's part of it.
+const COMMANDS: [&str; 9] = ["new", "setup", "build", "run", "view", "debug", "asm", "help", "test"];
+
+/// A command's part of the usage: none for a word that isn't one.
+fn command_usage(name: &str) -> Option<String> {
+    let t = format!("cargo {TOOL}");
+    let nightly = driver::TOOLCHAIN;
+    let codes_page = codes::PAGE;
+    Some(match name {
+        "new" => format!(
+            "  {t} new NAME [OPTION]...
+      Make a CARDIAC program, as `cargo new NAME` makes a Rust one (its options are cargo new's), with cardiac
+      {CARDIAC} as a dependency and src/main.rs a countdown from the number it reads.
+"
+        ),
+        "setup" => format!(
+            "  {t} setup
+      Fetch what the first build needs, now rather than then: the CARDIAC driver for this platform (about
+      1 MB) and the nightly it runs on, {nightly}, in rustup's minimal profile (about 550 MB on disk).
+      When both are here already, it says so.
+"
+        ),
+        "build" => format!(
+            "  {t} build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
+      Compile the package's programs (its binary targets, or the ones named) for CARDIAC: the package here,
+      or the workspace member -p names. Each gets its deck, NAME.cqb (and NAME.2.cqb, ... for a program in
+      phases), and its panic map, NAME.map, next to its source.
+  {t} build --emit LIST ...
+      What build writes, as rustc's --emit: any of deck, listing, map and asm (deck,map when not given).
+      listing is the program in Brian Stuart's six columns, NAME.cq (NAME.2.cq, ...), which asm assembles.
+  {t} build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay]
+            [--edition YEAR] FILE.rs...
+      The same for single files that use no other crate, not even cardiac: such a file defines the
+      built-ins it calls itself, as stubs (`#[inline(never)] pub fn out(_v: i16) {{}}`). It is Rust's
+      2021 edition unless --edition names another, as rustc's does.
+"
+        ),
+        "run" => format!(
+            "  {t} run [build's options] [--bin NAME] [-- INPUT...]
+      Build the program as build does, then run its deck, each phase's deck in turn, with its panic map
+      beside it: a program that panics says why, and exits 101, as `cargo run` does. The input is the
+      numbers after --, or standard input. A package with more than one program runs the one --bin names.
+      Its build's messages go to standard error, so standard output is the program's alone.
+"
+        ),
+        "view" => format!(
+            "  {t} view [build's options] [--bin NAME] [-- INPUT...]
+      Build the program as run does, and open it in Cardigan, the CARDIAC IDE, in your browser: stopped at the
+      start, the input in its reader, to step through. The program goes in the address, which stays on this machine.
+"
+        ),
+        "debug" => format!(
+            "  {t} debug [OPTION]... FILE [INPUT]...
+      Debug a listing (NAME.cq) or a deck, or profile it with --profile: ekg, with ekg's options.
+      `{t} help debug` says them.
+"
+        ),
+        "asm" => format!(
+            "  {t} asm [OPTION]... FILE
+      Assemble a listing into a deck: carc, with carc's options. `{t} help asm` says them.
+"
+        ),
+        "help" => format!(
+            "  {t} help [COMMAND | CODE]
+      This, or a command's part of it, or what a code in a message means, as `rustc --explain` says it:
+      error[RCE0002] is explained by `{t} help RCE0002`. Each code is on the web too, at
+      {codes_page}CODE/.
+      `{t} help --json` gives every code, its kind, title, messages and explanation, as JSON.
+"
+        ),
+        "test" => format!(
+            "  {t} test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--edition YEAR]
           FILE.rs [-- INPUT...]
   {t} test [--manifest-path PATH] [-p NAME] [--release | --profile NAME] --bin NAME [-- INPUT...]
       Compile a program as the compiler's tests do, write its .mir and .asm beside it, run it from
       main_bb0 on the input, and print its cards on one line.
-",
-        nightly = driver::TOOLCHAIN,
-        codes_page = codes::PAGE,
-    )
+"
+        ),
+        _ => return None,
+    })
 }
 
 fn bad_usage(why: &str) -> ! {
@@ -391,7 +432,7 @@ fn args() -> Args {
         eprint!("{}", usage());
         std::process::exit(2)
     };
-    if matches!(command.as_str(), "help" | "--help" | "-h") {
+    if matches!(command.as_str(), "--help" | "-h") {
         print!("{}", usage());
         std::process::exit(0)
     }
@@ -400,7 +441,7 @@ fn args() -> Args {
         std::process::exit(0)
     }
     // the commands whose options are another program's: everything after the command is theirs
-    let passed = matches!(command.as_str(), "new" | "debug" | "asm" | "explain");
+    let passed = matches!(command.as_str(), "new" | "debug" | "asm" | "help" | "explain");
     let mut r = Args {
         command,
         files: vec![],
@@ -720,29 +761,37 @@ fn main() {
     ExitCode::SUCCESS
 }
 
-/// `cargo cardiac explain CODE`: what a code means, as `rustc --explain` says it; with `--open`, the code's page in
-/// the browser; `--json`, every code, for the website's pages of them.
-fn explain(args: &[String]) -> ExitCode {
-    let open = args.iter().any(|a| a == "--open");
-    let rest: Vec<&String> = args.iter().filter(|a| *a != "--open").collect();
-    match rest.as_slice() {
-        [json] if *json == "--json" && !open => println!("{:#}", codes::table_json()),
-        [id] if !id.starts_with('-') => match codes::find(id) {
-            Some(c) if open => {
-                let url = format!("{}{}/", codes::PAGE, c.id);
-                if !open_in_browser(&url) {
-                    eprintln!("note: no browser opened; the address is below");
-                }
-                println!("{url}");
+/// `cargo cardiac help`: the usage; with a command, its part of it (debug's and asm's are ekg's and carc's own);
+/// with a code, what it means, as `rustc --explain` says it, and its page; `--json`, every code, for the website's
+/// pages of them. `explain` is the same command, its old name.
+fn help(args: &[String]) -> ExitCode {
+    match args {
+        [] => print!("{}", usage()),
+        [json] if json == "--json" => println!("{:#}", codes::table_json()),
+        [word] if word == "debug" => {
+            return heartburn::tools::ekg::main(&format!("cargo {TOOL} debug"), vec!["--help".into()])
+        }
+        [word] if word == "asm" => {
+            return heartburn::tools::carc::main(&format!("cargo {TOOL} asm"), vec!["--help".into()])
+        }
+        [word] if !word.starts_with('-') => {
+            if let Some(part) = command_usage(word) {
+                print!("{part}");
+            } else if let Some(c) = codes::find(word) {
+                // the address on a line of its own, so a terminal makes it a link
+                print!("{}", c.explanation);
+                println!("\n{}{}/", codes::PAGE, c.id);
+            } else if codes::looks_like_a_code(word) {
+                die(format!("{word} is not a cargo-cardiac code"))
+            } else {
+                die(format!(
+                    "{word} is not a command or a code: the commands are {}, and a code is RCE, RCW or RCI and \
+                     four digits",
+                    COMMANDS.join(", ")
+                ))
             }
-            Some(c) => print!("{}", c.explanation),
-            None => die(format!(
-                "{id} is not a cargo-cardiac code: they are RCE, RCW or RCI and four digits"
-            )),
-        },
-        _ => bad_usage(
-            "explain takes one CODE, RCE0002 say (with --open, its page in the browser), or --json for all of them",
-        ),
+        }
+        _ => bad_usage("help takes one COMMAND, or one CODE (RCE0002 say), or --json for every code"),
     }
     ExitCode::SUCCESS
 }
@@ -920,7 +969,8 @@ fn main() -> ExitCode {
         "new" => return new(&a.rest),
         "debug" => return heartburn::tools::ekg::main(&format!("cargo {TOOL} debug"), a.rest),
         "asm" => return heartburn::tools::carc::main(&format!("cargo {TOOL} asm"), a.rest),
-        "explain" => return explain(&a.rest),
+        // explain CODE, as it was before help took codes, stays
+        "help" | "explain" => return help(&a.rest),
         "setup" => {
             driver::setup().unwrap_or_else(|e| die(e));
             return ExitCode::SUCCESS;

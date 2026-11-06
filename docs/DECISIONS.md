@@ -4,6 +4,21 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · `cargo cardiac help` takes a command or a code, as `go help` and `git help` take topics
+
+- **Decision.** `help` is the one command that explains: `help` alone is the usage (as `--help`), `help COMMAND`
+  that command's part of it (for `debug` and `asm`, what ekg and carc say to `--help`), and `help CODE` a code's
+  explanation, as `explain CODE` printed it, then the code's page on a line of its own, which terminals make a
+  link. A word that is neither is a plain error; one of a code's shape that isn't one says so. `help --json` is
+  every code, for the website's pages. `explain` stays as a quiet alias (`explain CODE`, `explain --json`), out of
+  the usage, so the commands people and the site's build have used keep working. The line after a failed build
+  says `cargo cardiac help RCE0013`. `explain --open` is gone: printing the address gives the same in one click,
+  without a command that starts a browser; `view` still opens Cardigan.
+- **Why.** rustc's own split (`--help` and `--explain`) is two words for one question, "what does this mean";
+  `go help TOPIC` and `git help` answer it with one, and a code is one more topic.
+- **Cost.** A command name and a code can't collide, as a code is RC, a letter and four digits. The usage text
+  is built from each command's part, so `help COMMAND` and the usage can't drift apart.
+
 ## 2026-11-06 · An iterator adaptor chain is the loop it stands for, read back from where its structs are built
 
 - **Decision.** `adaptors::adaptor_chains`, beside `iterator_methods`: where rustc calls what consumes a chain of
