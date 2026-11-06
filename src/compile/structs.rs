@@ -432,7 +432,9 @@ fn shared_scalar_refs_by_value(fns: &mut Ordered<String, Function>) {
                         if let Some(r) = p.base_local().filter(|r| mine(*r)) {
                             let read = p.projection.as_slice() == [Projection::Deref];
                             let defined = matches!(s, Statement::Assign(d, _) if d == p);
-                            let copied = matches!(s, Statement::Assign(_, Rvalue::Use(Operand::Copy(q) | Operand::Move(q))) if q == p && p.projection.is_empty());
+                            // (copied whole only into another such reference: a result, or a field of a struct
+                            // or an enum, that holds a reference holds its address)
+                            let copied = matches!(s, Statement::Assign(d, Rvalue::Use(Operand::Copy(q) | Operand::Move(q))) if q == p && p.projection.is_empty() && d.as_local().is_some_and(mine));
                             if !(read || defined || copied) {
                                 drop.push((name.clone(), r));
                             }
