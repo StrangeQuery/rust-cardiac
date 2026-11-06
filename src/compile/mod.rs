@@ -22,6 +22,7 @@ pub mod bits;
 pub mod blocks;
 pub mod closures;
 pub mod copies;
+pub mod cycles;
 pub mod crates;
 pub mod enum_methods;
 pub mod enums;
