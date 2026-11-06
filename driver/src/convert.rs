@@ -116,12 +116,25 @@ fn ctfe_mir_encoded(tcx: TyCtxt<'_>, def: DefId) -> bool {
 /// These items of one crate, the local one or another (`krate`, its name, for another's), as the IR: as `file`
 /// makes the local crate's, each named as rustc names it in this session.
 pub fn items(tcx: TyCtxt<'_>, defs: &[DefId], krate: Option<&str>) -> (ir::File, Vec<(usize, ir::ItemPath)>) {
+    items_reached(tcx, defs, krate, &Default::default())
+}
+
+/// `items`, with the impls' functions that `also` holds named as a call names them too: those a generic function's
+/// instance calls (`instances::Instances::called`), which no call in `defs` reaches.
+pub fn items_reached(
+    tcx: TyCtxt<'_>,
+    defs: &[DefId],
+    krate: Option<&str>,
+    also: &std::collections::HashSet<DefId>,
+) -> (ir::File, Vec<(usize, ir::ItemPath)>) {
+    let mut called = called(tcx, defs);
+    called.extend(also.iter().filter(|d| defs.first().is_some_and(|f| d.krate == f.krate)));
     let c = Convert {
         tcx,
         krate: krate.map(str::to_string),
         renamed: Default::default(),
         made: Default::default(),
-        called: called(tcx, defs),
+        called,
     };
     let mut items = vec![];
     for &def in defs {
@@ -145,6 +158,36 @@ pub fn items(tcx: TyCtxt<'_>, defs: &[DefId], krate: Option<&str>) -> (ir::File,
     (ir::File { items }, c.renamed.into_inner())
 }
 
+/// Bodies rustc has no item for, each a function of its own by the name given: a generic function's instances
+/// (`instances`), their MIR instantiated. Each comes with the allocations it uses; a promoted constant is the
+/// generic item's, which an instance with one isn't made of.
+pub fn bodies<'tcx>(tcx: TyCtxt<'tcx>, bodies: &[(ir::ItemPath, &mmir::Body<'tcx>)]) -> ir::File {
+    let c = Convert {
+        tcx,
+        krate: None,
+        renamed: Default::default(),
+        made: Default::default(),
+        called: Default::default(),
+    };
+    let mut items = vec![];
+    for (path, body) in bodies {
+        let public: pmir::Body = stable(*body);
+        let params = (1..=body.arg_count)
+            .map(|l| (ir::Local(l as u32), c.ty(public.locals()[l].ty, Paths::Trimmed)))
+            .collect();
+        items.push(ir::Item::Fn(ir::FnItem {
+            path: path.clone(),
+            params,
+            ret: c.ty(public.locals()[0].ty, Paths::Trimmed),
+            body: c.body(&public, body),
+        }));
+        let mut allocs = vec![];
+        mmir::pretty::write_allocations(tcx, body, &mut allocs).expect("writing MIR to memory");
+        items.extend(ir::parse_file(&String::from_utf8_lossy(&allocs)).items);
+    }
+    ir::File { items }
+}
+
 /// The functions of these items' crate that their calls reach, resolved to the definitions they run.
 fn called(tcx: TyCtxt<'_>, defs: &[DefId]) -> std::collections::HashSet<DefId> {
     let mut called = calls(tcx, defs);
@@ -164,42 +207,47 @@ pub fn calls(tcx: TyCtxt<'_>, defs: &[DefId]) -> std::collections::HashSet<DefId
             bodies.push(tcx.mir_for_ctfe(def));
         }
         for body in bodies {
-            let env = mty::TypingEnv::post_analysis(tcx, def);
-            for b in body.basic_blocks.iter() {
-                let mmir::TerminatorKind::Call { func, .. } = &b.terminator().kind else {
-                    continue;
-                };
-                let Some((callee, args)) = func.const_fn_def() else {
-                    continue;
-                };
-                if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, callee, args) {
-                    called.insert(instance.def_id());
-                    // a trait's own default method (`PartialEq::ne`) calls the trait's other methods, as the
-                    // type implements them (its `eq`): those are reached too
-                    if let Some(trait_def) = tcx.trait_of_assoc(instance.def_id()) {
-                        // the trait's own arguments (Self and its parameters), not the method's own after them
-                        // (`RangeBounds::contains::<U>`): resolved with those, rustc records a delayed bug
-                        let trait_args = args.truncate_to(tcx, tcx.generics_of(trait_def));
-                        for &other in tcx.associated_item_def_ids(trait_def) {
-                            // only what the impl must define: one with a default is core's body, and resolving an
-                            // item the impl can't have (a bound unmet) is a delayed bug in rustc; and none with
-                            // parameters of its own, which the call doesn't give
-                            if tcx.def_kind(other) != rustc_hir::def::DefKind::AssocFn
-                                || tcx.defaultness(other).has_value()
-                                || tcx.generics_of(other).own_requires_monomorphization()
-                            {
-                                continue;
-                            }
-                            if let Ok(Some(i)) = mty::Instance::try_resolve(tcx, env, other, trait_args) {
-                                called.insert(i.def_id());
-                            }
-                        }
+            calls_in(tcx, body, &mut called);
+        }
+    }
+    called
+}
+
+/// The functions the calls in a body reach, each resolved to the definition it runs, added to `called`.
+pub fn calls_in<'tcx>(tcx: TyCtxt<'tcx>, body: &mmir::Body<'tcx>, called: &mut std::collections::HashSet<DefId>) {
+    let env = mty::TypingEnv::post_analysis(tcx, body.source.def_id());
+    for b in body.basic_blocks.iter() {
+        let mmir::TerminatorKind::Call { func, .. } = &b.terminator().kind else {
+            continue;
+        };
+        let Some((callee, args)) = func.const_fn_def() else {
+            continue;
+        };
+        if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, callee, args) {
+            called.insert(instance.def_id());
+            // a trait's own default method (`PartialEq::ne`) calls the trait's other methods, as the
+            // type implements them (its `eq`): those are reached too
+            if let Some(trait_def) = tcx.trait_of_assoc(instance.def_id()) {
+                // the trait's own arguments (Self and its parameters), not the method's own after them
+                // (`RangeBounds::contains::<U>`): resolved with those, rustc records a delayed bug
+                let trait_args = args.truncate_to(tcx, tcx.generics_of(trait_def));
+                for &other in tcx.associated_item_def_ids(trait_def) {
+                    // only what the impl must define: one with a default is core's body, and resolving an
+                    // item the impl can't have (a bound unmet) is a delayed bug in rustc; and none with
+                    // parameters of its own, which the call doesn't give
+                    if tcx.def_kind(other) != rustc_hir::def::DefKind::AssocFn
+                        || tcx.defaultness(other).has_value()
+                        || tcx.generics_of(other).own_requires_monomorphization()
+                    {
+                        continue;
+                    }
+                    if let Ok(Some(i)) = mty::Instance::try_resolve(tcx, env, other, trait_args) {
+                        called.insert(i.def_id());
                     }
                 }
             }
         }
     }
-    called
 }
 
 impl<'tcx> Convert<'tcx> {

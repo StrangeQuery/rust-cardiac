@@ -4,6 +4,38 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · A generic function's instance is a function of its own
+
+- **Decision.** Where rustc leaves a call to an instance of one of the program's generic functions
+  (`bigger::<i16>`, `show::<Sq>`, `sum::<3>`, a trait's default method `<A as Shown>::show`), the driver makes the
+  instance a function (`driver/src/instances.rs`): the generic MIR with the instance's arguments put in, as codegen
+  does, named by the instance in plain words (`bigger__i16`, `A_as_Shown__show`, a number after it if that is
+  taken), and the calls to it call that name. Instances are followed through the calls in their bodies (up to 64).
+  What a generic body does through a trait on a type now known is then what rustc writes for that type: a `drop`
+  of what needs none is no drop; `PartialOrd`'s and `PartialEq`'s comparisons, `clone`, and `+`, `-`, `*` of two
+  integers of one type (comparisons of bools too) are the operation, the arithmetic checked as the program's
+  overflow checks say (core's are `#[rustc_inherit_overflow_checks]`); a comparison of a C-like enum whose
+  `PartialOrd` (or `PartialEq`) is derived compares the discriminants, as the derived `partial_cmp` does; a
+  constant named through the parameters (`T::MAX`, an integer or a bool) is evaluated; an unwind to a cleanup
+  block continues. core's own `Ord::max` and `Ord::min` on a C-like enum (`if other < self { self } else { other
+  }`) are made the same way, which `x.max(y)` on a derived-`Ord` enum calls at every opt-level.
+- **Why.** A generic function worked only where rustc inlined it, and `#[inline(never)]`, a trait reached through
+  `impl Trait`, or a call too costly for the inliner (the landing pads of the generic body count against it) left
+  it refused at every setting. An instance is an ordinary function once its types are known, and every pass after
+  the driver takes it as one, with its cells and its calls checked as any function's.
+- **Considered.** Forcing rustc's inliner to inline the program's generic functions: it gives optimized MIR, but
+  breaks `#[inline(never)]` and copies the body into every call. Running rustc's MIR optimizations on each
+  instance: they are private to `rustc_mir_transform`.
+- **Cost.** An instance is the generic body as rustc optimized it before its types were known, which the passes
+  after clean up as they can: fn_generic_not_inlined (`bigger::<i16>` and `bigger::<bool>`) is 63 cells, as the same
+  program with an `i16` helper and a `bool` helper written out is. Each instance is a copy, as Rust's are. Left
+  refused: a generic function of another crate (the linker says so), an instance with a promoted constant, a closure
+  as an argument, a const argument the IR doesn't read (`f::<-3>`), a struct that is generic (`Pair<i16>`) as a
+  local or a parameter where its method stays a call (the struct pass knows a struct by its name alone, so
+  `Pair<i16>` and `Pair<bool>` would be one), and `max` on a struct, which passes it whole.
+- **Evidence.** Support matrix against tonight's merged results: 10 rows better, 0 worse; no listing or example
+  changes.
+
 ## 2026-11-06 · An iterator's and a slice's methods that rustc calls are the loops they stand for
 
 - **Decision.** `iterators::iterator_methods`: on a slice iterator into one array, or a range of a card's type
