@@ -119,10 +119,10 @@ impl fmt::Display for ItemPath {
 }
 
 impl FnItem {
-    /// Whether a parameter's type holds a tuple (other than one of numbers and bools, or a reference to one) or is
-    /// `()`, or a function pointer the front end doesn't make a number of, or the return type is one the IR does not
-    /// model and that contains a brace. The compiler does not read such a function (yet). A `()` in a type's
-    /// arguments (`Option<()>`) takes no cell, as an enum's field.
+    /// Whether a parameter's type holds a tuple (other than one of numbers and bools, or a reference to one, or an
+    /// `Option` or a `Result` of one) or is `()`, or a function pointer the front end doesn't make a number of, or
+    /// the return type is one the IR does not model and that contains a brace. The compiler does not read such a
+    /// function (yet). A `()` in a type's arguments (`Option<()>`) takes no cell, as an enum's field.
     pub fn unread(&self) -> bool {
         fn tuple(t: &Ty) -> bool {
             match t {
@@ -139,25 +139,29 @@ impl FnItem {
                 .qself
                 .as_ref()
                 .is_some_and(|q| tuple(&q.ty) || q.as_trait.as_ref().is_some_and(path_tuple));
+            // (an `Option` or a `Result` of a tuple of numbers and bools is read: the enum pass lays one out)
             q || p.segments.iter().any(|s| match s {
-                Segment::Name { args: Some(a), .. } => a
-                    .args
-                    .iter()
-                    .any(|a| matches!(a, GenericArg::Ty(t) if *t != Ty::Unit && tuple(t))),
+                Segment::Name { name, args: Some(a) } => a.args.iter().any(|a| {
+                    let laid_out = |t: &Ty| (name == "Option" || name == "Result") && scalars(t);
+                    matches!(a, GenericArg::Ty(t) if *t != Ty::Unit && tuple(t) && !laid_out(t))
+                }),
                 Segment::Impl(t) => tuple(t),
                 Segment::Name { args: None, .. } => false,
             })
         }
-        // a tuple of numbers, bools and references to them, `fn join(p: (i16, i16))` and the `(usize, &i16)` an
-        // enumerate's closure takes, is read, and a reference to one: the struct pass takes it apart
+        // a tuple of numbers, bools and references to them (the `(usize, &i16)` an enumerate's closure takes),
+        // `fn join(p: (i16, i16))`, or of such tuples, is read, and a reference to one: the struct pass takes it
+        // apart
         fn scalars(t: &Ty) -> bool {
             let cell = |t: &Ty| matches!(t, Ty::Int(_) | Ty::Bool);
             match t {
                 Ty::Tuple(ts) => {
-                    ts.len() >= 2
-                        && ts
-                            .iter()
-                            .all(|t| cell(t) || matches!(t, Ty::Ref { to, .. } if cell(to)))
+                    let element = |t: &Ty| {
+                        cell(t)
+                            || matches!(t, Ty::Ref { to, .. } if cell(to))
+                            || matches!(t, Ty::Tuple(_)) && scalars(t)
+                    };
+                    ts.len() >= 2 && ts.iter().all(element)
                 }
                 Ty::Ref { to, .. } => scalars(to),
                 _ => false,

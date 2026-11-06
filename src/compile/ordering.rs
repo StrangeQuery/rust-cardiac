@@ -10,9 +10,10 @@
 //!   d = o.reverse()        d = Cmp(Equal, o)
 //! `Cmp` is two tests, not a subtraction and its sign: a - b may be past a card.
 use super::front::{local_types, place_ty};
+use super::ir::visit_mut::{walk_path, VisitMut};
 use super::ir::{
-    BinOp, Block, Body, Const, File, Item, Local, Operand, Path, Place, Projection, Rvalue, Segment, Statement,
-    Terminator, Ty, Unwind,
+    BinOp, Block, Body, Const, File, GenericArg, GenericArgs, Item, Local, Operand, Path, Place, Projection, Rvalue,
+    Segment, Statement, Terminator, Ty, Unwind,
 };
 use super::methods::Gains;
 
@@ -241,4 +242,185 @@ mod tests {
             ]
         );
     }
+}
+
+/// `core::cmp::Reverse<T>` of an integer T: its T. With `short`, also as rustc names it where that name is core's
+/// alone, `Reverse<T>` (not where the program has a type of its own of that name).
+fn reversed(t: &Ty, short: bool) -> Option<Ty> {
+    let Ty::Path(p) = t else { return None };
+    let core = p.segments.len() == 3
+        && p.segments[..2]
+            .iter()
+            .zip(["core", "cmp"])
+            .all(|(s, w)| matches!(s, Segment::Name { name, args: None } if name == w));
+    if p.qself.is_some() || !(core || short && p.segments.len() == 1) {
+        return None;
+    }
+    let Some(Segment::Name { name, args: Some(g) }) = p.segments.last() else {
+        return None;
+    };
+    match g.args.as_slice() {
+        [GenericArg::Ty(t @ Ty::Int(_))] if name == "Reverse" => Some(t.clone()),
+        _ => None,
+    }
+}
+
+/// Does a type, a place's or an operand's, name `Reverse` anywhere?
+struct NamesReverse(bool);
+
+impl VisitMut for NamesReverse {
+    fn visit_path(&mut self, p: &mut Path) {
+        self.0 |= p
+            .segments
+            .iter()
+            .any(|s| matches!(s, Segment::Name { name, .. } if name == "Reverse"));
+        walk_path(self, p)
+    }
+}
+
+/// `Reverse(x)` of an integer is x, compared the other way round: a `Reverse<T>` local is a T, `Reverse(x)` is x and
+/// its `.0` the value, and a comparison of two (`<Reverse<T> as PartialOrd>::lt(&a, &b)`, `cmp`) is T's of the two
+/// swapped; their `max` is T's `min`, and `min` T's `max` (equal values are the same value). In a function whose
+/// parameters and result have none, and where nothing else is done with one; else it is left, and refused. `own`
+/// are the names of the program's own types.
+pub fn reverse_is_its_value(file: &mut File, own: &[String]) {
+    let short = !own.iter().any(|n| n == "Reverse");
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut names = NamesReverse(false);
+        for d in f.body.decls.iter_mut() {
+            names.visit_ty(&mut d.ty);
+        }
+        let mut outside = NamesReverse(false);
+        for (_, t) in f.params.iter_mut() {
+            outside.visit_ty(t);
+        }
+        outside.visit_ty(&mut f.ret);
+        if !names.0 || outside.0 {
+            continue;
+        }
+        let types = local_types(&f.params, &f.body.decls);
+        let mut body = f.body.clone();
+        // each `(p.0: T)` of a Reverse p, p
+        let unwrap = |p: &mut Place| {
+            let mut t = types.get(&p.base_local().unwrap_or(Local(u32::MAX))).cloned();
+            let mut k = 0;
+            while k < p.projection.len() {
+                if let (Some(_), Projection::Field(0, _)) =
+                    (t.as_ref().and_then(|t| reversed(t, short)), &p.projection[k])
+                {
+                    t = t.as_ref().and_then(|t| reversed(t, short));
+                    p.projection.remove(k);
+                    continue;
+                }
+                t = t.and_then(|t| match (&p.projection[k], t) {
+                    (Projection::Deref, Ty::Ref { to, .. }) => Some(*to),
+                    (Projection::Field(_, ft), _) => Some(ft.clone()),
+                    _ => None,
+                });
+                k += 1;
+            }
+        };
+        for b in body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                s.places_mut(&mut |p| unwrap(p));
+                if let Statement::Assign(_, r @ Rvalue::Variant(..)) = s {
+                    let Rvalue::Variant(p, ops) = &*r else { unreachable!() };
+                    if let (Some(_), [o]) = (
+                        reversed(
+                            &Ty::Path(Path {
+                                qself: None,
+                                segments: p.segments.clone(),
+                            }),
+                            short,
+                        ),
+                        ops.as_slice(),
+                    ) {
+                        *r = Rvalue::Use(o.clone());
+                    }
+                }
+            }
+            b.terminator.places_mut(&mut |p| unwrap(p));
+            if let Terminator::Call { func, args, .. } = &mut b.terminator {
+                if let Some(swapped) = swapped_call(func, short) {
+                    *func = swapped.0;
+                    if swapped.1 {
+                        args.reverse();
+                    }
+                }
+            }
+        }
+        for d in body.decls.iter_mut() {
+            d.ty = match &d.ty {
+                Ty::Ref { lifetime, mutable, to } if reversed(to, short).is_some() => Ty::Ref {
+                    lifetime: lifetime.clone(),
+                    mutable: *mutable,
+                    to: Box::new(reversed(to, short).unwrap()),
+                },
+                t => reversed(t, short).unwrap_or_else(|| t.clone()),
+            };
+        }
+        let mut left = NamesReverse(false);
+        left.visit_body(&mut body.clone());
+        if !left.0 {
+            f.body = body;
+        }
+    }
+}
+
+/// A call of a comparison of two `Reverse<T>`s as T's: its path, and whether the arguments swap.
+fn swapped_call(func: &Path, short: bool) -> Option<(Path, bool)> {
+    let one = |name: &str, args: Option<GenericArgs>| Segment::Name {
+        name: name.into(),
+        args,
+    };
+    if let Some(q) = &func.qself {
+        let t = reversed(&q.ty, short)?;
+        let tr = q.as_trait.as_ref()?;
+        let [Segment::Name { name, args: None }] = func.segments.as_slice() else {
+            return None;
+        };
+        let (name, swap) = match (tr.name(), name.as_str()) {
+            ("Ord", "max") => ("min", false),
+            ("Ord", "min") => ("max", false),
+            ("Ord", "cmp") => ("cmp", true),
+            ("PartialOrd", n @ ("lt" | "le" | "gt" | "ge" | "partial_cmp")) => (n, true),
+            _ => return None,
+        };
+        let mut q = (**q).clone();
+        q.ty = t;
+        return Some((
+            Path {
+                qself: Some(Box::new(q)),
+                segments: vec![one(name, None)],
+            },
+            swap,
+        ));
+    }
+    // core::cmp::max::<Reverse<T>>
+    let [c, cmp, Segment::Name { name, args: Some(g) }] = func.segments.as_slice() else {
+        return None;
+    };
+    let words = matches!(c, Segment::Name { name, args: None } if name == "core")
+        && matches!(cmp, Segment::Name { name, args: None } if name == "cmp");
+    let [GenericArg::Ty(r)] = g.args.as_slice() else {
+        return None;
+    };
+    let t = reversed(r, short)?;
+    let name = match name.as_str() {
+        "max" if words => "min",
+        "min" if words => "max",
+        _ => return None,
+    };
+    let args = GenericArgs {
+        turbofish: g.turbofish,
+        args: vec![GenericArg::Ty(t)],
+    };
+    Some((
+        Path {
+            qself: None,
+            segments: vec![c.clone(), cmp.clone(), one(name, Some(args))],
+        },
+        false,
+    ))
 }

@@ -1583,7 +1583,10 @@ pub fn adaptor_chains(f: &mut Function, known: &Known) {
     if !held.is_empty() {
         unread_chains(f, &held);
     }
-    // a closure of core's this didn't take, which nothing after knows
+}
+
+/// A closure of core's that neither this pass nor `enum_methods` took, which nothing after knows: refused.
+pub fn refuse_core_closures(f: &mut Function) {
     for b in f.body.blocks.iter_mut() {
         for st in b.statements.iter_mut() {
             if matches!(st, Statement::Assign(_, Rvalue::Closure(..))) {

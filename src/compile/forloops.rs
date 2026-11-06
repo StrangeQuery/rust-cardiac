@@ -890,6 +890,16 @@ pub fn lower_for_loops(f: &mut Function) {
                             bd.blocks[bi].statements[i] = Statement::Assign(Place::local(x), Rvalue::Use(v.clone()));
                             retype.set(x, Ty::Int(t));
                             bd.unwrap_some(x, t);
+                            // and a constant `Some` it is set to elsewhere, its value (`Some(Equal)`, a comparison's)
+                            for s in bd.blocks.iter_mut().flat_map(|b| b.statements.iter_mut()) {
+                                if let Statement::Assign(d, Rvalue::Use(Operand::Constant(Const::Variant(p, cs)))) = s {
+                                    if let (true, Some(_), [c]) =
+                                        (d.as_local() == Some(x), option_some(p), cs.as_slice())
+                                    {
+                                        *s = Statement::Assign(d.clone(), Rvalue::Use(Operand::Constant(c.clone())));
+                                    }
+                                }
+                            }
                             changed = true;
                             break;
                         }

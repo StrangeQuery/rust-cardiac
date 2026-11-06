@@ -206,6 +206,46 @@ pub fn c_like_enums(file: &mut File, defs: &[EnumDef]) -> Result<(), Fail> {
                     *c = Const::Int { value, ty: IntTy::I16 };
                 }
             }
+            // a variant named alone in another enum's constant, `Option::<Ordering>::Some(Equal)`: of the one C-like
+            // enum among the constant's type arguments that has a variant of that name
+            if let Const::Variant(p, fields) = c {
+                let args: Vec<&Path> = p
+                    .segments
+                    .iter()
+                    .filter_map(|s| match s {
+                        Segment::Name { args: Some(a), .. } => Some(&a.args),
+                        _ => None,
+                    })
+                    .flatten()
+                    .filter_map(|a| match a {
+                        GenericArg::Ty(Ty::Path(e)) if self.0.is_enum(e) => Some(e),
+                        _ => None,
+                    })
+                    .collect();
+                for f in fields.iter_mut() {
+                    let Const::Path(v) = f else { continue };
+                    let [Segment::Name { name, args: None }] = v.segments.as_slice() else {
+                        continue;
+                    };
+                    let numbered: Vec<i128> = args
+                        .iter()
+                        .filter_map(|e| {
+                            let mut named = (*e).clone();
+                            named.segments.push(Segment::Name {
+                                name: name.clone(),
+                                args: None,
+                            });
+                            self.0.variant(&named)
+                        })
+                        .collect();
+                    if let ([value], None) = (numbered.as_slice(), &v.qself) {
+                        *f = Const::Int {
+                            value: *value,
+                            ty: IntTy::I16,
+                        };
+                    }
+                }
+            }
             walk_const(self, c)
         }
         // a call's path keeps the enum's name: `<Colour as PartialEq>::eq` names the impl's function, as the
@@ -501,6 +541,12 @@ impl Enums<'_> {
         match t {
             Ty::Int(IntTy::I32) => Some(Ty::Int(IntTy::I16)),
             Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool => Some(t.clone()),
+            // (a char is a usize once the front end has run: `front::CharIsUsize`)
+            Ty::Char => Some(Ty::Int(IntTy::Usize)),
+            // (and a NonZero its integer: `nonzero`)
+            Ty::Path(_) if super::nonzero::nonzero(t, false).is_some() => {
+                self.scalar(super::nonzero::nonzero(t, false)?)
+            }
             Ty::Path(p) => def_of(self.defs, p)
                 .filter(|(_, d)| d.c_like() && !d.variants.is_empty())
                 .map(|_| Ty::Int(IntTy::I16)),
@@ -630,19 +676,9 @@ impl Enums<'_> {
                 return Ok(Kind::Cell(t.clone()));
             }
         }
-        // a tuple of scalars: the struct the struct pass makes of one, `tuple__i16_i16`
-        if let Ty::Tuple(ts) = t {
-            let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
-            if ts.len() >= 2 && ts.iter().all(scalar) {
-                let name = format!(
-                    "tuple__{}",
-                    ts.iter().map(|t| t.to_string()).collect::<Vec<_>>().join("_")
-                );
-                return Ok(Kind::Cell(Ty::Path(Path {
-                    qself: None,
-                    segments: vec![Segment::Name { name, args: None }],
-                })));
-            }
+        // a tuple of scalars, or of such tuples: a struct the struct pass makes of it (`structs::tuple_struct`)
+        if matches!(t, Ty::Tuple(_)) && super::structs::tuple_struct(t, &mut vec![]).is_some() {
+            return Ok(Kind::Cell(t.clone()));
         }
         let Ty::Path(p) = t else { return Err(None) };
         let Some((i, d)) = def_of(self.defs, p) else {

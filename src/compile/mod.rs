@@ -22,6 +22,7 @@ pub mod arith;
 pub mod bits;
 pub mod blocks;
 pub mod call_stack;
+pub mod chars;
 pub mod closures;
 pub mod copies;
 pub mod cycles;
@@ -37,6 +38,8 @@ pub mod lower;
 pub mod machine;
 pub mod methods;
 pub mod names;
+pub mod nested;
+pub mod nonzero;
 pub mod ordering;
 pub mod panic_messages;
 pub mod peephole;
@@ -720,7 +723,8 @@ fn compile(
     cuts: Option<&[phases::Cut]>,
     depth: u64,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named, statics, objects, capturing) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics, objects, capturing) =
+        front::front_end(file.clone(), debug_assertions, enums, structs)?;
     let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
         return Err(crate::codes::no_main());
@@ -730,6 +734,8 @@ fn compile(
     for n in &names {
         methods::inline_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
     }
+    // an array of arrays, one array
+    nested::arrays_of_arrays(&mut fns);
     // rustc's u8 + - and * wrap, before the passes write plain ops of their own
     for n in &names {
         let f = fns.get_mut(n).unwrap();
@@ -802,6 +808,7 @@ fn compile(
         methods::inline_pair_methods(fns.get_mut(n).unwrap());
         enum_methods::inline_option_eq(fns.get_mut(n).unwrap(), &normalized);
         enum_methods::inline_enum_methods(fns.get_mut(n).unwrap(), &normalized, &closures);
+        adaptors::refuse_core_closures(fns.get_mut(n).unwrap());
     }
     // a closure that captures nothing is called without itself: its first parameter, never read, goes
     for name in closures.values() {
