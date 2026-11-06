@@ -114,3 +114,17 @@
   settings: a `NonZeroI16` passed to a function and its `get()` doubled, `NonZeroU8::new(..).is_some()`, `unwrap()`
   (panicking at 0), `map(|n| n.get() + 1)`, and `==` of two `Option<NonZeroI16>`s; a program's own `Reverse<T>`
   is its own.
+
+## 2026-11-06 · `Option::get_or_insert` is core's test and a `&mut` of the value
+
+- **Decision.** `enum_methods::gets_or_inserts`: `o.get_or_insert(v)`, which rustc calls as `get_or_insert_with`
+  given core's own closure (one that returns the value it captured, built just before in the same block), is
+  core's `if let None = *o { *o = Some(v) }` and then `&mut` of the value in `Some`; the closure's line keeps v in
+  a local of its own. The closure pass leaves that closure for it, where it made any other closure it can't take
+  apart a refusal.
+- **Why.** A `&mut` of a variant's field is what the enum pass already does for `if let Some(x) = &mut o`.
+- **Cost.** None to other programs. A value rustc folds into the closure as a constant (`get_or_insert(200)`,
+  `const {transmute(0xc8): {closure@..}}`) stays refused.
+- **Evidence.** option_get_or_insert matches at every setting (42 and 54 cells). A probe with an `Option<i16>`
+  that was and wasn't `Some`, the value changed after the call, written through the `&mut`, and an `Option<u8>`'s
+  added to, matches native Rust at the four settings.

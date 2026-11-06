@@ -120,6 +120,8 @@ pub fn closures_as_structs(file: &mut File) {
                     Rvalue::Closure(Ty::Other(t), fields) if structs.contains_key(t) => {
                         *r = Rvalue::Struct(named(&structs[t]), std::mem::take(fields));
                     }
+                    // (core's in `Option::get_or_insert`, which returns its capture, is `enum_methods`')
+                    Rvalue::Closure(Ty::Other(t), _) if t.ends_with("::get_or_insert::{closure#0}}") => {}
                     // a closure of another kind, or a tuple of one that no call took apart, which the passes don't
                     // know
                     Rvalue::Closure(..) => *s = Statement::Unsupported(Unsupported::of(&s.to_string())),
