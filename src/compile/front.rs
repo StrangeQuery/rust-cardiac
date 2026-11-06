@@ -151,6 +151,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     switch_values(&mut file);
     cold_paths(&mut file);
     // `Cmp` and `Ordering`'s methods, written with its variants, which the C-like pass numbers
+    super::ordering::reverse_is_its_value(&mut file);
     super::ordering::three_way_compares(&mut file);
     tail_calls(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;

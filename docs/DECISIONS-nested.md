@@ -85,3 +85,17 @@
 - **Evidence.** option_lt matches at every setting (69 cells). `<`, `<=`, `>` and `>=` of two `Option<i16>`s over
   every pair of `None`, below, equal and above, an `Option<u8>` against `Some(3)` and `None < o`, match native
   Rust at the four settings. `o.cmp(&p)` and `o.max(p)` stay refused (core's `Ord` for `Option`, a call).
+
+## 2026-11-06 · `Reverse(x)` of an integer is x, compared the other way round
+
+- **Decision.** `ordering::reverse_is_its_value`, in the front end before the three-way compares: in a function
+  whose parameters and result hold no `core::cmp::Reverse`, a `Reverse<T>` of an integer T (or a reference to
+  one) is a T, `Reverse(x)` is x and `.0` the value; `<Reverse<T> as PartialOrd>::lt(&a, &b)` and its kin, and
+  `Ord::cmp`, are T's with the two arguments swapped; `Ord::max` (and `core::cmp::max`) is T's `min`, and `min`
+  T's `max`. Where anything else names `Reverse`, the function is left as it was, refused.
+- **Why.** `Reverse` is a transparent wrapper whose comparisons swap their operands; for an integer, two equal
+  values are the same value, so which of two equals `max` returns can't be told.
+- **Cost.** None to other programs.
+- **Evidence.** cmp_reverse matches at every setting (28 cells). `cmp`, `>=`, `core::cmp::min`, `max` of two
+  `Reverse<i16>`s and `<=` of two `Reverse<u8>`s, for a below, equal to and above b, match native Rust at the four
+  settings.
