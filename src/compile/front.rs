@@ -57,6 +57,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     file.visit(&mut PastACardDivisor);
     file.visit(&mut StdIsCore);
     file.visit(&mut OffsetIsAdd);
+    file.visit(&mut NoUnwinding);
     let named = scalar_consts(&file)?;
     inline_struct_consts(&mut file);
     inline_array_consts(&mut file);
@@ -355,6 +356,22 @@ fn place_ty(types: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
         };
     }
     Some(t)
+}
+
+/// A call or a check in a function that can't unwind (`extern "C"`), whose panic Rust turns into an abort
+/// (`unwind terminate(abi)`): CARDIAC never unwinds, and a panic stops the machine where it is, as anywhere else.
+/// (Natively the abort exits 134, not a panic's 101; the output is the same.)
+struct NoUnwinding;
+
+impl VisitMut for NoUnwinding {
+    fn visit_terminator(&mut self, t: &mut Terminator) {
+        if let Terminator::Call { unwind, .. } | Terminator::Assert { unwind, .. } = t {
+            if matches!(unwind, super::ir::Unwind::Terminate(why) if why == "abi") {
+                *unwind = super::ir::Unwind::Continue;
+            }
+        }
+        walk_terminator(self, t)
+    }
 }
 
 /// `x % k` and `x / k` of an i16 with k past a card (`% 1000`): a card's size is at most 999, so `x % k` is x (Rust's

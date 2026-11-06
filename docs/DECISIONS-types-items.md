@@ -16,3 +16,10 @@
   return block, is its arguments and the jump to the function; the function keeps no return instruction (no
   `CLA 99`, no exit cell), and a local of type `!` needs no cell.
 - **Why.** It was refused as a terminator the backend doesn't have, though it is an ordinary call.
+
+## 2026-11-05 · A function that can't unwind is compiled as any other
+
+- **Decision.** A call or a check whose unwind is `terminate(abi)` (in an `extern "C"` function, where Rust aborts
+  rather than unwinds a panic) is read as `unwind continue`: CARDIAC never unwinds, and a panic stops the machine.
+- **Cost.** Natively such a panic aborts, exit code 134, where burn exits 101 as for any panic; the output is the
+  same. The panic map can't say otherwise without a message burn reads as an abort.
