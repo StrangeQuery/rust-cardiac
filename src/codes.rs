@@ -879,11 +879,11 @@ for i in 0..t.len() {
 "#
 
     RCE0039 Error "A trait object used this way" {
-        trait_object(why: impl Display) "this use of a trait object isn't supported: a `&dyn Trait` works where it is made of a reference to one of the program's structs, and a method called through it is one each struct's impl defines ({why})";
+        trait_object(why: impl Display) "this use of a trait object isn't supported: a `&dyn Trait` works where it is made of a reference to one of the program's structs, and a method called through it is one each struct's impl defines, and a `&dyn Fn(..)` where it is made of a closure that captures ({why})";
     }
     r#"A trait object (`&dyn Trait`, `Box<dyn Trait>`) used in a way the compiler can't follow.
 
-A `&dyn Trait` compiles as an enum of the program's types that are made into one, and a method call through it as a `match` on which type it is. That needs every such object to be a reference to one of the program's own structs, and each method one their impls define. A `Box<dyn Trait>`, or a trait object of a library type, isn't.
+A `&dyn Trait` compiles as an enum of the program's types that are made into one, and a method call through it as a `match` on which type it is. That needs every such object to be a reference to one of the program's own structs, and each method one their impls define. A `&dyn Fn(..)` is the same with closures: each one made into it must capture something (a closure that captures nothing can be a function pointer, `fn(i16) -> i16`). A `Box<dyn Trait>`, a `&mut dyn FnMut(..)`, or a trait object of a library type, isn't.
 
 Use a `&dyn Trait` of your own structs, or an enum and a `match`.
 

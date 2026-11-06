@@ -54,7 +54,7 @@ pub fn closures_as_structs(file: &mut File) -> HashMap<String, String> {
     let structs: HashMap<String, String> = closures
         .iter()
         .filter(|(_, c)| c.captures)
-        .map(|(t, c)| (t.clone(), format!("{}_env", c.function)))
+        .map(|(t, c)| (t.clone(), env_name(&c.function)))
         .collect();
     for item in &mut file.items {
         let Item::Fn(f) = item else { continue };
@@ -175,6 +175,16 @@ fn called<'a>(t: &Terminator, closures: &'a HashMap<String, Closure>) -> Option<
         ("FnMut", [Segment::Name { name, args: None }]) if name == "call_mut"
     );
     (called && args.len() == 2).then(|| closures.get(closure)).flatten()
+}
+
+/// The struct a closure that captures is, by its function's name (`main_closure0_env`).
+fn env_name(function: &str) -> String {
+    format!("{function}_env")
+}
+
+/// The type of that struct.
+pub fn env_struct(function: &str) -> Ty {
+    Ty::Path(named(&env_name(function)))
 }
 
 /// A path of one name.
