@@ -397,6 +397,9 @@ pub enum Const {
     /// A closure that captures nothing, as a value of its type: `ZeroSized: {closure@src/main.rs:4:13: 4:16}`. (A
     /// value of any other type with no bytes is `()`.)
     ZeroSized(Ty),
+    /// A closure whose bytes rustc gives as all zeros, `{transmute(0x0000000000000000): {closure@..}}`, and how many
+    /// there are: what it makes of core's `enumerate` closure, a count of 0 beside closures that capture nothing.
+    Zeroed(Ty, usize),
     /// A tuple's value, `(10_i16,)`: what rustc passes a closure's `call` for its arguments.
     Tuple(Vec<Const>),
 }
@@ -407,7 +410,7 @@ impl Const {
         match self {
             Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
-            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) | Const::ZeroSized(_) | Const::Tuple(_) => false,
+            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) | Const::ZeroSized(_) | Const::Zeroed(..) | Const::Tuple(_) => false,
         }
     }
 }
@@ -971,6 +974,7 @@ impl fmt::Display for Const {
             }
             Const::Promoted(p, n) => write!(f, "{p}::promoted[{n}]"),
             Const::ZeroSized(t) => write!(f, "ZeroSized: {t}"),
+            Const::Zeroed(t, n) => write!(f, "{{transmute(0x{}): {t}}}", "00".repeat(*n)),
             Const::Tuple(cs) => {
                 f.write_str("(")?;
                 comma_list(f, cs)?;

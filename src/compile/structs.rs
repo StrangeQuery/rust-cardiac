@@ -636,14 +636,17 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
             .collect();
         let mut strukt = |t: &Ty| -> Option<Ty> {
             let Ty::Tuple(ts) = t else { return None };
-            let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+            let cell = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+            // (a reference to one is a cell too, its address: zip's and enumerate's items hold them)
+            let scalar = |t: &Ty| cell(t) || matches!(t, Ty::Ref { to, .. } if cell(to));
             if ts.len() < 2 || !ts.iter().all(scalar) {
                 return None;
             }
-            let name = format!(
-                "tuple__{}",
-                ts.iter().map(|t| t.to_string()).collect::<Vec<_>>().join("_")
-            );
+            let word = |t: &Ty| match t {
+                Ty::Ref { to, .. } => format!("ref_{to}"),
+                t => t.to_string(),
+            };
+            let name = format!("tuple__{}", ts.iter().map(word).collect::<Vec<_>>().join("_"));
             if !made.iter().any(|(m, _)| *m == name) {
                 let fields = ts
                     .iter()

@@ -208,7 +208,7 @@ pub fn walk_const<V: VisitMut + ?Sized>(v: &mut V, c: &mut Const) {
         | Const::Str(_)
         | Const::Bytes(_)
         | Const::Promoted(..) => {}
-        Const::Alloc(_, t) | Const::ZeroSized(t) => v.visit_ty(t),
+        Const::Alloc(_, t) | Const::ZeroSized(t) | Const::Zeroed(t, _) => v.visit_ty(t),
     }
 }
 

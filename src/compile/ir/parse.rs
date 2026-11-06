@@ -678,6 +678,36 @@ impl Parser<'_> {
             self.pos += 1;
             return Ok(Const::Str(s));
         }
+        // a closure whose bytes are all zeros: `{transmute(0x0000000000000000): {closure@..}}`
+        if let (
+            true,
+            Some(Tok::Ident(t)),
+            Some(Tok::Punct("(")),
+            Some(Tok::Int { digits, suffix: None }),
+            Some(Tok::Ident(x)),
+        ) = (
+            self.is_punct("{"),
+            self.peek_at(1),
+            self.peek_at(2),
+            self.peek_at(3),
+            self.peek_at(4),
+        ) {
+            let zeros = x
+                .strip_prefix('x')
+                .filter(|z| !z.is_empty() && z.len() % 2 == 0 && z.bytes().all(|b| b == b'0'));
+            if let (true, Some(zeros)) = (t == "transmute" && digits == "0", zeros) {
+                let n = zeros.len() / 2;
+                self.pos += 5;
+                self.punct(")")?;
+                self.punct(":")?;
+                let ty = self.ty()?;
+                self.punct("}")?;
+                return match ty {
+                    t @ Ty::Other(_) => Ok(Const::Zeroed(t, n)),
+                    _ => Err(self.error("a closure's type")),
+                };
+            }
+        }
         // a pointer into an allocation: `{alloc1: &[i16; 4]}`
         if let (true, Some(Tok::Ident(name)), Some(Tok::Punct(":"))) =
             (self.is_punct("{"), self.peek_at(1), self.peek_at(2))
@@ -1275,6 +1305,17 @@ mod tests {
                 "{past}"
             );
         }
+    }
+
+    #[test]
+    fn a_closure_of_zero_bytes_reads_and_prints_back() {
+        let line = "_1 = const {transmute(0x0000000000000000): {closure@<Enumerate<I> as Iterator>::fold::enumerate<&i16, i16, {closure@a.rs:1:2: 1:5}>::{closure#0}}};";
+        let Const::Zeroed(Ty::Other(_), 8) = constant(line) else {
+            panic!("not a closure of zero bytes")
+        };
+        assert_eq!(parse_line(line).unwrap().to_string(), line);
+        // anything but zeros stays unread
+        assert!(parse_line("_1 = const {transmute(0x0100000000000000): {closure@a.rs:1:2: 1:5}};").is_err());
     }
 
     #[test]

@@ -23,7 +23,9 @@ struct Closure {
 }
 
 /// Each closure that captures as a struct, and each call of a closure through its trait as a call of its function.
-pub fn closures_as_structs(file: &mut File) {
+/// Returns each closure that captures: its function, by the closure's type as rustc writes it (which a closure of
+/// core's that wraps it still names).
+pub fn closures_as_structs(file: &mut File) -> HashMap<String, String> {
     let mut closures: HashMap<String, Closure> = HashMap::new();
     for item in &file.items {
         let Item::Fn(f) = item else { continue };
@@ -120,6 +122,9 @@ pub fn closures_as_structs(file: &mut File) {
                     Rvalue::Closure(Ty::Other(t), fields) if structs.contains_key(t) => {
                         *r = Rvalue::Struct(named(&structs[t]), std::mem::take(fields));
                     }
+                    // a closure of core's, which wraps the program's (`map_fold(f, g)`): the adaptor pass reads it,
+                    // and refuses what it doesn't take
+                    Rvalue::Closure(Ty::Other(t), _) if !closures.contains_key(t) => {}
                     // a closure of another kind, or a tuple of one that no call took apart, which the passes don't
                     // know
                     Rvalue::Closure(..) => *s = Statement::Unsupported(Unsupported::of(&s.to_string())),
@@ -135,6 +140,11 @@ pub fn closures_as_structs(file: &mut File) {
         types.visit_ty(&mut f.ret);
         types.visit_body(&mut f.body);
     }
+    closures
+        .into_iter()
+        .filter(|(_, c)| c.captures)
+        .map(|(t, c)| (t, c.function))
+        .collect()
 }
 
 /// The closure a call calls through its trait, `<{closure@..} as Fn<(i16,)>>::call(env, args)` (or `FnMut`'s

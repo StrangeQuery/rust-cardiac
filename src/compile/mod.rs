@@ -17,6 +17,7 @@
 //! file's flags) turns them on, as the MIR rustc writes shows. A failed check panics, which prints -999 on the
 //! teletype and halts. Without overflow checks, a value past -999..999 keeps the low three digits when stored, as a
 //! cell does.
+pub mod adaptors;
 pub mod arith;
 pub mod bits;
 pub mod blocks;
@@ -683,7 +684,7 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics, objects, capturing) = front::front_end(file.clone(), debug_assertions, enums)?;
     let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
         return Err(crate::codes::no_main());
@@ -741,9 +742,26 @@ fn compile(
             _ => None,
         })
         .collect();
+    let rets: HashMap<String, ir::Ty> = fns.iter().map(|(n, f)| (n.clone(), f.ret.clone())).collect();
+    let own_structs: Vec<String> = structs.iter().filter(|s| s.in_crate).map(|s| s.name.clone()).collect();
+    let bodies: HashMap<String, (Vec<(ir::Local, ir::Ty)>, ir::Body)> = closures
+        .values()
+        .chain(capturing.values())
+        .filter_map(|n| fns.get(n).map(|f| (n.clone(), (f.params.clone(), f.body.clone()))))
+        .collect();
+    let known_closures = adaptors::Known {
+        closures: &closures,
+        rets: &rets,
+        capturing: &capturing,
+        bodies: &bodies,
+        own_structs: &own_structs,
+    };
     for n in &names {
         // an iterator's fold, sum, all and kin, which rustc calls: the loops they are
         iterators::iterator_methods(fns.get_mut(n).unwrap(), &closures);
+        // what a chain of adaptors does, which rustc calls core's code for: the loop it stands for
+        adaptors::adaptor_chains(fns.get_mut(n).unwrap(), &known_closures);
+        adaptors::array_maps(fns.get_mut(n).unwrap(), &known_closures);
         enum_methods::inline_checked(fns.get_mut(n).unwrap());
         methods::inline_pair_methods(fns.get_mut(n).unwrap());
         enum_methods::inline_option_eq(fns.get_mut(n).unwrap(), &normalized);

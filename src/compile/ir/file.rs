@@ -148,11 +148,17 @@ impl FnItem {
                 Segment::Name { args: None, .. } => false,
             })
         }
-        // a tuple of numbers and bools, `fn join(p: (i16, i16))`, is read, and a reference to one: the struct pass
-        // takes it apart
+        // a tuple of numbers, bools and references to them, `fn join(p: (i16, i16))` and the `(usize, &i16)` an
+        // enumerate's closure takes, is read, and a reference to one: the struct pass takes it apart
         fn scalars(t: &Ty) -> bool {
+            let cell = |t: &Ty| matches!(t, Ty::Int(_) | Ty::Bool);
             match t {
-                Ty::Tuple(ts) => ts.len() >= 2 && ts.iter().all(|t| matches!(t, Ty::Int(_) | Ty::Bool)),
+                Ty::Tuple(ts) => {
+                    ts.len() >= 2
+                        && ts
+                            .iter()
+                            .all(|t| cell(t) || matches!(t, Ty::Ref { to, .. } if cell(to)))
+                }
                 Ty::Ref { to, .. } => scalars(to),
                 _ => false,
             }

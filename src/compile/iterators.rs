@@ -13,7 +13,7 @@ use super::ir::{
 use super::structs::Function;
 
 /// A path of plain names, the last with these type arguments.
-fn path(names: &[&str], args: Vec<Ty>) -> Path {
+pub(super) fn path(names: &[&str], args: Vec<Ty>) -> Path {
     let n = names.len();
     Path {
         qself: None,
@@ -37,11 +37,11 @@ fn index_range() -> Ty {
 }
 
 /// `core::option::Option<T>`.
-fn option(t: Ty) -> Ty {
+pub(super) fn option(t: Ty) -> Ty {
     Ty::Path(path(&["core", "option", "Option"], vec![t]))
 }
 
-fn usize_const(v: u64) -> Operand {
+pub(super) fn usize_const(v: u64) -> Operand {
     Operand::Constant(Const::Int {
         value: v as i128,
         ty: IntTy::Usize,
@@ -49,7 +49,7 @@ fn usize_const(v: u64) -> Operand {
 }
 
 /// The names of a path's segments, if all are plain names (type arguments aside).
-fn names(p: &Path) -> Option<Vec<&str>> {
+pub(super) fn names(p: &Path) -> Option<Vec<&str>> {
     p.segments
         .iter()
         .map(|s| match s {
@@ -60,7 +60,7 @@ fn names(p: &Path) -> Option<Vec<&str>> {
 }
 
 /// The last segment's type arguments.
-fn last_args(p: &Path) -> Vec<&GenericArg> {
+pub(super) fn last_args(p: &Path) -> Vec<&GenericArg> {
     match p.segments.last() {
         Some(Segment::Name { args: Some(g), .. }) => g.args.iter().collect(),
         _ => vec![],
@@ -97,7 +97,7 @@ fn wrapper(t: &Ty) -> bool {
 
 /// Where a local is assigned: a statement (block, line), or a call's destination (block).
 #[derive(Clone, Copy, PartialEq)]
-enum At {
+pub(super) enum At {
     Line(usize, usize),
     Call(usize),
 }
@@ -117,7 +117,7 @@ struct Made {
 }
 
 /// The whole-local definitions of each local.
-fn definitions(f: &Function) -> HashMap<Local, Vec<At>> {
+pub(super) fn definitions(f: &Function) -> HashMap<Local, Vec<At>> {
     let mut defs: HashMap<Local, Vec<At>> = HashMap::new();
     for (bi, b) in f.body.blocks.iter().enumerate() {
         for (si, s) in b.statements.iter().enumerate() {
@@ -612,7 +612,7 @@ pub fn array_into_iter(f: &mut Function) {
 
 /// Where a pointer into an array points: the array (a local, or behind a parameter that never changes) and the
 /// element. Followed through the copies, casts and steps `slices` leaves of a slice iterator's pointers.
-fn element_pointer(f: &Function, defs: &HashMap<Local, Vec<At>>, o: &Operand) -> Option<(Place, u64)> {
+pub(super) fn element_pointer(f: &Function, defs: &HashMap<Local, Vec<At>>, o: &Operand) -> Option<(Place, u64)> {
     let l = o.local()?;
     let Some(ds) = defs.get(&l) else {
         // a parameter's own array, which nothing assigns
@@ -858,15 +858,16 @@ fn gone(f: &mut Function, lines: &[(usize, usize)]) {
 }
 
 /// Fresh locals and blocks for the code a method becomes.
-struct Fresh {
+#[derive(Clone)]
+pub(super) struct Fresh {
     local: u32,
     block: u32,
-    decls: Vec<ir::Decl>,
-    blocks: Vec<ir::Block>,
+    pub(super) decls: Vec<ir::Decl>,
+    pub(super) blocks: Vec<ir::Block>,
 }
 
 impl Fresh {
-    fn of(f: &Function) -> Fresh {
+    pub(super) fn of(f: &Function) -> Fresh {
         let local = f
             .body
             .decls
@@ -884,7 +885,7 @@ impl Fresh {
         }
     }
 
-    fn local(&mut self, ty: Ty) -> Local {
+    pub(super) fn local(&mut self, ty: Ty) -> Local {
         let l = Local(self.local);
         self.local += 1;
         self.decls.push(ir::Decl {
@@ -895,13 +896,13 @@ impl Fresh {
         l
     }
 
-    fn name(&mut self) -> BasicBlock {
+    pub(super) fn name(&mut self) -> BasicBlock {
         let b = BasicBlock(self.block);
         self.block += 1;
         b
     }
 
-    fn block(&mut self, name: BasicBlock, statements: Vec<Statement>, terminator: Terminator) {
+    pub(super) fn block(&mut self, name: BasicBlock, statements: Vec<Statement>, terminator: Terminator) {
         self.blocks.push(ir::Block {
             name,
             statements,
@@ -910,15 +911,15 @@ impl Fresh {
     }
 }
 
-fn assign(l: Local, r: Rvalue) -> Statement {
+pub(super) fn assign(l: Local, r: Rvalue) -> Statement {
     Statement::Assign(Place::local(l), r)
 }
 
-fn copy_of(l: Local) -> Operand {
+pub(super) fn copy_of(l: Local) -> Operand {
     Operand::Copy(Place::local(l))
 }
 
-fn branch(c: Local, zero: BasicBlock, other: BasicBlock) -> Terminator {
+pub(super) fn branch(c: Local, zero: BasicBlock, other: BasicBlock) -> Terminator {
     Terminator::SwitchInt {
         discr: Operand::Move(Place::local(c)),
         arms: vec![(0, zero)],
@@ -927,7 +928,7 @@ fn branch(c: Local, zero: BasicBlock, other: BasicBlock) -> Terminator {
 }
 
 /// A call of a function by its name, returning to `target`.
-fn call(dest: Place, callee: &str, args: Vec<Operand>, target: BasicBlock) -> Terminator {
+pub(super) fn call(dest: Place, callee: &str, args: Vec<Operand>, target: BasicBlock) -> Terminator {
     Terminator::Call {
         dest,
         func: Path {
@@ -944,7 +945,7 @@ fn call(dest: Place, callee: &str, args: Vec<Operand>, target: BasicBlock) -> Te
 }
 
 /// `Option::<T>::Some(v)` or `Option::<T>::None`.
-fn variant(t: &Ty, some: Option<Operand>) -> Rvalue {
+pub(super) fn variant(t: &Ty, some: Option<Operand>) -> Rvalue {
     let segments = vec![
         Segment::Name {
             name: "Option".into(),
@@ -1737,7 +1738,7 @@ pub fn array_eq(f: &mut Function) {
 }
 
 /// `core::ops::Range<T>`, or the struct the for-loop pass makes of one (`Range_i16`), for T a card's type: T.
-fn card_range(t: &Ty) -> Option<IntTy> {
+pub(super) fn card_range(t: &Ty) -> Option<IntTy> {
     let Ty::Path(p) = t else { return None };
     let card = |t: &Ty| match t {
         Ty::Int(t @ (IntTy::I16 | IntTy::U8 | IntTy::Usize)) => Some(*t),

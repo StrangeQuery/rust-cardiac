@@ -43,13 +43,15 @@ const CORE_MODULES: [&str; 14] = [
 ];
 
 /// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, its
-/// statics, and the enums its trait objects are (`indirect::trait_objects`).
+/// statics, the enums its trait objects are (`indirect::trait_objects`), and the function of each closure that
+/// captures, by the closure's type (`closures::closures_as_structs`).
 pub type FrontEnd = (
     File,
     Ordered<String, Function>,
     HashMap<String, i64>,
     Statics,
     Vec<super::enums::EnumDef>,
+    HashMap<String, String>,
 );
 
 /// The program's statics, each a fixed run of cells, as every variable on CARDIAC is: what each holds first, by the
@@ -138,7 +140,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::indirect::function_pointers(&mut file);
     let objects = super::indirect::trait_objects(&mut file);
     // a closure that captures, a struct; one called through its trait, a call of its function
-    super::closures::closures_as_structs(&mut file);
+    let capturing = super::closures::closures_as_structs(&mut file);
     super::panic_messages::literal_panics(&mut file);
     strings_as_bytes(&mut file);
     byte_strings(&mut file);
@@ -176,7 +178,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
             f.widened = Some(p);
         }
     }
-    Ok((file, fns, named, statics, objects))
+    Ok((file, fns, named, statics, objects, capturing))
 }
 
 /// `<T as PartialEq>::ne(a, b)`, which rustc calls at opt-level 1 and s for a derived `!=`: `PartialEq`'s own `ne`,
