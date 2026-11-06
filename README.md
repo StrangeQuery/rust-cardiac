@@ -33,6 +33,36 @@ after `--`, `cargo cardiac run -- 5`.
 The rest is on [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/): the listing to
 open in Cardigan, panic maps, running a deck from your own Rust program, and what Rust works.
 
+## What's new
+
+**0.2.0.** Two wrong answers in 0.1.3 are fixed. A value borrowed for a call could share a cell with another value
+and be read wrongly, and an overflow-checked sum of three terms could lose its first term when another of them was
+an array element at an index worked out at run time.
+
+Much more Rust compiles: slices of run-time length and their methods, iterator adaptors (`map`, `filter`, `zip`,
+`chain`, `skip`, `take` and the rest), function pointers and `dyn Trait`, closures passed, returned and stored,
+recursion (a function that calls itself gets a stack of its own, and functions that call one another at their
+ends need none), the bitwise operators and the bit methods, `u16` and `isize`, panic messages with values in them,
+nested tuples and arrays of arrays, the integer methods (`pow`, `isqrt`, the saturating ones and the rest), and a
+string literal's length and bytes.
+
+Every message about a program now has a code: RCE for an error, RCW for a warning and RCI for a note. `cargo
+cardiac help CODE` says what one means, and so does its page in
+[the message codes](https://lab.strangequery.com/rust-cardiac/messages/). A program that uses an expensive
+operation, such as `&` between two variables or `count_ones()`, gets a warning that names it. `--edition` sets a
+single file's edition. And `cargo cardiac` says when a newer version is out, at most once a day
+(`CARGO_CARDIAC_NO_UPDATE_CHECK=1` turns that off).
+
+**0.1.3.** `cargo cardiac view` builds a program and opens it in Cardigan. Slices of arrays and their iterators,
+`==` of arrays, `step_by`, and generic functions rustc doesn't inline compile.
+
+**0.1.2.** One install for everything: `cargo cardiac new`, `setup`, `run`, `debug` and `asm`. `i8`, `char`,
+statics, unit structs, `Ordering`, `assert_eq!` and panics with a message compile, and some wrong answers are fixed.
+
+**0.1.1.** Shorter crate descriptions, and heartburn from crates.io.
+
+**0.1.0.** The first release.
+
 ## CARDIAC
 
 CARDIAC (CARDboard Illustrative Aid to Computation) was a paper computer that Bell Labs gave to schools in 1968.
@@ -75,7 +105,7 @@ Notice the use of `out()` instead of `println!`. CARDIAC has limited I/O. `print
 
 When you run the program natively, `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
 
-[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the list of what is and isn't supported. `println!` and `format!` are refused: `out()` prints a value. `assert_eq!`, `assert_ne!` and panics with a literal message work, and say what Rust's would.
+[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the list of what is and isn't supported. `println!` and `format!` are refused: `out()` prints a value. `assert_eq!`, `assert_ne!` and panics with a message work, and say what Rust's would, without the values a formatted message prints.
 
 ## Building and running Hello
 In a checkout of this repository, in `examples/`, run it natively, then on CARDIAC:
@@ -165,21 +195,38 @@ of its own, `examples/collatz/`, built with `-p collatz`.
 
 rustc does all of the front end: parsing, type checking, the borrow checker. A program it rejects never reaches CARDIAC, and you get Rust's own errors. cargo-cardiac compiles what rustc writes out. In short:
 
-- **Works well:** `i16` (a card's -999..=999), `i8`, `u8`, `usize`, `bool`, `char` (one that fits on a card);
-  `+`, `-` and comparisons, `*` by a constant, `/` and `%` by a power of ten, `!`, and `<<` and `>>` by a constant;
-  `if`, `while`, `loop`, `match` on integers, `for` over a range; fixed-size arrays, `const` tables, `static`s,
-  tuples, structs (unit ones too) with methods; functions, traits, inlined generics and closures, and a function
-  calling itself as the last thing it does; `&mut` and array references; `Ordering` and `cmp`; bounds and overflow
-  checks, `assert!`, `assert_eq!`, `panic!` with a message.
+- **Works well:** `i16` (a card's -999..=999), `i8`, `u8`, `u16`, `usize`, `isize`, `bool`, `char` (one that fits on
+  a card), and an `i32` whose values stay on a card; `+`, `-` and comparisons, `*` by a constant, `/` and `%` by a
+  power of ten, `!`, and `<<` and `>>` by a constant; `if`, `while`, `loop`, `match`, `if let`, `let else` and `for`;
+  arrays, arrays of arrays, slices, `const` tables, `static`s, tuples, and structs with methods; functions,
+  generics, traits, `impl Trait`, closures, function pointers and `&dyn Trait`; references and raw pointers;
+  iterators and their adaptors, the array and slice methods, and the integer methods; string literals' lengths and
+  bytes; bounds and overflow checks, `assert!`, `assert_eq!`, `panic!` with a message.
 - **Works, but costs more than it looks:** `*`, `/` and `%` of two variables (a multiply or divide routine, and as
-  many steps as the numbers are big), arrays passed by value (copied at every call), anything read through an
-  index or a pointer (self-modifying code), arrays of structs (one array per field), overflow checks on.
+  many steps as the numbers are big); `&`, `|` and `^` between integers (but a mask one below a power of two),
+  shifts by a variable and the bit methods (routines that walk a card's bits, 26 to 67 instructions each, and the
+  build warns about them);
+  recursion other than a call to itself at the end (a stack of its own, about 30 cells, as deep as the memory left
+  over holds); a call through a function pointer or a `&dyn` (a test for each function it can be); arrays passed by
+  value (copied at every call); anything read through an index or a pointer (self-modifying code); arrays of
+  structs (one array per field); overflow checks on.
 - **Enums:** C-like ones are one cell. An enum with data, named fields or not, and so `Option` and `Result` with
   `?`, `if let` and most of their methods, is a tag cell and its fields' cells.
-- **Refused:** integers wider than 16 bits (an `i32` is held as an `i16` is) and floats; `|`, `^` and `&` between
-  integers (but `x & 3` and other masks one below a power of two), and shifts by a variable; strings and the heap; slices and iterators other than ranges; arrays of
-  arrays; recursion other than a call to itself at the end; `println!` and `format!`. The build stops with an
-  error, which for the common cases says what to write instead.
+- **Refused, because CARDIAC can't do it:** integers wider than 16 bits (`i64`, `u32`, `u64`, `i128`, `u128`), since a
+  cell holds -999 to 999; an `i32` is held as an `i16` is, so one past a card panics, or without overflow checks
+  keeps its last three digits. Floats, since a cell holds whole numbers. The heap (`Box`, `Vec`, `String`,
+  `format!`, `vec!`), since every value's cell is fixed when the program is built. Text formatting (`println!`,
+  `write!`), since CARDIAC prints only numbers: `out()` prints a value. Comparing and parsing strings: a compare is
+  too big, and the input is numbers, so there is no text to parse. `extern` blocks, since there is nothing outside
+  to call. `swap_bytes`, whose result is past a card for almost every value. And a refutable `let` (`let Some(x) =
+  o;`), which rustc refuses itself.
+- **Too big for 96 cells:** a program that uses both `<<` and `>>` by a variable, and a `&dyn Trait` chosen at run
+  time whose methods multiply, with overflow checks on.
+- **Refused on purpose:** constants no card holds, such as `i16::MAX` and `i16::MIN` as values (comparing with one
+  works), and `i16::midpoint`, which works in `i32` and would give a wrong answer past a card.
+
+Anything else that is refused is work not done yet. The build stops with an error, and `cargo cardiac help CODE`
+says what its code means and what to write instead.
 
 [docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
 and what to write instead.
@@ -298,16 +345,18 @@ and [FPGA](http://www.drdobbs.com/embedded-systems/paper-to-fpga/240155922) vers
     cargo cardiac new NAME [cargo new's options]
     cargo cardiac setup
     cargo cardiac run [build's options] [--bin NAME] [-- INPUT...]
+    cargo cardiac view [build's options] [--bin NAME] [-- INPUT...]
     cargo cardiac debug [ekg's options] FILE [INPUT]...
     cargo cardiac asm [carc's options] FILE
     cargo cardiac build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
-    cargo cardiac build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
+    cargo cardiac build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] [--edition YEAR] FILE.rs...
     cargo cardiac build --emit deck,listing,map,asm ...
     cargo cardiac help [COMMAND | CODE]
 
 `new` is `cargo new`, with `cardiac` added and the countdown as `src/main.rs`. `setup` fetches the driver and its
 nightly. `run` builds as `build` does and runs the deck, input from after `--` or from standard input, with the
-build's messages on standard error, so standard output is the program's. `debug` is heartburn's debugger and
+build's messages on standard error, so standard output is the program's. `view` builds as `run` does and opens
+the program in Cardigan, stopped at the start with the input in its reader. `debug` is heartburn's debugger and
 profiler, ekg, on a listing or a deck, and `asm` is its assembler, carc, which makes a deck of a listing. Each
 takes the options the program of its own does, and `--help` says them. `help` says the usage, `help COMMAND` a
 command's part of it (for `debug` and `asm`, ekg's and carc's own), and `help CODE` what a message's code means.
@@ -315,7 +364,8 @@ command's part of it (for `debug` and `asm`, ekg's and carc's own), and `help CO
 The settings are cargo's. A package is built with the `dev` profile, `--release` with `release`, and `--profile
 NAME` with a profile of the workspace's `Cargo.toml`, resolved by cargo itself. Its `opt-level` is rustc's, and it
 also says how hard the compiler's own passes work: none at 0, all of them from 1 up. A single file has no
-`Cargo.toml`, so it takes rustc's own flags instead, with rustc's defaults.
+`Cargo.toml`, so it takes rustc's own flags instead, with rustc's defaults, and is Rust's 2021 edition unless
+`--edition` names another.
 
 `--emit` chooses what build writes beside each program: `deck` (`NAME.cqb`), `listing` (`NAME.cq`, the program in
 Brian Stuart's six columns, which carc assembles), `map` (`NAME.map`) and `asm` (the compiler's own assembly,
