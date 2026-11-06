@@ -57,3 +57,13 @@
   can't be followed is refused.
 - **Why.** `fn tail(s: &[i16], k: usize) -> &[i16] { &s[k..] }` was refused; a `&str` a function returns is one.
 - **Cost.** A cell in the callee, and a copy at each call.
+
+## 2026-11-06 · A `&str` is the slice of its bytes
+
+- **Decision.** `front::strings_as_bytes`, before byte strings are built: a `&str` local, parameter or result is
+  a `&[u8]`, and a string literal it is set to (or `as_bytes()` of one) is the byte string of its bytes, which the
+  slice passes then lay out as any other. Only literals of ASCII and the plain escapes; any other stays refused.
+- **Why.** `.len()` of a literal, its bytes indexed, and a `&str` chosen at run time are slice operations the
+  compiler now has.
+- **Cost.** A literal is built as an array where it is used, two instructions a byte: `==` of two `&str`s is
+  still refused (core's `compare_bytes`), and would be too big as built.

@@ -58,6 +58,7 @@ pub struct Statics {
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
     super::panic_messages::literal_panics(&mut file);
+    strings_as_bytes(&mut file);
     byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
     ne_is_not_eq(&mut file);
@@ -262,6 +263,66 @@ fn promoted_consts(file: &mut File) {
             }
         }
         f.body.decls.extend(decls);
+    }
+}
+
+/// A `&str` local is the slice of its bytes, `&[u8]`, and a string literal it is set to (or `as_bytes()` of one,
+/// a transmute) the byte string of the literal's bytes. A literal with an escape other than
+/// `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'` and an ASCII `\x`, or a character past ASCII, is left as it is.
+fn strings_as_bytes(file: &mut File) {
+    fn bytes(s: &str) -> Option<Vec<u8>> {
+        let mut out = vec![];
+        let mut cs = s.chars();
+        while let Some(c) = cs.next() {
+            out.push(match c {
+                '\\' => match cs.next()? {
+                    'n' => b'\n',
+                    't' => b'\t',
+                    'r' => b'\r',
+                    '0' => 0,
+                    c @ ('\\' | '"' | '\'') => c as u8,
+                    'x' => {
+                        let h: String = [cs.next()?, cs.next()?].iter().collect();
+                        u8::from_str_radix(&h, 16).ok().filter(|b| b.is_ascii())?
+                    }
+                    _ => return None,
+                },
+                c if c.is_ascii() => c as u8,
+                _ => return None,
+            });
+        }
+        Some(out)
+    }
+    let str_ref = |t: &Ty| matches!(t, Ty::Ref { to, .. } if **to == Ty::Str);
+    let bytes_ref = |t: &Ty| matches!(t, Ty::Ref { to, .. } if **to == Ty::Slice(Box::new(Ty::Int(IntTy::U8))));
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
+        types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+        for b in f.body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                let Statement::Assign(d, r) = s else { continue };
+                let Some(t) = d.as_local().and_then(|l| types.get(&l)) else { continue };
+                let literal = match r {
+                    Rvalue::Use(Operand::Constant(Const::Str(s))) if str_ref(t) => Some(s),
+                    Rvalue::Cast(Operand::Constant(Const::Str(s)), _, CastKind::Transmute) if bytes_ref(t) => Some(s),
+                    _ => None,
+                };
+                if let Some(b) = literal.and_then(|s| bytes(s)) {
+                    *r = Rvalue::Use(Operand::Constant(Const::Bytes(b)));
+                }
+            }
+        }
+        let slice = |t: &mut Ty| {
+            if let Ty::Ref { to, .. } = t {
+                if **to == Ty::Str {
+                    **to = Ty::Slice(Box::new(Ty::Int(IntTy::U8)));
+                }
+            }
+        };
+        f.params.iter_mut().for_each(|(_, t)| slice(t));
+        f.body.decls.iter_mut().for_each(|d| slice(&mut d.ty));
+        slice(&mut f.ret);
     }
 }
 
