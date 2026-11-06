@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 
 use cargo_cardiac::cargo::{self, packages, Package, Target};
+use cargo_cardiac::codes::{self, Diag};
 use cargo_cardiac::compile::program::{self, Built, Emit, Rustc};
 use cargo_cardiac::driver::{self, Dep, Mode, Outcome, Program, Settings};
 use cargo_cardiac::{CARDIAC, TARGET, TOOL};
@@ -52,8 +53,16 @@ Usage:
       `{t} debug --help` says them.
   {t} asm [OPTION]... FILE
       Assemble a listing into a deck: carc, with carc's options. `{t} asm --help` says them.
+  {t} explain CODE
+      What a code in a message means, as `rustc --explain` says it: error[RCE0002] is explained by
+      `{t} explain RCE0002`. Each is on the web too, at {codes_page}CODE/.
+      `{t} explain --json` gives every code, its kind, title, messages and explanation, as JSON.
   {t} --version
       Which cargo-cardiac this is.
+
+Messages:
+  What build says about a program has a code, as rustc's errors do: error[RCE....] for an error,
+  warning[RCW....] for a warning, note[RCI....] for a note. `{t} explain CODE` says what it means.
 
 Resources, load_resource(\"NAME\"):
   A resource is the file resources/NAME beside the package's Cargo.toml (beside a single file, for one):
@@ -81,7 +90,8 @@ How much build and run say:
   -v, --verbose     also where the cells go
   --message-format=json
                     the same on standard error, each message a JSON object on a line of its own (JSON Lines)
-                    with its kind in \"reason\", as cargo's: compiling, compiled, note, error.
+                    with its kind in \"reason\", as cargo's: compiling, compiled, note, warning, error,
+                    and the message's code in \"code\".
                     --message-format=human, the default, is lines for a person
 
 New versions:
@@ -98,6 +108,7 @@ For developing cargo-cardiac:
       main_bb0 on the input, and print its cards on one line.
 ",
         nightly = driver::TOOLCHAIN,
+        codes_page = codes::PAGE,
     )
 }
 
@@ -132,15 +143,11 @@ enum Message<'a> {
         profile: &'a str,
     },
     Compiled(&'a Built),
-    /// what a build suggests the programmer change (`Built::advice`)
+    /// a note or a warning about a file: what a build suggests the programmer change (`Built::advice`), or the dev
+    /// settings `cargo cardiac` chose, the programmer's Cargo.toml not setting them (`cargo::dev_defaults`)
     Advice {
         file: &'a str,
-        text: &'a str,
-    },
-    /// the dev settings `cargo cardiac` chose, the programmer's Cargo.toml not setting them (`cargo::dev_defaults`)
-    Defaults {
-        file: &'a str,
-        text: &'a str,
+        said: &'a Diag,
     },
     /// a resource a build left empty, having no file
     Note {
@@ -148,7 +155,10 @@ enum Message<'a> {
         resource: &'a str,
         file: &'a Path,
     },
-    /// an error; with `usage`, one in the command line, said with the usage after it
+    /// why the program can't be built, with its code (`codes`)
+    Failed(&'a Diag),
+    /// an error of the tool's or the command line's, with no code; with `usage`, one in the command line, said with
+    /// the usage after it
     Error {
         why: &'a str,
         usage: bool,
@@ -159,7 +169,7 @@ impl Message<'_> {
     /// The least verbosity the message is said at: -1 (always) for an error or a note.
     fn level(&self) -> i8 {
         match self {
-            Message::Note { .. } | Message::Advice { .. } | Message::Error { .. } => -1,
+            Message::Note { .. } | Message::Advice { .. } | Message::Failed(_) | Message::Error { .. } => -1,
             _ => 0,
         }
     }
@@ -177,11 +187,12 @@ impl Message<'_> {
             ),
             Message::Compiled(b) if v => format!("{}\n           {}", b.line(), b.sections),
             Message::Compiled(b) => b.line(),
-            Message::Note { deck, resource, file } => format!(
-                "note: {deck}: resource {resource} has no file {}; its slot in the deck is empty until it is bound",
-                file.display()
-            ),
-            Message::Advice { file, text } | Message::Defaults { file, text } => format!("note: {file}: {text}"),
+            Message::Note { deck, resource, file } => codes::resource_empty(deck, resource, file.display()).to_string(),
+            Message::Advice { file, said } => (*said).clone().at(file).to_string(),
+            Message::Failed(e) => match e.more() {
+                Some(more) => format!("{e}\n{more}"),
+                None => e.to_string(),
+            },
             Message::Error { why, usage: false } => format!("error: {why}"),
             Message::Error { why, usage: true } => format!("error: {why}\n\n{}", usage()),
         }
@@ -215,12 +226,18 @@ impl Message<'_> {
                 m
             }
             Message::Note { deck, resource, file } => {
-                json!({"reason": "note", "message": self.text().strip_prefix("note: "), "deck": deck,
-                    "resource": resource, "file": file.display().to_string()})
+                let mut m = codes::resource_empty(deck, resource, file.display()).json();
+                m["deck"] = (*deck).into();
+                m["resource"] = (*resource).into();
+                m["file"] = file.display().to_string().into();
+                m
             }
-            Message::Advice { file, text } | Message::Defaults { file, text } => {
-                json!({"reason": "note", "message": text, "file": file})
+            Message::Advice { file, said } => {
+                let mut m = said.json();
+                m["file"] = (*file).into();
+                m
             }
+            Message::Failed(e) => e.json(),
             Message::Error { why, .. } => json!({"reason": "error", "message": why}),
         }
     }
@@ -249,6 +266,12 @@ fn say(m: Message) {
 
 fn die(e: String) -> ! {
     tell(Message::Error { why: &e, usage: false });
+    std::process::exit(1)
+}
+
+/// Stop, saying why the program can't be built.
+fn fail(e: Diag) -> ! {
+    tell(Message::Failed(&e));
     std::process::exit(1)
 }
 
@@ -356,7 +379,7 @@ fn args() -> Args {
         std::process::exit(0)
     }
     // the commands whose options are another program's: everything after the command is theirs
-    let passed = matches!(command.as_str(), "new" | "debug" | "asm");
+    let passed = matches!(command.as_str(), "new" | "debug" | "asm" | "explain");
     let mut r = Args {
         command,
         files: vec![],
@@ -476,13 +499,11 @@ fn args() -> Args {
 /// can't be CARDIAC programs (this tool's own, or one that needs a proc-macro crate) stops with where to go instead.
 fn chosen<'a>(pkgs: &'a [Package], bins: &[String]) -> Vec<(&'a Package, &'a Target)> {
     for p in pkgs {
-        let why = if p.name == env!("CARGO_PKG_NAME") {
-            Some(format!("this is {}'s own package", p.name))
-        } else {
-            p.problem.clone()
-        };
-        if let Some(why) = why {
-            die(format!("{}'s binaries can't be compiled for CARDIAC: {why}.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in rust-cardiac's repository, or name one with --manifest-path.", p.name));
+        if p.name == env!("CARGO_PKG_NAME") {
+            die(format!("{}'s binaries can't be compiled for CARDIAC: this is {}'s own package.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in rust-cardiac's repository, or name one with --manifest-path.", p.name, p.name));
+        }
+        if let Some(e) = &p.problem {
+            fail(e.clone());
         }
     }
     for b in bins {
@@ -531,15 +552,9 @@ fn compile(p: &Package, programs: &[&Target], profile: Option<&str>, mode: Mode,
     let defaults = cargo::dev_defaults(p, profile);
     if !defaults.is_empty() {
         let list: Vec<String> = defaults.iter().map(|(k, v)| format!("{k} = {v}")).collect();
-        tell(Message::Defaults {
+        tell(Message::Advice {
             file: &shown(&p.workspace_manifest.to_string_lossy()),
-            text: &format!(
-                "building with {} in the dev profile, which [profile.dev] doesn't set: CARDIAC needs rustc's optimized \
-                 MIR, the CARDIAC driver can't build incrementally, debuginfo changes the listing, and the checks \
-                 rarely fit in 96 cells (so an overflow `cargo run` panics on goes unchecked here). Set any of them \
-                 in [profile.dev] to choose your own",
-                list.join(", ")
-            ),
+            said: &codes::dev_defaults(list.join(", ")),
         });
     }
     let (reports, ok) = cargo::build(p, programs, profile, &settings).unwrap_or_else(|e| die(e));
@@ -549,7 +564,7 @@ fn compile(p: &Package, programs: &[&Target], profile: Option<&str>, mode: Mode,
             Some(Outcome::Failed(e)) => {
                 // what came before is said, as each program was compiled in turn
                 say_made(&made, p);
-                die(e)
+                fail(e)
             }
             Some(o) => made.push(o),
             None if ok => die(format!("the CARDIAC driver said nothing of {}", t.name)),
@@ -603,11 +618,7 @@ fn build(pkgs: &[Package], bins: &[String], profile: Option<&str>, emit: Emit) -
 fn build_single(f: &str, rustc: &Rustc, auto_overlay: bool, emit: Emit) -> Built {
     let src = std::fs::read_to_string(f).unwrap_or_else(|e| die(format!("{f}: {e}")));
     if src.contains("cardiac::") {
-        die(format!(
-            "{f}: a single file can't use the cardiac crate (no Cargo package says where it is). Build it in a \
-            package with `cargo cardiac build`, or define the built-ins it calls in the file itself, such as \
-            `#[inline(never)] pub fn out(_v: i16) {{}}`"
-        ));
+        fail(codes::single_file_cardiac(f));
     }
     let Outcome::Built(b) = compile_single(f, rustc, auto_overlay, Mode::Build, emit) else {
         die(format!("the CARDIAC driver didn't build {f}"))
@@ -685,6 +696,22 @@ fn main() {
     eprintln!(
         "      Adding cardiac {CARDIAC} to the dependencies, and a countdown from the number it reads as src/main.rs"
     );
+    ExitCode::SUCCESS
+}
+
+/// `cargo cardiac explain CODE`: what a code means, as `rustc --explain` says it; `--json`, every code, for the
+/// website's pages of them.
+fn explain(args: &[String]) -> ExitCode {
+    match args {
+        [json] if json == "--json" => println!("{:#}", codes::table_json()),
+        [id] if !id.starts_with('-') => match codes::find(id) {
+            Some(c) => print!("{}", c.explanation),
+            None => die(format!(
+                "{id} is not a cargo-cardiac code: they are RCE, RCW or RCI and four digits"
+            )),
+        },
+        _ => bad_usage("explain takes one CODE, RCE0002 say, or --json for all of them"),
+    }
     ExitCode::SUCCESS
 }
 
@@ -802,7 +829,7 @@ fn compile_single(f: &str, rustc: &Rustc, auto_overlay: bool, mode: Mode, emit: 
     };
     match driver::single(f, rustc, &settings).unwrap_or_else(|e| die(e)) {
         Some(r) => match r.outcome {
-            Outcome::Failed(e) => die(e),
+            Outcome::Failed(e) => fail(e),
             o => o,
         },
         None => die(format!("rustc failed on {f}")),
@@ -820,7 +847,7 @@ fn run_tested(file: &str, o: Outcome, input: &[i32]) {
         die(format!("the CARDIAC driver didn't test {file}"))
     };
     let punched = program::run_test(file, &read(&asm), input).map_err(|e| program::hint(e, opt_level));
-    println!("{}", punched.unwrap_or_else(|e| die(e)));
+    println!("{}", punched.unwrap_or_else(|e| fail(e)));
 }
 
 /// The `resources/` directory beside a file: a package's Cargo.toml or a single source file.
@@ -831,8 +858,8 @@ fn resources_beside(file: &str) -> PathBuf {
 /// Say what a build suggests the programmer change, and which resources it left empty, having no file (burn binds
 /// the deck's slot when it runs it).
 fn note_empty(b: &Built, dir: &Path) {
-    for text in &b.advice {
-        tell(Message::Advice { file: &b.file, text });
+    for said in &b.advice {
+        tell(Message::Advice { file: &b.file, said });
     }
     for name in &b.empty {
         tell(Message::Note {
@@ -854,6 +881,7 @@ fn main() -> ExitCode {
         "new" => return new(&a.rest),
         "debug" => return heartburn::tools::ekg::main(&format!("cargo {TOOL} debug"), a.rest),
         "asm" => return heartburn::tools::carc::main(&format!("cargo {TOOL} asm"), a.rest),
+        "explain" => return explain(&a.rest),
         "setup" => {
             driver::setup().unwrap_or_else(|e| die(e));
             return ExitCode::SUCCESS;

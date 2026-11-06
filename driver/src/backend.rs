@@ -7,6 +7,7 @@
 //! doesn't compile is a rustc error too, so that rustc fails, and cargo's build with it.
 use std::path::Path;
 
+use cargo_cardiac::codes::Diag;
 use cargo_cardiac::compile::crates::Crate;
 use cargo_cardiac::compile::program::{self, Mir, OptLevel};
 use cargo_cardiac::driver::{Mode, Outcome, Program, Report, Settings};
@@ -19,7 +20,7 @@ use crate::{check, convert, facts, instances};
 /// Compile `program`, the crate rustc has analysed, as `settings` ask; with `oracle`, check each crate's IR too.
 pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) {
     let outcome = rustc_public::rustc_internal::run(tcx, || made(tcx, settings, program, oracle))
-        .unwrap_or_else(|e| Outcome::Failed(format!("{}: rustc_public: {e:?}", program.file)));
+        .unwrap_or_else(|e| Outcome::Failed(Diag::tool(format!("{}: rustc_public: {e:?}", program.file))));
     let report = Report {
         program: program.name.clone(),
         outcome,
@@ -27,14 +28,15 @@ pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: 
     // the report first, then the error it carries: `cargo cardiac` knows the error when it comes
     eprintln!("{}", report.line());
     if let Outcome::Failed(e) = &report.outcome {
-        tcx.dcx().err(e.clone());
+        tcx.dcx().err(e.to_string());
     }
 }
 
 /// What the program is made into, or why it can't be.
 fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) -> Outcome {
     let file = &program.file;
-    let at = |e: String| format!("{file}: {e}");
+    // the driver's own failures, not the program's: no code
+    let at = |e: String| Diag::tool(format!("{file}: {e}"));
     let local: Vec<DefId> = rustc_public::all_local_items()
         .into_iter()
         .map(|item| rustc_public::rustc_internal::internal(tcx, item.def_id()))
@@ -67,7 +69,7 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
     if settings.mode == Mode::Test {
         // beside the program before anything else, so it is there when linking fails
         if let Err(e) = program::keep_mir(&program.source, &own) {
-            return Outcome::Failed(e);
+            return Outcome::Failed(Diag::tool(e));
         }
     }
     // the crates it uses, those rustc loaded for it, in the order `cargo cardiac` gives; of each, an impl's function

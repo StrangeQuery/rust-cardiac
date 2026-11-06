@@ -73,13 +73,13 @@ pub const BUILTINS: [&str; 7] = [
 ];
 
 /// Why a program cannot be compiled.
-pub type Fail = String;
+pub type Fail = crate::codes::Diag;
 
 /// A compiled program: its listing, and the label each phase after the first starts at.
 pub struct Compiled {
     pub listing: Vec<Line>,
-    /// what the programmer might change, said as a note when it is built (`bool_note`)
-    pub advice: Vec<String>,
+    /// what the programmer might change, said as a note or a warning when it is built (`bool_note`, `expensive`)
+    pub advice: Vec<Fail>,
     pub phase_starts: Vec<String>,
     /// where main could be cut into phases, had it no overlay() (`phases::cut_points`)
     pub cut_points: Vec<phases::Cut>,
@@ -155,10 +155,7 @@ pub fn compile_mir(
             }
         }
         if let Some((_, mut c)) = fit {
-            c.advice.push(format!(
-                "main doesn't fit in memory in one piece, so auto-overlay split it into {} phases",
-                c.phase_starts.len() + 1
-            ));
+            c.advice.push(crate::codes::split_into_phases(c.phase_starts.len() + 1));
             return Ok(c);
         }
         let Some((_, way)) = nearest else { break };
@@ -581,7 +578,7 @@ fn array_like(ty: &ir::Ty) -> bool {
 /// The note that a program's bools would be smaller as `cardiac::Flag`s: each test of a bool kept in a cell
 /// is `CLA b / SUB 00 / TAC`, and of a Flag `CLA f / TAC`; a Flag's false needs a -1 cell, which the program may
 /// have already. Said only when that saves 2 cells or more.
-fn bool_note(tests: &[Option<String>], listing: &[Line]) -> Option<String> {
+fn bool_note(tests: &[Option<String>], listing: &[Line]) -> Option<Fail> {
     let has_minus_one = machine::print(listing).lines().any(|l| l.starts_with("kn1:"));
     let saved = tests.len().checked_sub(if has_minus_one { 0 } else { 1 })?;
     if saved < 2 {
@@ -601,11 +598,31 @@ fn bool_note(tests: &[Option<String>], listing: &[Line]) -> Option<String> {
             more.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ")
         ),
     };
-    Some(format!(
-        "{which} tested {} times; as cardiac::Flag (`false.into()`, `.get()`) each test is an instruction less: \
-         about {saved} cells or more",
-        tests.len()
-    ))
+    Some(crate::codes::flag_advice(which, tests.len(), saved))
+}
+
+/// The warning that the program uses bit operations, each a routine or a walk over a value's bits (`runtime::bitwise`,
+/// `bits`), said once, naming each.
+fn expensive(pool: &lower::Pool, bit_methods: &[&'static str]) -> Option<Fail> {
+    let mut ops: Vec<String> = vec![];
+    let mut say = |op: String| {
+        if !ops.contains(&op) {
+            ops.push(op)
+        }
+    };
+    for r in &pool.bitwise {
+        say(format!("`{}`", r.op.symbol()));
+    }
+    if pool.shr {
+        say(bits::SHIFT_BY_A_VARIABLE[0].into());
+    }
+    if pool.shl || pool.shl8 {
+        say(bits::SHIFT_BY_A_VARIABLE[1].into());
+    }
+    for m in bit_methods {
+        say(m.to_string());
+    }
+    (!ops.is_empty()).then(|| crate::codes::expensive(ops.join(", ")))
 }
 
 /// The cells a listing fills: one for each instruction and each data cell.
@@ -669,7 +686,7 @@ fn compile(
     let (file, mut fns, named, statics, objects) = front::front_end(file.clone(), debug_assertions, enums)?;
     let enums: &[enums::EnumDef] = &[enums, &objects].concat();
     if !fns.has("main") {
-        return Err("no fn main in MIR".into());
+        return Err(crate::codes::no_main());
     }
     let names: Vec<String> = fns.keys().cloned().collect();
     // black_box and mem::swap, which rustc leaves as calls to intrinsics: a copy, and a read and two writes
@@ -752,8 +769,11 @@ fn compile(
     }
     // the bit methods' intrinsics; and abs, min and their kin, which rustc calls at opt-level 1 and s: what it
     // inlines at 2
+    let mut bit_methods = vec![];
     for n in &names {
-        bits::inline_bit_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
+        bit_methods.extend(bits::inline_bit_intrinsics(fns.get_mut(n).unwrap(), |name| {
+            names.iter().any(|m| m == name)
+        }));
         methods::inline_methods(fns.get_mut(n).unwrap());
         methods::inline_operators(fns.get_mut(n).unwrap());
     }
@@ -813,16 +833,13 @@ fn compile(
         order: &mut Vec<String>,
     ) -> Result<(), Fail> {
         if path.iter().any(|p| p == n) {
-            return Err(format!(
-                "recursion ({} -> {n}) needs a stack; this backend has none yet",
-                path.join(" -> ")
-            ));
+            return Err(crate::codes::recursion(format!("{} -> {n}", path.join(" -> "))));
         }
         if seen.contains(n) {
             return Ok(());
         }
         let Some(cs) = fns_calls.get(n) else {
-            return Err(format!("call to unknown function {n}"));
+            return Err(crate::codes::unknown_function(n));
         };
         path.push(n.to_string());
         for c in cs.clone() {
@@ -861,10 +878,7 @@ fn compile(
     for n in std::iter::once("main".to_string()).chain(order.iter().filter(|x| *x != "main").cloned()) {
         let f = fns.get(&n).unwrap();
         if let Some(p) = &f.widened {
-            return Err(format!(
-                "{p}, inlined in {n}, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card \
-                 (-999 to 999), past which it can: it is not supported"
-            ));
+            return Err(crate::codes::widened(p, &n));
         }
         let body = f.body.clone();
         // each local's type, the parameters' first, in the order they are declared (the order of their cells)
@@ -941,11 +955,7 @@ fn compile(
         // read
         if let (true, Some(cuts)) = (n == "main", cuts) {
             if phases::has_overlay(&blocks) {
-                return Err(
-                    "overlay() in main with auto-overlay on: the compiler places the phases itself. Take the \
-                            overlay() out, or turn auto-overlay off to place them by hand"
-                        .into(),
-                );
+                return Err(crate::codes::overlay_with_auto_overlay());
             }
             cut_points = phases::cut_points(&blocks);
             phases::cut(&mut blocks, cuts);
@@ -1051,7 +1061,7 @@ fn compile(
     for name in &sh.statics_used {
         let values = sh.statics.values.get(name).cloned().unwrap_or_default();
         if let Some(v) = values.iter().find(|v| !(-999..=999).contains(*v)) {
-            return Err(format!("static {name}: {v} is past what a card holds (-999 to 999)"));
+            return Err(crate::codes::static_past_card(name, v));
         }
         for (k, v) in values.iter().enumerate() {
             let value = machine::Arg::Num(v.to_string());
@@ -1084,7 +1094,10 @@ fn compile(
     } else {
         listing
     };
-    let advice = bool_note(&sh.bool_tests, &listing).into_iter().collect();
+    let advice = bool_note(&sh.bool_tests, &listing)
+        .into_iter()
+        .chain(expensive(&sh.pool, &bit_methods))
+        .collect();
     Ok((
         Compiled {
             listing,
@@ -1108,7 +1121,7 @@ mod tests {
 
     fn note(tests: &[Option<&str>], listing: &str) -> Option<String> {
         let tests: Vec<Option<String>> = tests.iter().map(|t| t.map(str::to_string)).collect();
-        bool_note(&tests, &parse(listing).unwrap())
+        bool_note(&tests, &parse(listing).unwrap()).map(|d| d.message)
     }
 
     /// Three tests less the -1 the program needs: 2 cells, said, each name once.

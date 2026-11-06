@@ -14,7 +14,8 @@ use super::machine::{Arg, Kind, Line, Op};
 use super::util::Ordered;
 use super::Fail;
 
-macro_rules! fail { ($($t:tt)*) => { return Err(format!($($t)*)) } }
+/// `fail!(name(...))`: return the error a constructor of `codes` makes.
+macro_rules! fail { ($($t:tt)*) => { return Err(crate::codes::$($t)*) } }
 
 mod arith;
 mod branches;
@@ -384,7 +385,7 @@ impl<'a> Lowering<'a> {
                         },
                     );
                 }
-                _ => fail!("unsupported local type {ty} for {local} (this backend has u8, i16, usize and bool)"),
+                _ => fail!(unsupported_type(ty, local)),
             }
         }
         l.locals = locals;
@@ -467,10 +468,10 @@ impl<'a> Lowering<'a> {
 
     /// An error, with the MIR line it came from and the function the line is in, unless it already shows the line.
     fn at(&self, e: Fail, line: &str) -> Fail {
-        if e.contains(line) {
+        if e.message.contains(line) {
             e
         } else {
-            format!("{e}, in {}: `{line}`", self.func)
+            e.and(&format!(", in {}: `{line}`", self.func))
         }
     }
 
@@ -754,7 +755,7 @@ impl<'a> Lowering<'a> {
             .find(|(c, _)| !arrays.iter().any(|(b, ..)| b == *c))
             .map(|(_, n)| n)
         {
-            fail!("load_resource(\"{name}\") must be bound to an array with let: `let t: [i16; N] = load_resource(\"{name}\");`")
+            fail!(resource_not_array(name))
         }
         for (base, n, elem) in arrays {
             // a resource's array also gets a table label of its own, resource_NAME: it shows the slot in the

@@ -466,7 +466,7 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
             }
         }
         if returns.contains_key(name) && !lengths.contains_key(&Local(0)) {
-            return Err(format!("{name}: it returns a slice whose length isn't known here"));
+            return Err(crate::codes::slice_result_length(name));
         }
         let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1;
         let mut back = vec![];
@@ -580,9 +580,7 @@ pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail>
             let Some(at) = sliced.get(&callee) else { continue };
             for &k in at.iter().rev() {
                 let Some(n) = args.get(k).and_then(Operand::local).and_then(length_of) else {
-                    return Err(format!(
-                        "{name}: a call of {callee}: the length of the slice it is passed isn't known here"
-                    ));
+                    return Err(crate::codes::slice_argument_length(name, callee));
                 };
                 args.insert(k + 1, n);
             }

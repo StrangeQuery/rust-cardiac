@@ -4,6 +4,7 @@
 //! which burn uses: with NAME.map beside NAME.cqb, a run that panics says why, as Rust does. What is the compiler's
 //! is making one (`map_of`), from where the checks went in a compiled program.
 use crate::asm;
+use crate::codes::Diag;
 use crate::compile::machine::Line;
 use crate::compile::Phases;
 pub use heartburn::panics::{Check, Map, Panic};
@@ -20,7 +21,7 @@ fn function_of(label: &str, phase: usize) -> Option<String> {
 
 /// The map of a compiled program, from what `split_phases` made of it: each phase's lines are assembled as its deck
 /// is (`tape::of`), so a line's cell here is its cell there.
-pub fn map_of(program: &Phases) -> Result<Map, String> {
+pub fn map_of(program: &Phases) -> Result<Map, Diag> {
     let mut map = Map::default();
     for (index, code) in program.code.iter().enumerate() {
         let phase = index + 1;

@@ -1023,7 +1023,7 @@ pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<u
                 break;
             }
             if iter == 39 {
-                return Err("range analysis did not settle".into());
+                return Err(crate::codes::internal("range analysis did not settle"));
             }
         }
         // Widening loses what a loop's own test gives back (a counter below 12 is at most 12 after its step): a few

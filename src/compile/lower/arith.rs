@@ -125,7 +125,7 @@ impl<'a> Lowering<'a> {
             _ => false,
         };
         if !on_a_card(self, x) || !on_a_card(self, y) {
-            fail!("{} is supported on i16, i8, u8 and usize, not here: {src}", op.name())
+            fail!(operator_type(op.name(), src))
         }
         let op = match op {
             BinOp::BitAnd => Bitwise::And,
@@ -168,7 +168,7 @@ impl<'a> Lowering<'a> {
         let name = if left { "<<" } else { ">>" };
         let ty = match self.operand_ty(x) {
             Some(Ty::Int(t)) => t,
-            _ => fail!("{name} is supported on integers: {src}"),
+            _ => fail!(method_type(name, src)),
         };
         let (routine, bits) = match (left, ty) {
             (false, IntTy::I16) => (Shift::Shr, 16),
@@ -176,7 +176,7 @@ impl<'a> Lowering<'a> {
             (false, IntTy::Usize) if !self.is_huge(x) => (Shift::Shr, 64),
             (true, IntTy::I16) => (Shift::Shl, 16),
             (true, IntTy::U8) => (Shift::Shl8, 8),
-            _ => fail!("{name} by a variable is supported on i16 and u8, and >> on i8 and usize, not here: {src}"),
+            _ => fail!(shift_type(name, src)),
         };
         let [entry, ca] = match routine {
             Shift::Shr => {
@@ -349,10 +349,10 @@ impl<'a> Lowering<'a> {
     /// value - 999 - 1 < 0. Changes the accumulator.
     pub(super) fn check_acc(&mut self, ty: Option<IntTy>, fail: &Sym, op: BinOp) -> Result<(), Fail> {
         let Some((lo, hi)) = ty.and_then(range_of) else {
-            fail!(
-                "internal: no range for the type {}",
+            fail!(internal(format!(
+                "no range for the type {}",
                 ty.map_or("undefined", IntTy::name)
-            )
+            )))
         };
         let ok = self.fresh("rc");
         // unsigned: a sum of two can only be too big, a difference only too small
