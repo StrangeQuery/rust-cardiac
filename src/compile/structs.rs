@@ -29,6 +29,8 @@ pub struct Function {
     pub ret: Ty,
     pub body: Body,
     pub results: Vec<Local>,
+    /// a function of core's that rustc inlined here and that works in i32 (see `front::widened_in_core`)
+    pub widened: Option<Path>,
 }
 
 /// A field of a struct: its name and type.

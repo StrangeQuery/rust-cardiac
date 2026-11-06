@@ -370,6 +370,9 @@ impl<'tcx> Convert<'tcx> {
                     mutable: decl.mutability == mmir::Mutability::Mut,
                     ty: self.ty(public.locals()[l].ty, Paths::Full),
                 });
+                if let Some(p) = self.inlined(body, s) {
+                    out.inlined.push((ir::Local(l as u32), p));
+                }
             }
         }
         for (k, (b, internal)) in public.blocks.iter().zip(body.basic_blocks.iter()).enumerate() {
@@ -392,6 +395,20 @@ impl<'tcx> Convert<'tcx> {
     }
 
     /// `debug x => _3;`: the name, and the value as the IR prints it (a place or a constant), else as rustc does.
+    /// The function rustc inlined into a scope, or into one it is within: its path as the text writes it in the
+    /// scope's line (`scope 3 (inlined core::num::<impl i16>::midpoint) {`).
+    fn inlined(&self, body: &mmir::Body<'tcx>, scope: mmir::SourceScope) -> Option<ir::Path> {
+        let mut s = Some(scope);
+        while let Some(at) = s {
+            let data = &body.source_scopes[at];
+            if let Some((callee, _)) = data.inlined {
+                return ir::parse_path(&self.trimmed(callee.to_string())).ok();
+            }
+            s = data.parent_scope;
+        }
+        None
+    }
+
     fn debug(&self, public: &pmir::VarDebugInfo, info: &mmir::VarDebugInfo<'tcx>, body: &pmir::Body) -> ir::Debug {
         let text = self.full(format!("{info:?}"));
         let (name_text, value_text) = text.rsplit_once(" => ").unwrap_or((&text, ""));

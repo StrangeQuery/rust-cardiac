@@ -771,6 +771,12 @@ fn compile(
     let mut unproved: HashSet<String> = HashSet::new();
     for n in std::iter::once("main".to_string()).chain(order.iter().filter(|x| *x != "main").cloned()) {
         let f = fns.get(&n).unwrap();
+        if let Some(p) = &f.widened {
+            return Err(format!(
+                "{p}, inlined in {n}, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card \
+                 (-999 to 999), past which it can: it is not supported"
+            ));
+        }
         let body = f.body.clone();
         // each local's type, the parameters' first, in the order they are declared (the order of their cells)
         let mut locals: Ordered<ir::Local, ir::Ty> = Ordered::new();

@@ -1,3 +1,18 @@
+## 2026-11-05 · An integer method of core's that works in i32 is refused
+
+- **Decision.** The IR keeps, for each body, the locals rustc declared in a function it inlined and that
+  function's path, as the scope says it (`scope 3 (inlined core::num::<impl i16>::midpoint) {`; `Body::inlined`,
+  read from the text and from rustc's source scopes alike). A function into which rustc inlined an integer method of
+  core's, of a type other than i32, that has an i32 local (`i16::midpoint`, which adds the two in i32) is refused:
+  "core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32
+  is a card".
+- **Why.** i32 is i16 on CARDIAC (`front::I32IsI16`), which is right for a program's own i32: on a card either way,
+  and past one it differs as an i16 does. But core widens to i32 only so as to work past what the narrower type
+  holds, and on a card that is a wrong answer for values the program never sees: `999.midpoint(998)` printed 598.
+  An i32 method's own i32 (a range of i32's step, `<impl i32>::overflowing_add_unsigned`) is the program's, and
+  stays.
+- **Cost.** `i16::midpoint` doesn't compile at any opt-level (at 1 and s it was already a refused call).
+
 ## 2026-11-05 · No card holds i16::MIN or i16::MAX: a test against one is settled, a value refused
 
 - **Decision.** Before any pass, at every opt-level (`settled_by_the_card`), a comparison of an i16 with

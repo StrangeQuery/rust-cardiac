@@ -49,6 +49,9 @@ pub struct Body {
     pub decls: Vec<Decl>,
     pub debug: Vec<Debug>,
     pub blocks: Vec<Block>,
+    /// the locals declared in a function rustc inlined here, each with that function's path, as its scope says
+    /// (`scope 3 (inlined core::num::<impl i16>::midpoint) {`); the innermost one, for a scope within another
+    pub inlined: Vec<(Local, Path)>,
 }
 
 /// A function's parameters, `_1: i16, _2: &mut [i16; 4]`: each local and its type, as written.
@@ -84,7 +87,25 @@ pub fn parse_params(text: &str) -> Vec<(Local, String)> {
 pub fn parse_body(text: &str) -> Body {
     let mut body = Body::default();
     let mut lines = text.lines().map(str::trim).peekable();
+    // the scopes the line is in: for each, the function inlined there, or within
+    let mut scopes: Vec<Option<Path>> = vec![];
     while let Some(line) = lines.next() {
+        if let Some(head) = line.strip_prefix("scope ").and_then(|r| r.strip_suffix(" {")) {
+            // (a path the IR can't read, `<impl PartialOrd for usize>::lt`, is none, as the driver has it)
+            let inlined = match head.split_once(" (inlined ") {
+                Some((_, p)) => p
+                    .strip_suffix(')')
+                    .map(|p| p.strip_prefix("#[track_caller] ").unwrap_or(p))
+                    .and_then(|p| parse_path(p).ok()),
+                None => scopes.last().cloned().flatten(),
+            };
+            scopes.push(inlined);
+            continue;
+        }
+        if line == "}" && !scopes.is_empty() {
+            scopes.pop();
+            continue;
+        }
         if let Some(rest) = line.strip_prefix("let ") {
             let rest = rest.strip_suffix(';').unwrap_or(rest);
             let (mutable, rest) = match rest.strip_prefix("mut ") {
@@ -95,6 +116,9 @@ pub fn parse_body(text: &str) -> Body {
                 if let Some(local) = Local::parse(l).filter(|l| *l != Local::UNIT) {
                     let ty = parse_ty(t.trim()).unwrap_or_else(|_| Ty::Other(t.trim().to_string()));
                     body.decls.push(Decl { local, mutable, ty });
+                    if let Some(Some(p)) = scopes.last() {
+                        body.inlined.push((local, p.clone()));
+                    }
                 }
             }
             continue;
@@ -175,7 +199,7 @@ fn block(name: BasicBlock, lines: &[&str]) -> Block {
     }
 }
 
-// ---- printing, as rustc prints a body (without its scopes, which the IR doesn't keep) ----
+// ---- printing, as rustc prints a body (its scopes only where a function is inlined: the IR keeps no others) ----
 
 impl fmt::Display for Decl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -213,8 +237,27 @@ impl fmt::Display for Body {
         for d in &self.debug {
             writeln!(f, "    {d}")?;
         }
+        // a local of a function rustc inlined is in a scope that says so, a run of them in one
+        let mut open: Option<&Path> = None;
         for d in &self.decls {
-            writeln!(f, "    {d}")?;
+            let inlined = self.inlined.iter().find(|(l, _)| *l == d.local).map(|(_, p)| p);
+            if open.is_some() && open != inlined {
+                writeln!(f, "    }}")?;
+                open = None;
+            }
+            match inlined {
+                Some(p) => {
+                    if open.is_none() {
+                        writeln!(f, "    scope 0 (inlined {p}) {{")?;
+                        open = Some(p);
+                    }
+                    writeln!(f, "        {d}")?;
+                }
+                None => writeln!(f, "    {d}")?,
+            }
+        }
+        if open.is_some() {
+            writeln!(f, "    }}")?;
         }
         for b in &self.blocks {
             writeln!(f)?;
