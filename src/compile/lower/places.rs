@@ -226,9 +226,15 @@ impl<'a> Lowering<'a> {
                     }
                     return Ok(Value::Const(v));
                 }
-                // i16::MIN and MAX only turn up in rustc's own overflow checks; no card can equal them
-                Const::Path(p) if p.is_path(&["i16", "MIN"]) => return Ok(Value::Const(-32768)),
-                Const::Path(p) if p.is_path(&["i16", "MAX"]) => return Ok(Value::Const(32767)),
+                // a comparison with one is settled before lowering (`settled_by_the_card`): what is left is the value
+                Const::Path(p) if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]) => {
+                    let v = if p.name() == "MIN" { -32768 } else { 32767 };
+                    fail!(
+                        "constant out of range: i16::{} ({v}) is past what a card holds (-999 to 999): no i16 on a \
+                         card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled",
+                        p.name()
+                    )
+                }
                 // a named `const` item, resolved from the MIR
                 Const::Path(p) if p.qself.is_none() && is_const_path(&p.segments) => {
                     let name = p.name();

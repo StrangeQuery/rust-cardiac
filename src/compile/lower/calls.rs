@@ -169,11 +169,12 @@ impl<'a> Lowering<'a> {
             return Ok(());
         }
         if func.is_path(&["inp"]) {
-            // the card reader: the next card after the program on the deck
+            // the card reader: the next card after the program on the deck. A local no other line names is never
+            // read, unless it is a result the caller reads
             let unread = dest
                 .as_local()
                 .and_then(numbered)
-                .is_some_and(|l| self.count_lines(l) == 1);
+                .is_some_and(|l| l != Local(0) && !self.results.contains(&l) && self.count_lines(l) == 1);
             if unread {
                 self.emit_c(
                     Op::Inp,

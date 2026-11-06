@@ -58,6 +58,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::ordering::three_way_compares(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums));
+    let widened = widened_in_core(&file);
     // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
     super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
@@ -69,7 +70,12 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     inline_struct_consts(&mut file);
     inline_array_consts(&mut file);
     join_module_paths(&mut file);
-    let fns = functions(&file);
+    let mut fns = functions(&file);
+    for (name, p) in widened {
+        if let Some(f) = fns.get_mut(&name) {
+            f.widened = Some(p);
+        }
+    }
     Ok((file, fns, named))
 }
 
@@ -456,6 +462,36 @@ impl VisitMut for TupleStructConsts<'_> {
         }
         walk_const(self, c)
     }
+}
+
+/// The functions into which rustc inlined an integer method of core's, of a type other than i32, that works in i32
+/// (a local of its is one), by the name `functions` gives them, each with that method's path. i32 is i16 on
+/// CARDIAC, which is right for a program's own (Rust's default integer, on a card either way, and its methods, such
+/// as a range's step); but core widens to i32 only to work past what the narrower type holds: `i16::midpoint` adds
+/// the two in i32, so that the sum can't overflow, and on a card it can.
+fn widened_in_core(file: &File) -> HashMap<String, Path> {
+    let mut out = HashMap::new();
+    let fns = functions(file);
+    for (name, f) in fns.iter() {
+        let i32_locals: Vec<Local> = f
+            .body
+            .decls
+            .iter()
+            .filter(|d| d.ty == Ty::Int(IntTy::I32))
+            .map(|d| d.local)
+            .collect();
+        // `core::num::<impl i16>::midpoint`: an integer method of core's, of a type other than i32 itself
+        let widens = |p: &Path| {
+            matches!(p.segments.first(), Some(Segment::Name { name, .. }) if name == "core")
+                && p.segments
+                    .iter()
+                    .any(|s| matches!(s, Segment::Impl(Ty::Int(t)) if *t != IntTy::I32))
+        };
+        if let Some((_, p)) = f.body.inlined.iter().find(|(l, p)| i32_locals.contains(l) && widens(p)) {
+            out.insert(name.clone(), p.clone());
+        }
+    }
+    out
 }
 
 struct I32IsI16;
@@ -872,6 +908,7 @@ fn functions(file: &File) -> Ordered<String, Function> {
                 ret: f.ret.clone(),
                 body: f.body.clone(),
                 results: vec![],
+                widened: None,
             },
         );
     }

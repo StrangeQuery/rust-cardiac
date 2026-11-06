@@ -43,9 +43,16 @@ for opt in 1 2; do
     tests/programs/fold_twice.rs \
     tests/programs/huge_usize.rs tests/programs/u8_max.rs tests/programs/u8_max_args.rs \
     tests/programs/enums_c.rs tests/programs/enums_c2.rs tests/programs/methods.rs \
-    tests/programs/option_methods.rs tests/programs/try_result.rs tests/programs/try_option.rs tests/programs/enum_consts.rs tests/programs/enums_for.rs tests/programs/niche.rs tests/programs/niche_u8.rs tests/programs/niche_negative.rs tests/programs/checked.rs tests/programs/checked_mul.rs tests/programs/niche_eq.rs tests/programs/struct_const_arg.rs tests/programs/struct_refs.rs tests/programs/tuples_return.rs tests/programs/tuples_return2.rs tests/programs/enums_eq.rs tests/programs/enums_ne.rs tests/programs/past_card_divisor.rs tests/programs/result_in_place.rs tests/programs/result_in_place2.rs tests/programs/result_in_place3.rs tests/programs/not_element.rs tests/programs/switch_elements.rs tests/programs/tuple_struct_consts.rs tests/programs/tuple_struct_eq.rs tests/programs/not_compare.rs tests/programs/range_contains.rs tests/programs/digit_const.rs tests/programs/const_cast.rs tests/programs/option_map.rs tests/programs/result_map.rs tests/programs/array_return.rs tests/programs/enum_mut.rs tests/programs/enum_field.rs tests/programs/enum_field_mut.rs tests/programs/enum_payload.rs tests/programs/enum_payload_array.rs tests/programs/enum_payload_mut.rs tests/programs/struct_mut.rs tests/programs/struct_nested.rs tests/programs/struct_array_field.rs tests/programs/count_loops.rs tests/programs/count_down.rs tests/programs/count_result.rs tests/programs/match_ranges.rs tests/programs/switch_consecutive.rs tests/programs/count_param.rs tests/programs/count_reset.rs tests/programs/count_inner.rs tests/programs/phase_init.rs tests/programs/match_desc.rs tests/programs/contains_dead.rs tests/programs/div_euclid.rs tests/programs/option_tuple.rs tests/programs/mask_counter.rs tests/programs/mask_condition.rs tests/programs/mask_signed.rs tests/programs/mask_unsigned.rs tests/programs/bool_kept.rs tests/programs/bool_and_kept.rs tests/programs/add_times.rs || exit 1
+    tests/programs/option_methods.rs tests/programs/try_result.rs tests/programs/try_option.rs tests/programs/enum_consts.rs tests/programs/enums_for.rs tests/programs/niche.rs tests/programs/niche_u8.rs tests/programs/niche_negative.rs tests/programs/checked.rs tests/programs/checked_mul.rs tests/programs/niche_eq.rs tests/programs/struct_const_arg.rs tests/programs/struct_refs.rs tests/programs/tuples_return.rs tests/programs/tuples_return2.rs tests/programs/enums_eq.rs tests/programs/enums_ne.rs tests/programs/past_card_divisor.rs tests/programs/result_in_place.rs tests/programs/result_in_place2.rs tests/programs/result_in_place3.rs tests/programs/not_element.rs tests/programs/switch_elements.rs tests/programs/tuple_struct_consts.rs tests/programs/tuple_struct_eq.rs tests/programs/not_compare.rs tests/programs/range_contains.rs tests/programs/digit_const.rs tests/programs/const_cast.rs tests/programs/option_map.rs tests/programs/result_map.rs tests/programs/array_return.rs tests/programs/enum_mut.rs tests/programs/enum_field.rs tests/programs/enum_field_mut.rs tests/programs/enum_payload.rs tests/programs/enum_payload_array.rs tests/programs/enum_payload_mut.rs tests/programs/struct_mut.rs tests/programs/struct_nested.rs tests/programs/struct_array_field.rs tests/programs/count_loops.rs tests/programs/count_down.rs tests/programs/count_result.rs tests/programs/match_ranges.rs tests/programs/switch_consecutive.rs tests/programs/count_param.rs tests/programs/count_reset.rs tests/programs/count_inner.rs tests/programs/phase_init.rs tests/programs/match_desc.rs tests/programs/contains_dead.rs tests/programs/div_euclid.rs tests/programs/option_tuple.rs tests/programs/mask_counter.rs tests/programs/mask_condition.rs tests/programs/mask_signed.rs tests/programs/mask_unsigned.rs tests/programs/bool_kept.rs tests/programs/bool_and_kept.rs tests/programs/add_times.rs tests/programs/ref_returned.rs tests/programs/card_limits.rs || exit 1
   # small integer methods rustc calls at opt-level 1; at 2 it inlines signum into a Cmp, which is refused
   if [ $opt = 1 ]; then sh native_diff.sh $checked tests/programs/signum.rs || exit 1; fi
+  # and ones it inlines at 2 that test for i16::MIN, or wrap a u8; and `?` converting with From
+  if [ $opt = 2 ]; then
+    for c in "$checked" "$unchecked"; do
+      sh native_diff.sh $c tests/programs/checked_limits.rs tests/programs/overflowing_u8.rs || exit 1
+    done
+    sh native_diff.sh $unchecked tests/programs/try_from.rs || exit 1
+  fi
   # and as `cargo cardiac build` compiles, a release build (no overflow checks): the division routine, every sign
   sh native_diff.sh $unchecked tests/programs/sdivvar.rs tests/programs/sremvar.rs tests/programs/sremvar2.rs tests/programs/sdiv.rs tests/programs/smulvar.rs \
     tests/programs/smul2.rs tests/programs/structs2.rs tests/programs/repeats.rs tests/programs/repeats2.rs tests/programs/structs3.rs tests/programs/structs4.rs tests/programs/exprhelp.rs tests/programs/exprif.rs tests/programs/exprtuple.rs tests/programs/forloops.rs tests/programs/forloops2.rs tests/programs/forloops3.rs tests/programs/forloops4.rs tests/programs/phases.rs tests/programs/phases2.rs \
@@ -63,7 +70,7 @@ for opt in 1 2; do
     tests/programs/fold_stale.rs \
     tests/programs/huge_usize.rs tests/programs/u8_max.rs tests/programs/u8_max_args.rs \
     tests/programs/enums_c.rs tests/programs/enums_c2.rs tests/programs/methods.rs \
-    tests/programs/option_methods.rs tests/programs/result_methods.rs tests/programs/try_result.rs tests/programs/try_option.rs tests/programs/enum_consts.rs tests/programs/enums_for.rs tests/programs/niche.rs tests/programs/niche_u8.rs tests/programs/niche_negative.rs tests/programs/checked.rs tests/programs/checked_mul.rs tests/programs/niche_eq.rs tests/programs/option_eq.rs tests/programs/struct_const_arg.rs tests/programs/struct_refs.rs tests/programs/tuples_return.rs tests/programs/tuples_return2.rs tests/programs/enums_eq.rs tests/programs/enums_ne.rs tests/programs/past_card_divisor.rs tests/programs/result_in_place.rs tests/programs/result_in_place2.rs tests/programs/result_in_place3.rs tests/programs/not_element.rs tests/programs/switch_elements.rs tests/programs/tuple_struct_consts.rs tests/programs/tuple_struct_eq.rs tests/programs/not_compare.rs tests/programs/range_contains.rs tests/programs/digit_const.rs tests/programs/const_cast.rs tests/programs/option_map.rs tests/programs/result_map.rs tests/programs/array_return.rs tests/programs/enum_mut.rs tests/programs/enum_field.rs tests/programs/enum_field_mut.rs tests/programs/enum_payload.rs tests/programs/enum_payload_array.rs tests/programs/enum_payload_mut.rs tests/programs/struct_mut.rs tests/programs/struct_nested.rs tests/programs/struct_array_field.rs tests/programs/count_loops.rs tests/programs/count_down.rs tests/programs/count_result.rs tests/programs/match_ranges.rs tests/programs/switch_consecutive.rs tests/programs/count_param.rs tests/programs/count_reset.rs tests/programs/count_inner.rs tests/programs/phase_init.rs tests/programs/match_desc.rs tests/programs/contains_dead.rs tests/programs/div_euclid.rs tests/programs/option_tuple.rs tests/programs/mask_counter.rs tests/programs/mask_condition.rs tests/programs/mask_signed.rs tests/programs/mask_unsigned.rs tests/programs/bool_kept.rs tests/programs/bool_and_kept.rs tests/programs/bool_and_loop.rs tests/programs/sub_two_elements.rs tests/programs/add_times.rs || exit 1
+    tests/programs/option_methods.rs tests/programs/result_methods.rs tests/programs/try_result.rs tests/programs/try_option.rs tests/programs/enum_consts.rs tests/programs/enums_for.rs tests/programs/niche.rs tests/programs/niche_u8.rs tests/programs/niche_negative.rs tests/programs/checked.rs tests/programs/checked_mul.rs tests/programs/niche_eq.rs tests/programs/option_eq.rs tests/programs/struct_const_arg.rs tests/programs/struct_refs.rs tests/programs/tuples_return.rs tests/programs/tuples_return2.rs tests/programs/enums_eq.rs tests/programs/enums_ne.rs tests/programs/past_card_divisor.rs tests/programs/result_in_place.rs tests/programs/result_in_place2.rs tests/programs/result_in_place3.rs tests/programs/not_element.rs tests/programs/switch_elements.rs tests/programs/tuple_struct_consts.rs tests/programs/tuple_struct_eq.rs tests/programs/not_compare.rs tests/programs/range_contains.rs tests/programs/digit_const.rs tests/programs/const_cast.rs tests/programs/option_map.rs tests/programs/result_map.rs tests/programs/array_return.rs tests/programs/enum_mut.rs tests/programs/enum_field.rs tests/programs/enum_field_mut.rs tests/programs/enum_payload.rs tests/programs/enum_payload_array.rs tests/programs/enum_payload_mut.rs tests/programs/struct_mut.rs tests/programs/struct_nested.rs tests/programs/struct_array_field.rs tests/programs/count_loops.rs tests/programs/count_down.rs tests/programs/count_result.rs tests/programs/match_ranges.rs tests/programs/switch_consecutive.rs tests/programs/count_param.rs tests/programs/count_reset.rs tests/programs/count_inner.rs tests/programs/phase_init.rs tests/programs/match_desc.rs tests/programs/contains_dead.rs tests/programs/div_euclid.rs tests/programs/option_tuple.rs tests/programs/mask_counter.rs tests/programs/mask_condition.rs tests/programs/mask_signed.rs tests/programs/mask_unsigned.rs tests/programs/bool_kept.rs tests/programs/bool_and_kept.rs tests/programs/bool_and_loop.rs tests/programs/sub_two_elements.rs tests/programs/add_times.rs tests/programs/ref_returned.rs tests/programs/card_limits.rs || exit 1
   # with debug assertions on, rustc keeps core's checks of unsafe preconditions: each is checked, and a for
   # loop's step needs none; rustc inlines unchecked_add and its kin (and so their checks) at opt-level 2
   asserted="-C debug-assertions=on"
@@ -96,13 +103,15 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
     tests/programs/crates/xchain.rs tests/programs/crates/xstruct.rs tests/programs/crates/xassume.rs || exit 1
   CRATES=$crates sh native_diff.sh --profile opt$opt-asserted tests/programs/crates/xbroken.rs tests/programs/crates/xhint.rs || exit 1
   # skip_cards() and add_times() from the built-ins crate on decks, run natively (cargo run: the cardiac
-  # crate reads them) and on CARDIAC: the same cards out, the same way of ending
+  # crate reads them) and on CARDIAC: the same cards out, the same way of ending; and cards read straight into a
+  # function's result
   repeat="8 3 0 3 1 -7 9 999 1 12 10 -27 37 1 99 -10 99 -83 -111 9 7 37"
   skip="6 0 0 11 1 7 0 12 9 $(cards 9 1) 3 $(cards 3 2) 13 10 $(cards 10 3) 0 14 37 $(cards 37 4) 1 5 15 99 $(cards 99 6)
     11 $(cards 11 7) 16 $(cards 9 8) 17"
   for p in opt$opt opt$opt-unchecked; do
-    ./target/release/cargo-cardiac build -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin xrepeat --bin xskip || exit 1
-    for run in "xrepeat:$repeat" "xskip:$skip" "xskip:1 999 $(cards 999 1) 0 18 $(cards 9 2) 19"; do
+    ./target/release/cargo-cardiac build -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin xrepeat --bin xskip --bin xread || exit 1
+    for run in "xrepeat:$repeat" "xskip:$skip" "xskip:1 999 $(cards 999 1) 0 18 $(cards 9 2) 19" \
+      "xread:4 -5 6 70 8 -9"; do
       bin=${run%%:*}; deck=${run#*:}
       native=$(echo $deck | cargo run -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin $bin 2>/dev/null | tr '\n' ','; echo "exit $?")
       cardiac=$("$BURN" tests/programs/crates/$bin.cqb -- $deck 2>/dev/null | tr '\n' ','; echo "exit $?")
@@ -139,6 +148,24 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
   case "$out" in *"constant out of range: 2000 is past what a card holds (-999 to 999): "*"would overflow a card, in main: \`_"*" = AddWithOverflow("*)
       echo "MATCH  const_range: rejected";;
     *) echo "DIFFER const_range: $out"; exit 1;; esac
+  # i16::MAX as a value is a constant past a card; midpoint, inlined, is a sum past one, and a u8's overflowing_mul
+  # a product past one; `?` converting with From is core's from_residual where rustc calls it, which can't be
+  # written out without the conversion
+  out=$(./target/release/cargo-cardiac test $checked tests/programs/limit_value.rs 2>&1)
+  case "$out" in *"constant out of range: i16::MAX (32767) is past what a card holds"*) echo "MATCH  limit_value: rejected";;
+    *) echo "DIFFER limit_value: $out"; exit 1;; esac
+  if [ $opt = 2 ]; then
+    out=$(./target/release/cargo-cardiac test $checked tests/programs/midpoint.rs 2>&1)
+    case "$out" in *"core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow"*) echo "MATCH  midpoint: rejected";;
+      *) echo "DIFFER midpoint: $out"; exit 1;; esac
+    out=$(./target/release/cargo-cardiac test $checked tests/programs/overflowing_mul_u8.rs 2>&1)
+    case "$out" in *"a u8 product with its overflow flag"*) echo "MATCH  overflowing_mul_u8: rejected";;
+      *) echo "DIFFER overflowing_mul_u8: $out"; exit 1;; esac
+  else
+    out=$(./target/release/cargo-cardiac test $checked tests/programs/try_from.rs 2>&1)
+    case "$out" in *"from_residual"*"not supported"*) echo "MATCH  try_from: rejected";;
+      *) echo "DIFFER try_from: $out"; exit 1;; esac
+  fi
   # a check rustc has proved fails is the panic, and the deck's panic map says which; a panic main runs off its end
   # into (its JMP to the routine dropped as the routine comes next) is one too, and one a phase starts with
   for r in "settled_neg:index out of bounds" "settled_rem:attempt to calculate the remainder with a divisor of zero" \

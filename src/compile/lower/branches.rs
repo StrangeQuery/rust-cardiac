@@ -8,7 +8,7 @@ use crate::compile::Fail;
 
 use super::arith::plain_op;
 use super::places::{Loc, Value};
-use super::{bare, is_comparison, is_i16_limit, numbered, one_word, plain_unwind, source, Cell, Lowering, Sym};
+use super::{bare, is_comparison, numbered, one_word, plain_unwind, source, Cell, Lowering, Sym};
 
 /// How many lines of a block read the value of an overflow-checked pair `(t.0: T)` (with `skip_asserts`, not
 /// counting an assert's message arguments).
@@ -413,7 +413,7 @@ impl<'a> Lowering<'a> {
                         }
                     }
                 }
-                if !both_known && !is_i16_limit(x) && !is_i16_limit(y) {
+                if !both_known {
                     if let Terminator::Assert {
                         cond,
                         expected: false,

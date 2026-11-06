@@ -29,6 +29,8 @@ pub struct Function {
     pub ret: Ty,
     pub body: Body,
     pub results: Vec<Local>,
+    /// a function of core's that rustc inlined here and that works in i32 (see `front::widened_in_core`)
+    pub widened: Option<Path>,
 }
 
 /// A field of a struct: its name and type.
@@ -427,12 +429,14 @@ fn shared_scalar_refs_by_value(fns: &mut Ordered<String, Function>) {
                             }
                         }
                     }
-                    // its uses: reads through it, `*r`
+                    // its uses: reads through it, `*r`, and copies into another such reference (a copy into
+                    // anything else, a function's result, say, is the address)
                     for p in s.places() {
                         if let Some(r) = p.base_local().filter(|r| mine(*r)) {
                             let read = p.projection.as_slice() == [Projection::Deref];
                             let defined = matches!(s, Statement::Assign(d, _) if d == p);
-                            let copied = matches!(s, Statement::Assign(_, Rvalue::Use(Operand::Copy(q) | Operand::Move(q))) if q == p && p.projection.is_empty());
+                            let copied = matches!(s, Statement::Assign(d, Rvalue::Use(Operand::Copy(q) | Operand::Move(q)))
+                                if q == p && p.projection.is_empty() && d.as_local().is_some_and(mine));
                             if !(read || defined || copied) {
                                 drop.push((name.clone(), r));
                             }

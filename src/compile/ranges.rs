@@ -8,7 +8,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::ir::{
-    predecessors, BasicBlock, BinOp, Block, CastKind, Const, IntTy, Local, Locals, Operand, Place, Projection, Rvalue,
+    predecessors, BasicBlock, BinOp, Block, CastKind, IntTy, Local, Locals, Operand, Place, Projection, Rvalue,
     Segment, Statement, Terminator, Ty, UnOp, Unwind,
 };
 use super::Fail;
@@ -367,12 +367,10 @@ impl Pass<'_> {
                     let op = *op;
                     kill(x, &mut facts, &mut bools, &mut alias);
                     bools.insert(x, (op, bare(a), bare(c)));
-                    // x == c when x's range leaves c out (or c is i16::MIN, which no card is): known false
+                    // x == c when x's range leaves c out: known false
                     let kc = int_value(c);
                     let rx = self.val(&facts, a);
-                    if op == BinOp::Eq
-                        && (is_i16_min(c) || matches!((kc, rx), (Some(k), Some(r)) if k < r[0] || k > r[1]))
-                    {
+                    if op == BinOp::Eq && matches!((kc, rx), (Some(k), Some(r)) if k < r[0] || k > r[1]) {
                         facts.insert(Key::Local(x), [0, 0]);
                     }
                     // an order comparison the ranges settle: known true or false. A bounds check the index's range
@@ -781,14 +779,6 @@ impl Pass<'_> {
         }
         edge
     }
-}
-
-/// `const i16::MIN`
-fn is_i16_min(o: &Operand) -> bool {
-    let Operand::Constant(Const::Path(p)) = o else {
-        return false;
-    };
-    p.is_path(&["i16", "MIN"])
 }
 
 /// The locals whose address is taken as a whole or at an index: `&x`, `&mut x`, `&raw mut x[0 of 1]`.

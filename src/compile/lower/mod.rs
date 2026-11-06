@@ -9,9 +9,7 @@
 //! its checks, `branches` the switches, asserts and compare-and-branch, and `calls` the calls and the built-ins.
 use std::collections::{HashMap, HashSet};
 
-use super::ir::{
-    self, lines_naming, BasicBlock, BinOp, Const, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind,
-};
+use super::ir::{self, lines_naming, BasicBlock, BinOp, IntTy, Local, Segment, Statement, Terminator, Ty, Unwind};
 use super::machine::{Arg, Kind, Line, Op};
 use super::util::Ordered;
 use super::Fail;
@@ -154,11 +152,6 @@ fn source(s: &Statement) -> String {
     s.to_string().trim_end_matches(';').to_string()
 }
 
-/// `const i16::MIN` or `const i16::MAX`.
-fn is_i16_limit(o: &ir::Operand) -> bool {
-    matches!(o, ir::Operand::Constant(Const::Path(p)) if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]))
-}
-
 /// A plain unwind: `unwind continue` or `unwind unreachable`.
 fn plain_unwind(u: &Unwind) -> bool {
     matches!(u, Unwind::Continue | Unwind::Unreachable)
@@ -281,6 +274,8 @@ pub struct Lowering<'a> {
     pub names: Ordered<String, Local>,
     /// the usize locals that can hold a value past a card, below 0 (see `ranges::huge_usizes`)
     pub huge: HashSet<Local>,
+    /// the function's result cells besides `_0`, which its caller reads after it returns
+    pub results: HashSet<Local>,
 }
 
 impl<'a> Lowering<'a> {
@@ -320,6 +315,7 @@ impl<'a> Lowering<'a> {
             resources: HashMap::new(),
             names: Ordered::new(),
             huge: HashSet::new(),
+            results: HashSet::new(),
         };
         for (&local, ty) in locals.iter() {
             if *ty == Ty::Unit {

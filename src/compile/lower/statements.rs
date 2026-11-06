@@ -7,7 +7,7 @@ use crate::compile::Fail;
 
 use super::arith::plain_op;
 use super::places::{Loc, Value};
-use super::{is_comparison, is_i16_limit, numbered, one_word, source, Access, Cell, Lowering, Operand, Sym};
+use super::{is_comparison, numbered, one_word, source, Access, Cell, Lowering, Operand, Sym};
 
 /// A value an array repeat stores into each element: a scalar constant, or a place read without indexing (rustc
 /// reads an element into a temporary first).
@@ -149,14 +149,28 @@ impl<'a> Lowering<'a> {
                 let (bad, done) = (self.fresh("ov"), self.fresh("d"));
                 let w = self.width.get(&d).copied();
                 let plain = plain_op(*op);
+                if w == Some(IntTy::U8) && plain == BinOp::Mul {
+                    // the product wraps, as a u8's does, but past a card it can't be held to be wrapped
+                    fail!(
+                        "a u8 product with its overflow flag (`overflowing_mul`, `checked_mul`) is not supported: \
+                         past a card it can't be wrapped"
+                    )
+                }
                 self.arith_acc(plain, a, b, w.map(|_| &bad), src)?;
-                self.emit(Op::Sto, f0);
+                self.emit(Op::Sto, f0.clone());
                 self.check_acc(w, &bad, plain)?;
                 let z = self.konst(0);
                 self.emit(Op::Cla, z);
                 self.emit(Op::Sto, f1.clone());
                 self.emit(Op::Jmp, done.clone());
                 self.define(&bad);
+                if w == Some(IntTy::U8) && plain != BinOp::Mul {
+                    // a u8's sum or difference wraps, as Rust's does (`overflowing_add` reads it): -255..=510 is on
+                    // a card
+                    self.emit(Op::Cla, f0.clone());
+                    self.wrap_u8(plain == BinOp::Sub);
+                    self.emit(Op::Sto, f0);
+                }
                 let one = self.konst(1);
                 self.emit(Op::Cla, one);
                 self.emit(Op::Sto, f1);
@@ -304,14 +318,6 @@ impl<'a> Lowering<'a> {
             }
             Rvalue::BinaryOp(op @ (BinOp::Rem | BinOp::Div), x, y) => {
                 self.divide(src, dest, *op == BinOp::Rem, x, y, false)
-            }
-            Rvalue::BinaryOp(op @ (BinOp::Eq | BinOp::Ne), _, y) if is_i16_limit(y) => {
-                // no card equals i16::MIN or MAX
-                let c = self.konst(if *op == BinOp::Eq { 0 } else { 1 });
-                self.emit(Op::Cla, c);
-                let p = self.place(dest)?;
-                self.emit_c(Op::Sto, p, src);
-                Ok(())
             }
             Rvalue::BinaryOp(op, ir::Operand::Constant(ca), ir::Operand::Constant(cb))
                 if is_comparison(*op) && ca.is_scalar() && cb.is_scalar() =>

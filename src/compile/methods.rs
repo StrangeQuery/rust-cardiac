@@ -913,6 +913,7 @@ mod tests {
             ret: Ty::Unit,
             body,
             results: vec![],
+            widened: None,
         };
         inline_methods(&mut f);
         let text: Vec<String> = f

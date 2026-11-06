@@ -92,7 +92,11 @@ pub fn assemble(origin: i32, src: &str) -> Result<Program, String> {
         let mn = it.next().unwrap();
         let x = it.next().unwrap_or("0");
         let v = match mn {
-            "DAT" => arg(x)?,
+            // a cell holds -999..999: a constant past that is refused before here, and this says so if one isn't
+            "DAT" => match arg(x)? {
+                v @ -999..=999 => v,
+                _ => return Err(format!("constant out of range: DAT {x} is past what a card holds")),
+            },
             "CUT" => -(600 + arg(x)?),
             "LDC" => -(100 + arg(x)?),
             _ => op(mn).ok_or(format!("unknown instruction {mn}"))? * 100 + arg(x)?,
