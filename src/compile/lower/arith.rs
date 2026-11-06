@@ -439,10 +439,15 @@ impl<'a> Lowering<'a> {
 
     /// The signed terms of a sum into the accumulator.
     pub(super) fn sum_acc(&mut self, terms: &[(ir::Sign, ir::Operand)], comment: &str) -> Result<(), Fail> {
-        for (i, (sign, o)) in terms.iter().enumerate() {
-            let plus = *sign == ir::Sign::Plus;
+        // every term in a cell first: one read through an address is read through the accumulator, which the
+        // partial sum would be in
+        let mut values = vec![];
+        for (sign, o) in terms {
             let v = self.operand(o)?;
-            let v = self.mat(v);
+            values.push((*sign, self.mat(v)));
+        }
+        for (i, (sign, v)) in values.into_iter().enumerate() {
+            let plus = sign == ir::Sign::Plus;
             if i == 0 && plus {
                 self.load(&v)?;
             } else {
