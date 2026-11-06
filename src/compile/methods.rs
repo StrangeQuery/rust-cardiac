@@ -952,6 +952,7 @@ mod tests {
             ret: Ty::Unit,
             body: ir::parse_body(body),
             results: vec![],
+            widened: None,
         };
         inline_operators(&mut f);
         f.body
