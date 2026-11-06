@@ -503,10 +503,10 @@ impl Pass<'_> {
                     kill(x, &mut facts, &mut bools, &mut alias);
                     if let (Some(r), Some(t)) = (r, type_range(to)) {
                         if r[0] >= t[0] && r[1] <= t[1] {
-                            // known not negative: no check
+                            // known not negative (and for a u8, below 256): no check, nothing to wrap
                             if rewrite
                                 && self.locals.get(&y) == Some(&Ty::Int(IntTy::I16))
-                                && *to == Ty::Int(IntTy::Usize)
+                                && matches!(to, Ty::Int(IntTy::Usize | IntTy::U8))
                             {
                                 b.statements[i] =
                                     Statement::Assign(Place::local(x), Rvalue::Use(Operand::Copy(Place::local(y))));

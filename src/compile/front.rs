@@ -54,10 +54,15 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     // switch arms are read as their switch's type first: a discriminant's is isize
     switch_values(&mut file);
     cold_paths(&mut file);
+    // `Cmp` and `Ordering`'s methods, written with its variants, which the C-like pass numbers
+    super::ordering::three_way_compares(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums));
+    // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
+    super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
     file.visit(&mut PastACardDivisor);
+    file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
     file.visit(&mut OffsetIsAdd);
     let named = scalar_consts(&file)?;
@@ -339,8 +344,17 @@ fn cold_paths(file: &mut File) {
     }
 }
 
+/// The types of a function's parameters and locals.
+pub(super) fn local_types(params: &[(Local, Ty)], decls: &[super::ir::Decl]) -> HashMap<Local, Ty> {
+    params
+        .iter()
+        .cloned()
+        .chain(decls.iter().map(|d| (d.local, d.ty.clone())))
+        .collect()
+}
+
 /// The type of a place, from its local's through its projections.
-fn place_ty(types: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
+pub(super) fn place_ty(types: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
     let mut t = types.get(&p.base_local()?)?.clone();
     for x in &p.projection {
         t = match (x, t) {
@@ -384,6 +398,36 @@ impl VisitMut for PastACardDivisor {
                 };
             }
         }
+    }
+}
+
+/// A usize compared with a constant k past a card, as rustc's inlined `i16::try_from(n)` tests `n > 32767`: a usize
+/// on a card is at most 999 and one past a card (held below 0, `ranges::huge_usizes`) is above 2^64 - 1000, so
+/// `x > k` and `x >= k` are `x > 999`, and `x < k` and `x <= k` are `x <= 999`, for any k between, and the
+/// constant needs no cell.
+struct PastACardBound;
+
+impl VisitMut for PastACardBound {
+    fn visit_rvalue(&mut self, r: &mut Rvalue) {
+        walk_rvalue(self, r);
+        let Rvalue::BinaryOp(op @ (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), a, b) = r else {
+            return;
+        };
+        let between = |o: &Operand| {
+            matches!(o, Operand::Constant(Const::Int { value, ty: IntTy::Usize })
+                if (1000..(1i128 << 64) - 1000).contains(value))
+        };
+        // x op k, the constant on the right
+        let (x, above) = match (between(a), between(b)) {
+            (false, true) => (a.clone(), matches!(op, BinOp::Gt | BinOp::Ge)),
+            (true, false) => (b.clone(), matches!(op, BinOp::Lt | BinOp::Le)),
+            _ => return,
+        };
+        let card = Operand::Constant(Const::Int {
+            value: 999,
+            ty: IntTy::Usize,
+        });
+        *r = Rvalue::BinaryOp(if above { BinOp::Gt } else { BinOp::Le }, x, card);
     }
 }
 
