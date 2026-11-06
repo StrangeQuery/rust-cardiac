@@ -83,3 +83,7 @@ path = "xrepeat.rs"
 [[bin]]
 name = "xskip"
 path = "xskip.rs"
+
+[[bin]]
+name = "xread"
+path = "xread.rs"
