@@ -46,6 +46,8 @@ for opt in 1 2; do
     tests/programs/option_methods.rs tests/programs/try_result.rs tests/programs/try_option.rs tests/programs/enum_consts.rs tests/programs/enums_for.rs tests/programs/niche.rs tests/programs/niche_u8.rs tests/programs/niche_negative.rs tests/programs/checked.rs tests/programs/checked_mul.rs tests/programs/niche_eq.rs tests/programs/struct_const_arg.rs tests/programs/struct_refs.rs tests/programs/tuples_return.rs tests/programs/tuples_return2.rs tests/programs/enums_eq.rs tests/programs/enums_ne.rs tests/programs/past_card_divisor.rs tests/programs/result_in_place.rs tests/programs/result_in_place2.rs tests/programs/result_in_place3.rs tests/programs/not_element.rs tests/programs/switch_elements.rs tests/programs/tuple_struct_consts.rs tests/programs/tuple_struct_eq.rs tests/programs/not_compare.rs tests/programs/range_contains.rs tests/programs/digit_const.rs tests/programs/const_cast.rs tests/programs/option_map.rs tests/programs/result_map.rs tests/programs/array_return.rs tests/programs/enum_mut.rs tests/programs/enum_field.rs tests/programs/enum_field_mut.rs tests/programs/enum_payload.rs tests/programs/enum_payload_array.rs tests/programs/enum_payload_mut.rs tests/programs/struct_mut.rs tests/programs/struct_nested.rs tests/programs/struct_array_field.rs tests/programs/count_loops.rs tests/programs/count_down.rs tests/programs/count_result.rs tests/programs/match_ranges.rs tests/programs/switch_consecutive.rs tests/programs/count_param.rs tests/programs/count_reset.rs tests/programs/count_inner.rs tests/programs/phase_init.rs tests/programs/match_desc.rs tests/programs/contains_dead.rs tests/programs/div_euclid.rs tests/programs/option_tuple.rs tests/programs/mask_counter.rs tests/programs/mask_condition.rs tests/programs/mask_signed.rs tests/programs/mask_unsigned.rs tests/programs/bool_kept.rs tests/programs/bool_and_kept.rs tests/programs/add_times.rs tests/programs/ref_returned.rs || exit 1
   # small integer methods rustc calls at opt-level 1; at 2 it inlines signum into a Cmp, which is refused
   if [ $opt = 1 ]; then sh native_diff.sh $checked tests/programs/signum.rs || exit 1; fi
+  # and `?` converting with From, which rustc inlines at 2
+  if [ $opt = 2 ]; then sh native_diff.sh $unchecked tests/programs/try_from.rs || exit 1; fi
   # and as `cargo cardiac build` compiles, a release build (no overflow checks): the division routine, every sign
   sh native_diff.sh $unchecked tests/programs/sdivvar.rs tests/programs/sremvar.rs tests/programs/sremvar2.rs tests/programs/sdiv.rs tests/programs/smulvar.rs \
     tests/programs/smul2.rs tests/programs/structs2.rs tests/programs/repeats.rs tests/programs/repeats2.rs tests/programs/structs3.rs tests/programs/structs4.rs tests/programs/exprhelp.rs tests/programs/exprif.rs tests/programs/exprtuple.rs tests/programs/forloops.rs tests/programs/forloops2.rs tests/programs/forloops3.rs tests/programs/forloops4.rs tests/programs/phases.rs tests/programs/phases2.rs \
@@ -141,6 +143,13 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
   case "$out" in *"constant out of range: 2000 is past what a card holds (-999 to 999): "*"would overflow a card, in main: \`_"*" = AddWithOverflow("*)
       echo "MATCH  const_range: rejected";;
     *) echo "DIFFER const_range: $out"; exit 1;; esac
+  # `?` converting with From is core's from_residual where rustc calls it, which can't be written out without the
+  # conversion
+  if [ $opt = 1 ]; then
+    out=$(./target/release/cargo-cardiac test $checked tests/programs/try_from.rs 2>&1)
+    case "$out" in *"from_residual"*"not supported"*) echo "MATCH  try_from: rejected";;
+      *) echo "DIFFER try_from: $out"; exit 1;; esac
+  fi
   # a check rustc has proved fails is the panic, and the deck's panic map says which; a panic main runs off its end
   # into (its JMP to the routine dropped as the routine comes next) is one too, and one a phase starts with
   for r in "settled_neg:index out of bounds" "settled_rem:attempt to calculate the remainder with a divisor of zero" \

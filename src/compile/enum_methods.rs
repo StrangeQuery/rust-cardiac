@@ -384,14 +384,19 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                         test: Some((d, good_n, good_way, way(vec![other]))),
                     }
                 }
-                // the residual as the function's own failing variant: None, or Err with the residual's E
+                // the residual as the function's own failing variant: None, or Err with the residual's E. That is
+                // `From::from` of it only where the two E are the same type (core's `impl From<T> for T`); another
+                // E's conversion is a call this can't make, so the call stays, and is refused
                 "from_residual" => {
                     let built = if option {
                         build(&dest_ty, "None", vec![])?
                     } else {
                         let r = x?;
-                        let e = ty_args(&enum_ty).get(1)?.clone();
-                        build(&dest_ty, "Err", vec![moved(field(&r, "Err", &e))])?
+                        let residual_e = ty_args(&ty_of(&r)?).get(1)?.clone();
+                        if Some(&residual_e) != e.as_ref() {
+                            return None;
+                        }
+                        build(&dest_ty, "Err", vec![moved(field(&r, "Err", &residual_e))])?
                     };
                     Inlined {
                         before: vec![built],
