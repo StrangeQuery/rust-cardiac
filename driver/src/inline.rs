@@ -19,17 +19,10 @@ use rustc_span::def_id::DefId;
 use cargo_cardiac::compile::ir::IntTy;
 use cargo_cardiac::compile::methods;
 
-/// Integer methods whose inlined body (at opt-level 2) the compiler compiles wrongly or crashes on: kept calls, so
-/// that at opt-level 1 and s they stay refused rather than take on the fault. `midpoint` adds in an `i32` past a
-/// card, a u8's `overflowing_add` doesn't wrap at 256, and the rest read `i16::MIN` or `i16::MAX` as values.
-const WRONG_INLINED: [(&str, IntTy); 6] = [
-    ("midpoint", IntTy::I16),
-    ("overflowing_add", IntTy::U8),
-    ("checked_div", IntTy::I16),
-    ("checked_rem", IntTy::I16),
-    ("checked_neg", IntTy::I16),
-    ("saturating_mul", IntTy::I16),
-];
+/// Integer methods whose inlined body (at opt-level 2) the compiler can't compile right: kept calls, so that at
+/// opt-level 1 and s they stay refused as they are at 2. `midpoint` adds in an `i32` past a card, and
+/// `saturating_mul` picks between `i16::MIN` and `i16::MAX` as values.
+const WRONG_INLINED: [(&str, IntTy); 2] = [("midpoint", IntTy::I16), ("saturating_mul", IntTy::I16)];
 
 /// Whether the inliner should run where rustc wouldn't run it: opt-level 1, s or z, unless `-Zinline-mir` says.
 /// (At 0 the MIR is unoptimized and the compiler's passes are off; from 2 rustc runs it already.)
