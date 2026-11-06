@@ -76,6 +76,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     super::wide::u16_cells(&mut file);
     super::wide::wide_locals(&mut file);
     file.visit(&mut I32IsI16);
+    file.visit(&mut IsizeIsI16);
     file.visit(&mut PastACardDivisor);
     file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
@@ -936,6 +937,42 @@ impl VisitMut for I32IsI16 {
         for s in &mut p.segments {
             if let Segment::Name { name, .. } = s {
                 if name == "i32" {
+                    *name = "i16".into();
+                }
+            }
+        }
+        walk_path(self, p)
+    }
+}
+
+/// An isize is an i16, as a C-like enum's discriminant already is (`enums`): what a card holds, an isize holds too,
+/// and past a card it panics or keeps three digits as an i16 does. (A cast of one to a usize, or of a usize to one,
+/// is then an i16's: -1 is usize::MAX, held below 0, and back.)
+struct IsizeIsI16;
+
+impl VisitMut for IsizeIsI16 {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if *t == Ty::Int(IntTy::Isize) {
+            *t = Ty::Int(IntTy::I16);
+        }
+        walk_ty(self, t)
+    }
+
+    fn visit_const(&mut self, c: &mut Const) {
+        if let Const::Int {
+            ty: ty @ IntTy::Isize, ..
+        } = c
+        {
+            *ty = IntTy::I16;
+        }
+        walk_const(self, c)
+    }
+
+    /// `isize::MAX`, which no card holds, as `i16::MAX` is refused
+    fn visit_path(&mut self, p: &mut Path) {
+        for s in &mut p.segments {
+            if let Segment::Name { name, .. } = s {
+                if name == "isize" {
                     *name = "i16".into();
                 }
             }

@@ -36,3 +36,14 @@
   three digits, as for an i16: `(a - b) as i16` of 300 and 400 is -100 in Rust without overflow checks, and a
   panic here, where the modular cells would have been exact had nothing compared them. The matrix's int_u16
   matches at every setting; nothing else changed.
+
+## 2026-11-06 · An isize is an i16
+
+- **Decision.** After the C-like enum pass, every isize (a type, a constant, a path's `isize`) is an i16, as an
+  i32 is (`front::IsizeIsI16`). The enum pass already made a discriminant's isize one, but only in a program with
+  a C-like enum.
+- **Why.** On a card an isize and an i16 hold the same values and their arithmetic, comparisons and casts agree:
+  `-1isize as usize` is usize::MAX, held below 0 as `-1i16 as usize` is, and back. Its methods are an i16's there
+  too, and `isize::MAX`, which no card holds, is refused or settled as `i16::MAX` is.
+- **Cost.** Past a card it panics or keeps three digits as an i16 does, where Rust's isize goes on to 2^63. The
+  matrix's int_isize matches at every setting; nothing else changed.
