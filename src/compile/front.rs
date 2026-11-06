@@ -42,13 +42,24 @@ const CORE_MODULES: [&str; 14] = [
     "clone",
 ];
 
-/// What the front end makes of a file: the file, its functions by name, and the named scalar consts' values.
-pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>);
+/// What the front end makes of a file: the file, its functions by name, the named scalar consts' values, and its
+/// statics.
+pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>, Statics);
+
+/// The program's statics, each a fixed run of cells, as every variable on CARDIAC is: what each holds first, by the
+/// static's name, and the static each allocation a body points into is (`{alloc1: *mut i16}`).
+#[derive(Clone, Debug, Default)]
+pub struct Statics {
+    pub values: Ordered<String, Vec<i64>>,
+    pub of_alloc: HashMap<String, String>,
+}
 
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
     super::panic_messages::literal_panics(&mut file);
+    byte_strings(&mut file);
+    file.visit(&mut CharIsUsize);
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
     // switch arms are read as their switch's type first: a discriminant's is isize
@@ -56,8 +67,9 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     cold_paths(&mut file);
     // `Cmp` and `Ordering`'s methods, written with its variants, which the C-like pass numbers
     super::ordering::three_way_compares(&mut file);
+    tail_calls(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
-    file.visit(&mut TupleStructConsts(enums));
+    file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
     let widened = widened_in_core(&file);
     // u16 and u32 locals as cells, before an i32 is an i16: a cast to i32 is a cast to a wider type
     super::wide::wide_locals(&mut file);
@@ -66,7 +78,9 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
     file.visit(&mut OffsetIsAdd);
+    file.visit(&mut NoUnwinding);
     let named = scalar_consts(&file)?;
+    let statics = statics(&file);
     inline_struct_consts(&mut file);
     inline_array_consts(&mut file);
     join_module_paths(&mut file);
@@ -76,7 +90,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
             f.widened = Some(p);
         }
     }
-    Ok((file, fns, named))
+    Ok((file, fns, named, statics))
 }
 
 /// `<T as PartialEq>::ne(a, b)`, which rustc calls at opt-level 1 and s for a derived `!=`: `PartialEq`'s own `ne`,
@@ -251,6 +265,75 @@ fn promoted_consts(file: &mut File) {
     }
 }
 
+/// Each byte string a function uses, `const b"CARD"`: a reference to an array of the bytes, which is built in the
+/// function, at the start of the block that uses it, in a local of its own (a `[u8; N]` of constants, as a
+/// promoted's value is), and borrowed there.
+fn byte_strings(file: &mut File) {
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut next = f
+            .params
+            .iter()
+            .map(|(l, _)| l.0)
+            .chain(f.body.decls.iter().map(|d| d.local.0))
+            .max()
+            .unwrap_or(0)
+            + 1;
+        let mut decls = vec![];
+        for b in f.body.blocks.iter_mut() {
+            let mut setup = vec![];
+            let mut operands: Vec<&mut Operand> = b.statements.iter_mut().flat_map(|s| s.operands_mut()).collect();
+            operands.extend(b.terminator.operands_mut());
+            for o in operands {
+                // (`b""` too has no array literal: `[]` isn't MIR's)
+                let Operand::Constant(Const::Bytes(bytes)) = &*o else {
+                    continue;
+                };
+                if bytes.is_empty() {
+                    continue;
+                }
+                let array_ty = Ty::Array(Box::new(Ty::Int(IntTy::U8)), ArrayLen::Known(bytes.len() as u64));
+                let (array, borrow) = (Local(next), Local(next + 1));
+                next += 2;
+                decls.push(super::ir::Decl {
+                    local: array,
+                    mutable: false,
+                    ty: array_ty.clone(),
+                });
+                decls.push(super::ir::Decl {
+                    local: borrow,
+                    mutable: false,
+                    ty: Ty::Ref {
+                        lifetime: None,
+                        mutable: false,
+                        to: Box::new(array_ty),
+                    },
+                });
+                let byte = |v: &u8| {
+                    Operand::Constant(Const::Int {
+                        value: *v as i128,
+                        ty: IntTy::U8,
+                    })
+                };
+                setup.push(Statement::Assign(
+                    Place::local(array),
+                    Rvalue::Array(bytes.iter().map(byte).collect()),
+                ));
+                setup.push(Statement::Assign(
+                    Place::local(borrow),
+                    Rvalue::Ref(super::ir::BorrowKind::Shared, Place::local(array)),
+                ));
+                *o = Operand::Move(Place::local(borrow));
+            }
+            if !setup.is_empty() {
+                setup.append(&mut b.statements);
+                b.statements = setup;
+            }
+        }
+        f.body.decls.extend(decls);
+    }
+}
+
 /// A promoted `&(1..=13)`, as rustc builds it: `_1 = core::ops::RangeInclusive::<i16>::new(const 1_i16, const
 /// 13_i16) -> bb1`, then the borrow. The call is the range's literal, `RangeInclusive::<i16> {{ start, end,
 /// exhausted: false }}` (as `for` loops read one, forloops.rs), so the promoted is one block, which is inlined.
@@ -359,6 +442,118 @@ pub(super) fn local_types(params: &[(Local, Ty)], decls: &[super::ir::Decl]) -> 
         .collect()
 }
 
+/// A function's call of itself whose result is its own, with nothing after it but the way to its return
+/// (`count(n - 1, acc + 2)` as the last thing `count` does): a loop. Each argument goes into a temporary, then each
+/// temporary into its parameter, and the call is a jump back to the start (a block of its own that the entry goes
+/// to, so the entry is entered once, as a loop's header isn't); the function's cells hold the next round's values,
+/// as they would the callee's. Only where no parameter or argument is a reference or a pointer,
+/// which could point into the cells being reused.
+fn tail_calls(file: &mut File) {
+    let pointer = |t: &Ty| matches!(t, Ty::Ref { .. } | Ty::Ptr { .. });
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        if !f.path.is_plain() || f.params.iter().any(|(_, t)| pointer(t)) {
+            continue;
+        }
+        if !f.body.blocks.iter().any(|b| b.name == super::ir::BasicBlock(0)) {
+            continue;
+        }
+        let name = f.path.to_string();
+        let types: HashMap<Local, Ty> = f
+            .params
+            .iter()
+            .cloned()
+            .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+            .collect();
+        // a block that only goes on, its way ending in the return
+        let returns = |start: super::ir::BasicBlock, blocks: &[Block]| {
+            let mut at = start;
+            for _ in 0..blocks.len() {
+                let Some(b) = blocks.iter().find(|b| b.name == at) else {
+                    return false;
+                };
+                let idle = b.statements.iter().all(|s| {
+                    matches!(
+                        s,
+                        Statement::StorageLive(_) | Statement::StorageDead(_) | Statement::Nop
+                    )
+                });
+                match (&b.terminator, idle) {
+                    (Terminator::Return, true) => return true,
+                    (Terminator::Goto(next), true) => at = *next,
+                    _ => return false,
+                }
+            }
+            false
+        };
+        let mut next = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+        let mut decls = vec![];
+        let blocks = f.body.blocks.clone();
+        let start = super::ir::BasicBlock(blocks.iter().map(|b| b.name.0).max().unwrap_or(0) + 1);
+        let mut looped = false;
+        for b in f.body.blocks.iter_mut() {
+            let Terminator::Call {
+                dest,
+                func,
+                args,
+                target: Some(target),
+                unwind: super::ir::Unwind::Continue | super::ir::Unwind::Unreachable,
+            } = &b.terminator
+            else {
+                continue;
+            };
+            let arg_ty = |o: &Operand| match o {
+                Operand::Copy(p) | Operand::Move(p) => place_ty(&types, p),
+                Operand::Constant(_) => None,
+                _ => Some(Ty::Other(String::new())),
+            };
+            let self_call = func.is_plain() && func.to_string() == name && args.len() == f.params.len();
+            if !self_call || dest.as_local() != Some(Local(0)) || !returns(*target, &blocks) {
+                continue;
+            }
+            if args.iter().any(|a| arg_ty(a).is_some_and(|t| pointer(&t))) {
+                continue;
+            }
+            let mut temps = vec![];
+            for (a, (_, ty)) in args.iter().zip(&f.params) {
+                let t = Local(next);
+                next += 1;
+                decls.push(super::ir::Decl {
+                    local: t,
+                    mutable: false,
+                    ty: ty.clone(),
+                });
+                b.statements
+                    .push(Statement::Assign(Place::local(t), Rvalue::Use(a.clone())));
+                temps.push(t);
+            }
+            for (t, (p, _)) in temps.into_iter().zip(&f.params) {
+                b.statements.push(Statement::Assign(
+                    Place::local(*p),
+                    Rvalue::Use(Operand::Move(Place::local(t))),
+                ));
+            }
+            b.terminator = Terminator::Goto(start);
+            looped = true;
+        }
+        f.body.decls.extend(decls);
+        if looped {
+            let entry = f
+                .body
+                .blocks
+                .iter_mut()
+                .find(|b| b.name == super::ir::BasicBlock(0))
+                .unwrap();
+            let header = Block {
+                name: start,
+                statements: std::mem::take(&mut entry.statements),
+                terminator: std::mem::replace(&mut entry.terminator, Terminator::Goto(start)),
+            };
+            f.body.blocks.push(header);
+        }
+    }
+}
+
 /// The type of a place, from its local's through its projections.
 pub(super) fn place_ty(types: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
     let mut t = types.get(&p.base_local()?)?.clone();
@@ -378,6 +573,22 @@ pub(super) fn place_ty(types: &HashMap<Local, Ty>, p: &Place) -> Option<Ty> {
         };
     }
     Some(t)
+}
+
+/// A call or a check in a function that can't unwind (`extern "C"`), whose panic Rust turns into an abort
+/// (`unwind terminate(abi)`): CARDIAC never unwinds, and a panic stops the machine where it is, as anywhere else.
+/// (Natively the abort exits 134, not a panic's 101; the output is the same.)
+struct NoUnwinding;
+
+impl VisitMut for NoUnwinding {
+    fn visit_terminator(&mut self, t: &mut Terminator) {
+        if let Terminator::Call { unwind, .. } | Terminator::Assert { unwind, .. } = t {
+            if matches!(unwind, super::ir::Unwind::Terminate(why) if why == "abi") {
+                *unwind = super::ir::Unwind::Continue;
+            }
+        }
+        walk_terminator(self, t)
+    }
 }
 
 /// `x % k` and `x / k` of an i16 with k past a card (`% 1000`): a card's size is at most 999, so `x % k` is x (Rust's
@@ -439,13 +650,20 @@ impl VisitMut for PastACardBound {
 
 /// A tuple struct's constant, `const Flag(-1_i16)`, and its building, `Flag(move _1)`, read as a variant's
 /// (`Err(-9_i16)`): where the path names no enum's variant they are the struct's, its fields `0`, `1`, ... as a
-/// tuple struct's are named.
-struct TupleStructConsts<'a>(&'a [super::enums::EnumDef]);
+/// tuple struct's are named. An enum is looked for as the MIR names it and as the C-like enums pass has made it
+/// (`Option::<i16>` for `Option::<Colour>`): the definitions as given, and normalized.
+struct TupleStructConsts<'a>(&'a [super::enums::EnumDef], &'a [super::enums::EnumDef]);
+
+impl TupleStructConsts<'_> {
+    fn names_a_variant(&self, p: &Path) -> bool {
+        super::enums::names_a_variant(self.0, p) || super::enums::names_a_variant(self.1, p)
+    }
+}
 
 impl VisitMut for TupleStructConsts<'_> {
     fn visit_rvalue(&mut self, r: &mut Rvalue) {
         if let Rvalue::Variant(p, ops) = r {
-            if !ops.is_empty() && !super::enums::names_a_variant(self.0, p) {
+            if !ops.is_empty() && !self.names_a_variant(p) {
                 let fields = ops.drain(..).enumerate().map(|(i, o)| (i.to_string(), o)).collect();
                 *r = Rvalue::Struct(p.clone(), fields);
             }
@@ -455,7 +673,7 @@ impl VisitMut for TupleStructConsts<'_> {
 
     fn visit_const(&mut self, c: &mut Const) {
         if let Const::Variant(p, cs) = c {
-            if !cs.is_empty() && !super::enums::names_a_variant(self.0, p) {
+            if !cs.is_empty() && !self.names_a_variant(p) {
                 let fields = cs.drain(..).enumerate().map(|(i, c)| (i.to_string(), c)).collect();
                 *c = Const::Adt(p.clone(), fields);
             }
@@ -492,6 +710,30 @@ fn widened_in_core(file: &File) -> HashMap<String, Path> {
         }
     }
     out
+}
+
+/// A char is the number it is, a code point, in a cell as a usize is: never negative, compared as numbers, `as u8`
+/// its low byte (mod 256). Rust has no arithmetic on chars, and every char a program can make (a literal, a `u8`
+/// cast) is below 1000, a literal past a card refused as any constant past one is.
+struct CharIsUsize;
+
+impl VisitMut for CharIsUsize {
+    fn visit_ty(&mut self, t: &mut Ty) {
+        if *t == Ty::Char {
+            *t = Ty::Int(IntTy::Usize);
+        }
+        walk_ty(self, t)
+    }
+
+    fn visit_const(&mut self, c: &mut Const) {
+        if let Const::Char(ch) = *c {
+            *c = Const::Int {
+                value: ch as i128,
+                ty: IntTy::Usize,
+            };
+        }
+        walk_const(self, c)
+    }
 }
 
 struct I32IsI16;
@@ -555,6 +797,47 @@ impl VisitMut for OffsetIsAdd {
         }
         walk_rvalue(self, r)
     }
+}
+
+/// The statics whose first value is a literal: a number or a bool (`static mut COUNT: i16 = 0`), or an array of them
+/// (`static T: [i16; 4] = [11, 22, 33, 44]`); each by its name, as the allocations a body points into name it. A
+/// static whose value rustc works out otherwise is left out, and a pointer to it is refused where it is used.
+fn statics(file: &File) -> Statics {
+    let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::I8 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+    let value = |o: &Operand| match o {
+        Operand::Constant(Const::Int { value, .. }) => Some(*value as i64),
+        Operand::Constant(Const::Bool(b)) => Some(*b as i64),
+        _ => None,
+    };
+    let mut out = Statics::default();
+    for item in &file.items {
+        let Item::Static(s) = item else { continue };
+        let Some(name) = s.path.single().filter(|_| s.path.is_plain()) else {
+            continue;
+        };
+        let values = match (&s.ty, result_value(&s.body).next()) {
+            (t, Some(Rvalue::Use(o))) if scalar(t) => value(o).map(|v| vec![v]),
+            (Ty::Array(e, ArrayLen::Known(n)), Some(Rvalue::Array(os))) if scalar(e) && os.len() as u64 == *n => {
+                os.iter().map(value).collect()
+            }
+            (Ty::Array(e, ArrayLen::Known(n)), Some(Rvalue::Repeat(o, k))) if scalar(e) && k == n => {
+                value(o).map(|v| vec![v; *n as usize])
+            }
+            _ => None,
+        };
+        if let Some(values) = values {
+            out.values.set(name.to_string(), values);
+        }
+    }
+    for item in &file.items {
+        let Item::Alloc(a) = item else { continue };
+        if let Some(name) = a.of_static.as_ref().and_then(|p| p.single()) {
+            if out.values.has(name) {
+                out.of_alloc.insert(a.name.clone(), name.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// `const LIMIT: i16 = const 40_i16;`: a const of one name and a scalar value. Its value must be a u8, i16, usize or
@@ -737,7 +1020,10 @@ fn inline_array_consts(file: &mut File) {
         let Some(name) = path.single().filter(|_| path.is_plain()) else {
             continue;
         };
-        if !matches!(**elem, Ty::Int(IntTy::I16 | IntTy::U8)) {
+        if !matches!(
+            **elem,
+            Ty::Int(IntTy::I16 | IntTy::I8 | IntTy::U8 | IntTy::Usize) | Ty::Bool
+        ) {
             continue;
         }
         let constant = |o: &Operand| matches!(o, Operand::Constant(c) if !matches!(c, Const::Adt(..)));

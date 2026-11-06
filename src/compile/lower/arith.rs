@@ -114,7 +114,7 @@ impl<'a> Lowering<'a> {
         let ty = self
             .place_ty(dest)
             .or_else(|| [x, y].iter().find_map(|o| self.operand_ty(o)));
-        let signed = ty == Some(Ty::Int(IntTy::I16));
+        let signed = matches!(ty, Some(Ty::Int(IntTy::I16 | IntTy::I8)));
         let p10 = match b.k() {
             Some(k) => [10, 100].iter().position(|&p| p == k.abs()).map_or(0, |i| i as i64 + 1),
             None => 0,
@@ -295,6 +295,32 @@ impl<'a> Lowering<'a> {
             self.define(&done);
             self.emit(Op::Add, k);
         }
+    }
+
+    /// The accumulator as an i8 keeps it, mod 256 from -128 to 127: from anything a cell or a sum of two holds,
+    /// 256 added while it is below -128, and taken away while it is above 127.
+    pub(super) fn wrap_i8(&mut self) {
+        let (k256, k128) = (self.konst(256), self.konst(128));
+        let (up, down, back, done) = (
+            self.fresh("wrap"),
+            self.fresh("wrap"),
+            self.fresh("wrap"),
+            self.fresh("d"),
+        );
+        // with 128 added the wanted range is 0..=255
+        self.emit(Op::Add, k128.clone());
+        self.define(&up);
+        self.emit(Op::Tac, back.clone());
+        self.define(&down);
+        self.emit(Op::Sub, k256.clone());
+        self.emit(Op::Tac, done.clone());
+        self.emit(Op::Jmp, down);
+        self.define(&back);
+        self.emit(Op::Add, k256.clone());
+        self.emit(Op::Jmp, up);
+        self.define(&done);
+        self.emit(Op::Add, k256);
+        self.emit(Op::Sub, k128);
     }
 
     /// The signed terms of a sum into the accumulator.

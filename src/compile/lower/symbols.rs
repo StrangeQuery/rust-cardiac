@@ -67,6 +67,8 @@ pub enum Sym {
     Exit(String),
     /// A shared routine's label or cell: `rt_panic`, `rt_mul_a`.
     Runtime(&'static str),
+    /// A static's cell, or the first of an array's: `static_COUNT`.
+    Static(String),
 }
 
 impl Sym {
@@ -201,6 +203,7 @@ impl fmt::Display for Sym {
             Sym::Entry(func) => write!(f, "{func}_entry"),
             Sym::Exit(func) => write!(f, "{func}_exit"),
             Sym::Runtime(name) => f.write_str(name),
+            Sym::Static(name) => write!(f, "static_{name}"),
         }
     }
 }

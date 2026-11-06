@@ -173,6 +173,8 @@ fn name(item: &ir::Item) -> String {
     match item {
         ir::Item::Fn(f) => f.path.to_string(),
         ir::Item::Const(c) => c.path.to_string(),
+        ir::Item::Static(s) => s.path.to_string(),
+        ir::Item::Alloc(a) => a.name.clone(),
         ir::Item::Other(text) => text.lines().next().unwrap_or("").to_string(),
     }
 }

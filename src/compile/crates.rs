@@ -18,12 +18,14 @@ use super::ir::{File, Item, Segment, Terminator};
 use super::Fail;
 use super::BUILTINS;
 
-/// One crate's IR, the name other crates know it by, and its enums.
+/// One crate's IR, the name other crates know it by, and its enums and structs.
 pub struct Crate {
     pub name: String,
     pub file: File,
     /// The enums its functions use, as the driver found them (`compile::enums`).
     pub enums: Vec<super::enums::EnumDef>,
+    /// The structs its functions use (`compile::structs::StructDef`).
+    pub structs: Vec<super::structs::StructDef>,
 }
 
 /// The functions a crate's MIR defines, by the names it prints for them (not the `<impl at ..>` ones).

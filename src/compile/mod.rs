@@ -90,19 +90,21 @@ impl Compiled {
 
 /// Compile a crate's MIR. With `optimize` off, every statement is lowered as it stands. `debug_assertions`: whether
 /// rustc built it with them on, which the MIR doesn't always show (a call of core's `assert_unchecked`).
-/// `enums`: the enums the driver looked up, which the MIR names but doesn't define. `auto_overlay`: whether
-/// the compiler cuts main into phases itself when it doesn't fit, rather than at the program's own overlay() calls.
+/// `enums`: the enums the driver looked up, which the MIR names but doesn't define, and `structs` the structs, for
+/// the ones with no fields. `auto_overlay`: whether the compiler cuts main into phases itself when it doesn't fit,
+/// rather than at the program's own overlay() calls.
 pub fn compile_mir(
     mir: &ir::File,
     optimize: bool,
     debug_assertions: bool,
     enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
     auto_overlay: bool,
 ) -> Result<Compiled, Fail> {
     if let Some(k) = forced_cuts() {
         // the fuzzer's hook: main cut at those of its places, fit or not, to check that any cut runs as one piece
         // does (a program with an overlay() of its own is compiled as it is)
-        if let Ok(whole) = compile_cut(mir, optimize, debug_assertions, enums, Some(&[])) {
+        if let Ok(whole) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[])) {
             let n = whole.cut_points.len();
             let mut cuts: Vec<phases::Cut> = vec![];
             for c in k.iter().filter(|_| n > 0).map(|k| whole.cut_points[k % n]) {
@@ -110,13 +112,13 @@ pub fn compile_mir(
                     cuts.push(c);
                 }
             }
-            return compile_cut(mir, optimize, debug_assertions, enums, Some(&cuts));
+            return compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&cuts));
         }
     }
     if !auto_overlay {
-        return compile_cut(mir, optimize, debug_assertions, enums, None);
+        return compile_cut(mir, optimize, debug_assertions, enums, structs, None);
     }
-    let whole = compile_cut(mir, optimize, debug_assertions, enums, Some(&[]))?;
+    let whole = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[]))?;
     if whole.cut_points.is_empty() || largest_phase(&whole.listing).is_none_or(|n| n <= MEMORY) {
         return Ok(whole);
     }
@@ -131,7 +133,7 @@ pub fn compile_mir(
         for &way in whole.cut_points.iter().filter(|w| !cuts.contains(w)) {
             let mut tried = cuts.clone();
             tried.push(way);
-            let Ok(c) = compile_cut(mir, optimize, debug_assertions, enums, Some(&tried)) else {
+            let Ok(c) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&tried)) else {
                 continue;
             };
             let (Some(largest), Ok(r)) = (largest_phase(&c.listing), split_phases(&c.listing)) else {
@@ -184,14 +186,15 @@ fn compile_cut(
     optimize: bool,
     debug_assertions: bool,
     enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
 ) -> Result<Compiled, Fail> {
     // parameters passed straight on share the argument's cell (copies::forwarded), kept only when that is no bigger
-    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, cuts)?;
+    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, structs, cuts)?;
     if !forwards {
         return Ok(shared);
     }
-    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, cuts)?.0;
+    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, structs, cuts)?.0;
     Ok(if cells(&shared.listing) <= cells(&plain.listing) {
         shared
     } else {
@@ -615,20 +618,29 @@ fn compile_niched(
     forward: bool,
     debug_assertions: bool,
     enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool), Fail> {
     let mut no_niche = HashSet::new();
     loop {
-        let (compiled, forwards, unproved) =
-            match compile(file, optimize, forward, debug_assertions, enums, &no_niche, cuts) {
-                Ok(c) => c,
-                // (with its guards, say, the program may not fit where it fits without them): again with no niche
-                Err(_) if !no_niche.contains(enums::NO_NICHES) => {
-                    no_niche = HashSet::from([enums::NO_NICHES.to_string()]);
-                    continue;
-                }
-                Err(e) => return Err(e),
-            };
+        let (compiled, forwards, unproved) = match compile(
+            file,
+            optimize,
+            forward,
+            debug_assertions,
+            enums,
+            structs,
+            &no_niche,
+            cuts,
+        ) {
+            Ok(c) => c,
+            // (with its guards, say, the program may not fit where it fits without them): again with no niche
+            Err(_) if !no_niche.contains(enums::NO_NICHES) => {
+                no_niche = HashSet::from([enums::NO_NICHES.to_string()]);
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         if unproved.is_empty() {
             return Ok((compiled, forwards));
         }
@@ -644,10 +656,11 @@ fn compile(
     forward: bool,
     debug_assertions: bool,
     enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
-    let (file, mut fns, named) = front::front_end(file.clone(), debug_assertions, enums)?;
+    let (file, mut fns, named, statics) = front::front_end(file.clone(), debug_assertions, enums)?;
     if !fns.has("main") {
         return Err("no fn main in MIR".into());
     }
@@ -701,7 +714,7 @@ fn compile(
         }
     }
     let known = enums::data_enums(&mut fns, enums, no_niche)?;
-    structs::scalarize_structs(&mut fns, &file, known)?;
+    structs::scalarize_structs(&mut fns, &file, known, structs)?;
     // abs, min and their kin, which rustc calls at opt-level 1 and s: the code it inlines at 2
     for n in &names {
         methods::inline_methods(fns.get_mut(n).unwrap());
@@ -737,10 +750,13 @@ fn compile(
             .blocks
             .iter()
             .filter(|b| promise_call(&b.terminator, &promisers).is_none());
+        // (a call with no way back is one too, of a function that returns `!`, but not of a panic)
         let called = called.filter_map(|b| match &b.terminator {
-            ir::Terminator::Call {
-                func, target: Some(_), ..
-            } if func.qself.is_none() && matches!(func.segments.as_slice(), [ir::Segment::Name { args: None, .. }]) => {
+            ir::Terminator::Call { func, target, .. }
+                if func.qself.is_none()
+                    && matches!(func.segments.as_slice(), [ir::Segment::Name { args: None, .. }])
+                    && (target.is_some() || !lower::calls::never_returns(func)) =>
+            {
                 Some(func.name().to_string())
             }
             _ => None,
@@ -788,6 +804,8 @@ fn compile(
         named,
         resources: vec![],
         bool_tests: vec![],
+        statics,
+        statics_used: vec![],
     };
     struct Ready {
         name: String,
@@ -987,6 +1005,21 @@ fn compile(
         names::comments(&mut code, &shown);
         listing.extend(code);
         data.extend(cells);
+    }
+    // each static a function points into: its cells, with its first values
+    for name in &sh.statics_used {
+        let values = sh.statics.values.get(name).cloned().unwrap_or_default();
+        if let Some(v) = values.iter().find(|v| !(-999..=999).contains(*v)) {
+            return Err(format!("static {name}: {v} is past what a card holds (-999 to 999)"));
+        }
+        for (k, v) in values.iter().enumerate() {
+            let value = machine::Arg::Num(v.to_string());
+            data.push(if k == 0 {
+                Line::data_cell(&Sym::Static(name.clone()).to_string(), value)
+            } else {
+                Line::new(Kind::Dat(None, value))
+            });
+        }
     }
     let (routines, runtime_data) = runtime::runtime(&sh.pool, &sh.consts);
     listing.extend(routines);

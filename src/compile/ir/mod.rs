@@ -21,7 +21,7 @@ mod visit;
 pub mod visit_mut;
 
 pub use body::{blocks_naming, find, lines_naming, occurrences, predecessors};
-pub use file::{parse_file, parse_item_path, ConstItem, ConstValue, File, FnItem, Item, ItemPath};
+pub use file::{parse_file, parse_item_path, AllocItem, ConstItem, ConstValue, File, FnItem, Item, ItemPath, StaticItem};
 pub use function::{parse_body, parse_params, Body, Debug, Decl};
 pub use parse::{limit_on_a_card, parse_line, parse_operand, parse_path, parse_ty, ParseError};
 pub use visit::Locals;
@@ -311,9 +311,16 @@ pub enum Const {
         ty: IntTy,
     },
     Bool(bool),
+    /// A char, `'b'`.
+    Char(char),
     Unit,
     /// A string literal, as written (escapes and all).
     Str(String),
+    /// A byte string literal, `b"CARD"`: a reference to an array of its bytes.
+    Bytes(Vec<u8>),
+    /// A pointer into an allocation, `{alloc1: &[i16; 4]}`: its name and the pointer's type. A static's is the
+    /// static, which the allocation's own item names (`alloc1 (static: T, size: 8, align: 2)`).
+    Alloc(String, Ty),
     /// A named constant: `N`, `tables::SQUARES`, `i16::MIN`.
     Path(Path),
     /// A struct's value, field by field: `core::ops::Range::<i16> {{ start: 1_i16, end: 5_i16 }}`.
@@ -329,9 +336,9 @@ impl Const {
     /// A constant of one word: an integer, a bool, or a named constant (`N`, `i16::MAX`).
     pub fn is_scalar(&self) -> bool {
         match self {
-            Const::Int { .. } | Const::Bool(_) => true,
+            Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
-            Const::Unit | Const::Str(_) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
+            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
         }
     }
 }
@@ -827,8 +834,11 @@ impl fmt::Display for Const {
         match self {
             Const::Int { value, ty } => write!(f, "{value}_{ty}"),
             Const::Bool(b) => write!(f, "{b}"),
+            Const::Char(c) => write!(f, "{c:?}"),
             Const::Unit => f.write_str("()"),
             Const::Str(s) => write!(f, "\"{s}\""),
+            Const::Bytes(bs) => write!(f, "b\"{}\"", bs.escape_ascii()),
+            Const::Alloc(name, ty) => write!(f, "{{{name}: {ty}}}"),
             Const::Path(p) => write!(f, "{p}"),
             Const::Adt(p, fields) => {
                 write!(f, "{p} {{{{ ")?;

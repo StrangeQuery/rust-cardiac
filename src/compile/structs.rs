@@ -15,8 +15,8 @@
 use std::collections::HashMap;
 
 use super::ir::{
-    ArrayLen, BasicBlock, BinOp, Block, Body, BorrowKind, Const, Debug, Decl, File, IntTy, Local, Operand, Path, Place,
-    PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty,
+    ArrayLen, BasicBlock, BinOp, Block, Body, BorrowKind, Const, Debug, Decl, File, IntTy, Item, Local, Operand, Path,
+    Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty,
 };
 use super::util::Ordered;
 use super::Fail;
@@ -31,6 +31,14 @@ pub struct Function {
     pub results: Vec<Local>,
     /// a function of core's that rustc inlined here and that works in i32 (see `front::widened_in_core`)
     pub widened: Option<Path>,
+}
+
+/// A struct a crate's locals have, as the driver found it: its name, as the pass knows structs, and whether it has
+/// no fields (`struct Flag;`). A unit struct needs no cells, which the MIR can't show where nothing builds one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StructDef {
+    pub name: String,
+    pub unit: bool,
 }
 
 /// A field of a struct: its name and type.
@@ -79,15 +87,31 @@ fn indexing(p: &Projection) -> bool {
 
 /// Take every struct local apart, in every function. `file` is the whole program's MIR, where the structs not built
 /// in these functions are found too; `known` are structs given with their fields (the enums with data, as
-/// `enums::data_enums` writes them).
+/// `enums::data_enums` writes them); `structs` the structs the driver found, of which a unit struct has no fields.
 pub fn scalarize_structs(
     fns: &mut Ordered<String, Function>,
     file: &File,
     known: Vec<(String, Vec<Field>)>,
+    structs: &[StructDef],
 ) -> Result<(), Fail> {
     // the structs: their fields in declaration order, from the aggregates that build them
     shared_scalar_refs_by_value(fns);
     let mut layouts: HashMap<String, Vec<Field>> = known.into_iter().collect();
+    // a unit struct is no cells, and its value (`const Flag`) none: unless a struct or a const of the same name
+    // has some, as the pass knows structs by name
+    let consts: Vec<&str> = file
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Const(c) => c.path.segments.last().map(String::as_str),
+            _ => None,
+        })
+        .collect();
+    for s in structs.iter().filter(|s| s.unit) {
+        if !structs.iter().any(|t| t.name == s.name && !t.unit) && !consts.contains(&s.name.as_str()) {
+            layouts.entry(s.name.clone()).or_default();
+        }
+    }
     layouts.extend(tuples_as_structs(fns));
     let mut learn = |p: &Path, names: Vec<&String>| {
         if !plain_path(p) {
@@ -606,6 +630,13 @@ fn tuples_as_structs(fns: &mut Ordered<String, Function>) -> Vec<(String, Vec<Fi
             }
             let n = match t {
                 Ty::Tuple(ts) => ts.len(),
+                // a reference to one: to the struct, which a shared reference is by value
+                Ty::Ref { to, .. } => {
+                    if let Some(s) = strukt(to) {
+                        **to = s;
+                    }
+                    return;
+                }
                 _ => return,
             };
             if let Some(s) = strukt(t) {
@@ -896,12 +927,19 @@ fn ops_of(o: &Operand, fields: &Ordered<Local, Split>, shapes: &Shapes) -> Optio
             )
         }
         Operand::Aggregate(p, fs) if plain_path(p) => built(p, fs.iter().map(|(_, o)| o.clone()), fields, shapes),
+        // a unit struct's value
+        Operand::Constant(Const::Path(p)) if p.segments.len() == 1 && unit(p, shapes) => Some(vec![]),
         // a struct literal rustc folded into one constant: its fields' constants
         Operand::Constant(Const::Adt(p, fs)) if plain_path(p) => {
             built(p, fs.iter().map(|(_, c)| Operand::Constant(c.clone())), fields, shapes)
         }
         _ => None,
     }
+}
+
+/// Is it the path of a struct with no cells, a unit struct?
+fn unit(p: &Path, shapes: &Shapes) -> bool {
+    plain_path(p) && shapes.layouts.get(&struct_name(p)).is_some_and(|l| l.is_empty())
 }
 
 /// A struct built of its fields' values as one operand per leaf: each field that is a struct, its own leaves.
@@ -939,6 +977,8 @@ fn rvalue_ops(r: &Rvalue, fields: &Ordered<Local, Split>, shapes: &Shapes) -> Op
                 .map(Rvalue::Use)
                 .collect(),
         ),
+        // a unit struct's value, `Flag`, which MIR prints as it prints a unit variant: nothing to write
+        Rvalue::Variant(p, ops) if ops.is_empty() && unit(p, shapes) => Some(vec![]),
         Rvalue::Ref(kind @ BorrowKind::Mut, p) => match resolve(p, fields, shapes)? {
             At::Whole(ps) => Some(ps.into_iter().map(|q| Rvalue::Ref(*kind, q)).collect()),
             At::Leaf(_) => None,

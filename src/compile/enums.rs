@@ -354,12 +354,13 @@ fn comparison(op: BinOp) -> bool {
 }
 
 /// What a variant's field takes: a cell of its type, the cells of an enum with data (its layout's, by index), or
-/// none, for a type with no values (`Infallible`, in what `?` builds).
+/// none, for a type with no values (`Infallible`, in what `?` builds) or with one (`()`, in `Option<()>`).
 #[derive(Clone, Debug)]
 enum Kind {
     Cell(Ty),
     Enum(usize),
     Never,
+    Unit,
 }
 
 /// A variant in its enum's cells: its number, and where each of its fields starts and what it takes.
@@ -553,7 +554,7 @@ impl Enums<'_> {
                             ty: f.ty.clone(),
                         })
                         .collect(),
-                    Kind::Never => vec![],
+                    Kind::Never | Kind::Unit => vec![],
                 };
                 let n = cells.len() as u32;
                 // the first run of cells of these types that no earlier field of the variant has, else new ones
@@ -624,6 +625,9 @@ impl Enums<'_> {
     fn kind(&mut self, t: &Ty) -> Result<Kind, Option<Fail>> {
         if let Some(t) = self.scalar(t) {
             return Ok(Kind::Cell(t));
+        }
+        if *t == Ty::Unit {
+            return Ok(Kind::Unit);
         }
         if let Ty::Array(e, n @ ArrayLen::Known(_)) = t {
             let e = self.scalar(e).ok_or(None)?;
@@ -984,7 +988,9 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
         |to: &Place, at: u32, l: usize, o: &Operand, line: &dyn std::fmt::Display| -> Result<Vec<Statement>, Fail> {
             match o {
                 Operand::Constant(Const::Path(p)) => match enums.variant(p) {
-                    Some((vl, (value, at_k))) if vl == l && at_k.iter().all(|(_, k)| matches!(k, Kind::Never)) => {
+                    Some((vl, (value, at_k)))
+                        if vl == l && at_k.iter().all(|(_, k)| matches!(k, Kind::Never | Kind::Unit)) =>
+                    {
                         Ok(set_tag(to, at, l, *value))
                     }
                     _ => Err(format!(
@@ -1022,7 +1028,7 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
                                 out.push(Statement::Assign(d, Rvalue::Use(o.clone())));
                             }
                             Kind::Enum(j) => out.extend(write_op(to, at + start, *j, o, line)?),
-                            Kind::Never => {}
+                            Kind::Never | Kind::Unit => {}
                         }
                     }
                     if !at_k.is_empty() {
@@ -1042,6 +1048,11 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
     let built = |rv: &Rvalue| match rv {
         Rvalue::Use(Operand::Constant(Const::Variant(p, cs))) => {
             Rvalue::Variant(p.clone(), cs.iter().cloned().map(Operand::Constant).collect())
+        }
+        // a variant with named fields built, `Shape::Rect { w: copy _2, h: copy _3 }`: the same, its fields in the
+        // order they are declared (as rustc gives them, and as the cells are laid out)
+        Rvalue::Struct(p, fs) if enums.variant(p).is_some() => {
+            Rvalue::Variant(p.clone(), fs.iter().map(|(_, o)| o.clone()).collect())
         }
         rv => rv.clone(),
     };
@@ -1577,6 +1588,8 @@ fn resolve(p: &Place, types: &HashMap<Local, Ty>, enums: &Enums) -> Result<Resol
                 }
                 Kind::Enum(j) => within = Some((w.clone(), at + start, *j)),
                 Kind::Never => return Err(format!("{p}: a field of a type with no values")),
+                // (rustc writes `const ()` where a `()` is used, so the MIR has no reason to read one)
+                Kind::Unit => return Err(format!("{p}: a field of type ()")),
             }
             i += 2;
             continue;

@@ -234,8 +234,16 @@ impl<'a> Lowering<'a> {
                 let b = self.operand(y)?;
                 let b = self.mat(b);
                 let plain = crate::compile::ranges::unwrapped(*op);
+                let ty = self.place_ty(dest);
+                // a product the accumulator holds (9999 at most): a u8's or an i8's by a constant to 39
+                let held = |o: &ir::Operand| o.int().is_some_and(|(k, _)| (-39..=39).contains(&k));
+                if plain == BinOp::Mul && !(held(x) || held(y)) {
+                    fail!("a wrapping * of two values that can pass what the accumulator holds is not supported: {src}")
+                }
                 self.arith_acc(plain, a, b, None, src)?;
-                if self.place_ty(dest) == Some(Ty::Int(IntTy::Usize)) {
+                if ty == Some(Ty::Int(IntTy::I8)) {
+                    self.wrap_i8();
+                } else if ty == Some(Ty::Int(IntTy::Usize)) {
                     // a usize below 0 is one past a card, which only a local that can hold one does (as it is)
                     if !dest.as_local().is_some_and(|l| self.huge.contains(&l)) {
                         self.past_a_card("a usize past a card");
@@ -253,6 +261,10 @@ impl<'a> Lowering<'a> {
                 self.emit_c(Op::Cla, z, src);
                 let x = self.arith(&a)?;
                 self.emit(Op::Sub, x);
+                if self.place_ty(dest) == Some(Ty::Int(IntTy::I8)) {
+                    // -(-128) wraps to -128 in an i8 (overflow checks off: on, rustc's assert comes first)
+                    self.wrap_i8();
+                }
                 self.store(&dst, "")
             }
             Rvalue::UnaryOp(UnOp::Not, x) => {
@@ -397,6 +409,7 @@ impl<'a> Lowering<'a> {
                 };
                 let fits = match to {
                     IntTy::U8 => (0..=255).contains(&v),
+                    IntTy::I8 => (-128..=127).contains(&v),
                     IntTy::Usize => (0..=999).contains(&v),
                     _ => (-999..=999).contains(&v),
                 };
@@ -543,13 +556,26 @@ impl<'a> Lowering<'a> {
             self.emit(Op::Jmp, lp);
             self.define(&done);
             self.emit(Op::Add, k);
-        } else if to == Some(IntTy::Usize) && (from == Some(IntTy::I16) || huge) {
+        } else if to == Some(IntTy::I8) && from != Some(IntTy::I8) {
+            // `as i8` keeps the value mod 256, as Rust does, from -128 to 127: a usize past a card is held below 0,
+            // as the value it is mod 256
+            self.wrap_i8();
+        } else if from == Some(IntTy::I8) && to == Some(IntTy::U8) {
+            // a negative i8 is 256 more as a u8
+            let (up, done) = (self.fresh("cast"), self.fresh("d"));
+            let k = self.konst(256);
+            self.emit(Op::Tac, up.clone());
+            self.emit(Op::Jmp, done.clone());
+            self.define(&up);
+            self.emit(Op::Add, k);
+            self.define(&done);
+        } else if to == Some(IntTy::Usize) && (matches!(from, Some(IntTy::I16 | IntTy::I8)) || huge) {
             // a negative i16 is a usize past a card in Rust (-1 is usize::MAX): held below 0 as it is, in a local
             // that can hold one, else past a card (see ranges::huge_usizes)
             if !dest.as_local().is_some_and(|l| self.huge.contains(&l)) {
                 self.past_a_card("as usize: a usize past a card");
             }
-        } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I16)) {
+        } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I8 | IntTy::I16)) {
             fail!("unsupported cast: {src}")
         }
         self.store(&dst, src)

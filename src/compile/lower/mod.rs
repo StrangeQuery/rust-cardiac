@@ -72,6 +72,9 @@ pub struct Shared {
     /// each test of a bool kept in a cell (`CLA b / SUB 00 / TAC`), by the variable's name where it has one: what
     /// `cardiac::Flag` would make an instruction less
     pub bool_tests: Vec<Option<String>>,
+    /// the program's statics, and those a function points into, in the order they are first used
+    pub statics: super::front::Statics,
+    pub statics_used: Vec<String>,
 }
 
 impl Shared {
@@ -318,8 +321,8 @@ impl<'a> Lowering<'a> {
             results: HashSet::new(),
         };
         for (&local, ty) in locals.iter() {
-            if *ty == Ty::Unit {
-                continue; // unit values need no cell
+            if *ty == Ty::Unit || *ty == Ty::Never {
+                continue; // unit values need no cell, nor does `!`, which has none
             }
             // an overflow-checked pair's type says how its op is checked, wherever its cells are
             if let Some(width) = overflow_pair(ty) {
@@ -332,15 +335,19 @@ impl<'a> Lowering<'a> {
                 continue; // a parameter in the cell it is passed on in
             }
             // One cell holds a u8, an i16 (a card value, panicking past +-999), a bool, a usize (an index, panicking
-            // above 999), or a reference or raw pointer, which is a cell address 00-99.
-            let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16));
-            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I16) | Ty::Bool);
+            // above 999), or a reference or raw pointer, which is a cell address 00-99. An array's element is one of
+            // them too, but a usize past a card: only a local holds one (`ranges::huge_usizes`), and storing one
+            // anywhere else panics.
+            let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16));
+            let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
             let one_cell = match ty {
-                Ty::Int(IntTy::U8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
+                Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
                 Ty::Ref { lifetime: None, to, .. } => {
                     card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
                 }
-                Ty::Ptr { to, .. } => card(to),
+                Ty::Ptr { to, .. } => {
+                    card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
+                }
                 _ => false,
             };
             if one_cell {
@@ -559,9 +566,13 @@ impl<'a> Lowering<'a> {
         self.fused_flags.clear();
         let entry = BasicBlock(0);
         let bb0_targeted = self.blocks.iter().any(|b| b.terminator.names(entry));
+        // a function that returns `!` has no way back to keep
+        let returns = self.func != "main" && self.callees.sigs.get(&self.func).is_none_or(|s| s.ret != Ty::Never);
         if self.func != "main" {
+            self.define(&Sym::Entry(self.func.clone()));
+        }
+        if returns {
             let f = self.func.clone();
-            self.define(&Sym::Entry(f.clone()));
             self.emit_c(
                 Op::Cla,
                 Operand::CELL_99,
@@ -705,7 +716,7 @@ impl<'a> Lowering<'a> {
                     .map_err(|e| self.at(e, t.to_string().trim_end_matches(';')))?;
             }
         }
-        if self.func != "main" {
+        if returns {
             let exit = Sym::Exit(self.func.clone());
             let mut exit = Line::data_cell(&exit.to_string(), Arg::Num("0".into()));
             exit.note("becomes JMP back to the caller");
@@ -770,7 +781,7 @@ impl<'a> Lowering<'a> {
 fn overflow_pair(ty: &Ty) -> Option<IntTy> {
     match ty {
         Ty::Tuple(ts) if ts.len() == 2 && ts[1] == Ty::Bool => match ts[0] {
-            Ty::Int(w @ (IntTy::U8 | IntTy::I16 | IntTy::Usize)) => Some(w),
+            Ty::Int(w @ (IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize)) => Some(w),
             _ => None,
         },
         _ => None,

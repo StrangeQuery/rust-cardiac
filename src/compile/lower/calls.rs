@@ -137,6 +137,25 @@ impl<'a> Lowering<'a> {
                 return Ok(());
             }
         }
+        // a call of the program's own function that returns `!` (`fn fail() -> !`): its arguments passed and the
+        // jump, with no way back
+        if let Terminator::Call {
+            func,
+            args,
+            target: None,
+            unwind,
+            ..
+        } = t
+        {
+            let callee = func.to_string();
+            let never = self.callees.sigs.get(&callee).is_some_and(|s| s.ret == Ty::Never);
+            if plain_unwind(unwind) && is_word(&callee) && never {
+                self.pass_args(&callee, args, &line)?;
+                let entry = Sym::Entry(callee.clone());
+                self.emit_c(Op::Jmp, entry, &format!("call {callee}, which never returns"));
+                return Ok(());
+            }
+        }
         let Terminator::Call {
             dest,
             func,
@@ -366,41 +385,8 @@ impl<'a> Lowering<'a> {
         let Some(sig) = self.callees.sigs.get(&callee) else {
             fail!("call to unknown function {callee}")
         };
-        let params = sig.params.clone();
-        let widths = sig.widths.clone();
         let returns = sig.ret != Ty::Unit;
-        if args.len() != params.len() {
-            fail!(
-                "call to {callee} with {} arguments, expected {}",
-                args.len(),
-                params.len()
-            )
-        }
-        for (i, a) in args.iter().enumerate() {
-            let o = self.operand(a)?;
-            let c = if i == 0 {
-                line[..line.find(" -> ").unwrap()].to_string()
-            } else {
-                String::new()
-            };
-            let to = self.callees.home(Sym::local(&callee, params[i]));
-            if widths[i] > 1 {
-                // an array passed by value: every element copied into the parameter's cells
-                let Value::At(Cell {
-                    sym: from,
-                    offset: None,
-                }) = o
-                else {
-                    fail!("call to {callee}: an array passed by value must be a local array; pass it by reference, `&[T; N]`")
-                };
-                for k in 0..widths[i] as u32 {
-                    self.emit_c(Op::Cla, Cell::element(&from, k), if k == 0 { &c } else { "" });
-                    self.emit(Op::Sto, Cell::element(&to, k));
-                }
-                continue;
-            }
-            self.pass(&o, &to, &c)?;
-        }
+        self.pass_args(&callee, args, &line)?;
         let entry = Sym::Entry(callee.clone());
         self.emit_c(
             Op::Jmp,
@@ -427,6 +413,48 @@ impl<'a> Lowering<'a> {
             }
         }
         self.emit(Op::Jmp, back);
+        Ok(())
+    }
+
+    /// A call's arguments, each into its parameter's cell (`line` is the call, for the first one's comment).
+    fn pass_args(&mut self, callee: &str, args: &[ir::Operand], line: &str) -> Result<(), Fail> {
+        let Some(sig) = self.callees.sigs.get(callee) else {
+            fail!("call to unknown function {callee}")
+        };
+        let params = sig.params.clone();
+        let widths = sig.widths.clone();
+        if args.len() != params.len() {
+            fail!(
+                "call to {callee} with {} arguments, expected {}",
+                args.len(),
+                params.len()
+            )
+        }
+        for (i, a) in args.iter().enumerate() {
+            let o = self.operand(a)?;
+            let c = if i == 0 {
+                line[..line.find(" -> ").unwrap()].to_string()
+            } else {
+                String::new()
+            };
+            let to = self.callees.home(Sym::local(callee, params[i]));
+            if widths[i] > 1 {
+                // an array passed by value: every element copied into the parameter's cells
+                let Value::At(Cell {
+                    sym: from,
+                    offset: None,
+                }) = o
+                else {
+                    fail!("call to {callee}: an array passed by value must be a local array; pass it by reference, `&[T; N]`")
+                };
+                for k in 0..widths[i] as u32 {
+                    self.emit_c(Op::Cla, Cell::element(&from, k), if k == 0 { &c } else { "" });
+                    self.emit(Op::Sto, Cell::element(&to, k));
+                }
+                continue;
+            }
+            self.pass(&o, &to, &c)?;
+        }
         Ok(())
     }
 }

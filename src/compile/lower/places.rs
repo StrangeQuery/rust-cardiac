@@ -55,6 +55,7 @@ impl Value {
 pub(super) fn range_of(ty: IntTy) -> Option<(i64, i64)> {
     match ty {
         IntTy::U8 => Some((0, 255)),
+        IntTy::I8 => Some((-128, 127)),
         IntTy::Usize => Some((0, 999)),
         IntTy::I16 => Some((-999, 999)),
         _ => None,
@@ -212,7 +213,7 @@ impl<'a> Lowering<'a> {
             match c {
                 Const::Int {
                     value,
-                    ty: ty @ (IntTy::U8 | IntTy::Usize | IntTy::I16),
+                    ty: ty @ (IntTy::U8 | IntTy::I8 | IntTy::Usize | IntTy::I16),
                 } => {
                     let v = *value as i64;
                     let (lo, hi) = range_of(*ty).unwrap();
@@ -225,6 +226,17 @@ impl<'a> Lowering<'a> {
                         )
                     }
                     return Ok(Value::Const(v));
+                }
+                // a static's address: the cell holding it, a constant (see `front::Statics`)
+                Const::Alloc(alloc, _) => {
+                    let Some(name) = self.sh.statics.of_alloc.get(alloc).cloned() else {
+                        fail!("unsupported place {c}: a pointer into memory this backend doesn't have (a static's is, when its first value is a literal of numbers or bools)")
+                    };
+                    if !self.sh.statics_used.contains(&name) {
+                        self.sh.statics_used.push(name.clone());
+                    }
+                    let a = self.addr(Cell::from(Sym::Static(name)));
+                    return Ok(Value::At(Cell::from(a)));
                 }
                 // a comparison with one is settled before lowering (`settled_by_the_card`): what is left is the value
                 Const::Path(p) if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]) => {
