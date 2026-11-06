@@ -19,3 +19,19 @@
   arm. No test program or example changed. Still refused: `partial_cmp` at opt-level 1 (it builds an
   `Option<Ordering>` in a way the enum pass refuses), and the derived `Ord` and `PartialOrd` methods rustc calls
   at opt-level 1 for a C-like enum (`<Lvl as Ord>::max`, `<Lvl as PartialOrd>::lt`), whose bodies are not compiled.
+
+## 2026-11-05 · `i16 as u8` wraps as Rust's does; a usize compared with a constant past a card
+
+- **Decision.** `x as u8` of an i16 is x mod 256, as Rust's two's complement gives it: a negative x is raised by
+  256s, then the value lowered by 256s until it is below 0 and raised once (the code `usize as u8` already had for
+  a usize past a card). Where the range pass knows x is 0..=255 the cast is a copy. The cast now takes the type of
+  what it casts from the place, so an array's element or what a reference points to is cast by its type: before,
+  `t[i] as u8` of an i16 element was stored as it was (-1 stayed -1, #139). A usize compared with a constant k
+  past a card (1000 up to 2^64 - 1000), as rustc's inlined `i16::try_from(n)` tests `n > 32767`, is compared with
+  999: a usize on a card is at most 999, and one past a card, held below 0, is above every k.
+- **Why.** `i16 as u8` was refused, and so `u8::try_from` of an i16 at opt-level 2 (the range check, then the
+  cast), and every row that has to read its u8s from a table; `i16::try_from` of a usize at opt-level 2 was refused
+  for its constant.
+- **Cost.** A cast the range pass can't settle is about 12 instructions and a pass of a three-instruction loop
+  per 256 (at most four). `TryFrom` at opt-level 1, where rustc calls `try_from`, is still refused: the call
+  builds a `Result` whose `Err` holds a `TryFromIntError`, a struct the enum pass has no cells for.

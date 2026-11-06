@@ -57,6 +57,7 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     file.visit(&mut TupleStructConsts(enums));
     file.visit(&mut I32IsI16);
     file.visit(&mut PastACardDivisor);
+    file.visit(&mut PastACardBound);
     file.visit(&mut StdIsCore);
     file.visit(&mut OffsetIsAdd);
     let named = scalar_consts(&file)?;
@@ -392,6 +393,36 @@ impl VisitMut for PastACardDivisor {
                 };
             }
         }
+    }
+}
+
+/// A usize compared with a constant k past a card, as rustc's inlined `i16::try_from(n)` tests `n > 32767`: a usize
+/// on a card is at most 999 and one past a card (held below 0, `ranges::huge_usizes`) is above 2^64 - 1000, so
+/// `x > k` and `x >= k` are `x > 999`, and `x < k` and `x <= k` are `x <= 999`, for any k between, and the
+/// constant needs no cell.
+struct PastACardBound;
+
+impl VisitMut for PastACardBound {
+    fn visit_rvalue(&mut self, r: &mut Rvalue) {
+        walk_rvalue(self, r);
+        let Rvalue::BinaryOp(op @ (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), a, b) = r else {
+            return;
+        };
+        let between = |o: &Operand| {
+            matches!(o, Operand::Constant(Const::Int { value, ty: IntTy::Usize })
+                if (1000..(1i128 << 64) - 1000).contains(value))
+        };
+        // x op k, the constant on the right
+        let (x, above) = match (between(a), between(b)) {
+            (false, true) => (a.clone(), matches!(op, BinOp::Gt | BinOp::Ge)),
+            (true, false) => (b.clone(), matches!(op, BinOp::Lt | BinOp::Le)),
+            _ => return,
+        };
+        let card = Operand::Constant(Const::Int {
+            value: 999,
+            ty: IntTy::Usize,
+        });
+        *r = Rvalue::BinaryOp(if above { BinOp::Gt } else { BinOp::Le }, x, card);
     }
 }
 

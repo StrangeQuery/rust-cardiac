@@ -500,17 +500,20 @@ impl<'a> Lowering<'a> {
             Some(Ty::Int(i)) => Some(*i),
             _ => None,
         };
+        // the type of what is cast: a local's, a field's, an element's, what a reference points to
         let from = match p.projection.as_slice() {
             [Projection::Field(_, t)] => int(Some(t)),
-            _ => int(p.as_local().and_then(|l| self.locals.get(&l))),
+            _ => int(self.place_ty(p).as_ref()),
         };
         let to = int(Some(to));
         let v = self.operand(&ir::Operand::Place(p.clone()))?;
         self.load(&v)?;
         let huge = self.is_huge(&ir::Operand::Copy(p.clone()));
-        if to == Some(IntTy::U8) && from == Some(IntTy::Usize) {
-            // `as u8` keeps the value mod 256, as Rust does: a usize past a card, 2^64 - k held as -k, has -k's
-            if huge {
+        if to == Some(IntTy::U8) && matches!(from, Some(IntTy::Usize | IntTy::I16)) {
+            // `as u8` keeps the value mod 256, as Rust does: a negative i16 is raised by 256s first, and so is a
+            // usize past a card, 2^64 - k held as -k, which has -k's (where the range pass knows the value is
+            // 0..=255 already, it made the cast a copy)
+            if huge || from == Some(IntTy::I16) {
                 let (up, back, ok) = (self.fresh("cast"), self.fresh("cast"), self.fresh("d"));
                 let k = self.konst(256);
                 self.define(&up);
@@ -535,8 +538,6 @@ impl<'a> Lowering<'a> {
             if !dest.as_local().is_some_and(|l| self.huge.contains(&l)) {
                 self.past_a_card("as usize: a usize past a card");
             }
-        } else if to == Some(IntTy::U8) && from == Some(IntTy::I16) {
-            fail!("i16 as u8 is not supported (it wraps): {src}")
         } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I16)) {
             fail!("unsupported cast: {src}")
         }
