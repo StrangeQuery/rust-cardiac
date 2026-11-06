@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
+use std::sync::Mutex;
 
 use cargo_cardiac::cargo::{self, packages, Package, Target};
 use cargo_cardiac::codes::{self, Diag};
@@ -53,9 +54,10 @@ Usage:
       `{t} debug --help` says them.
   {t} asm [OPTION]... FILE
       Assemble a listing into a deck: carc, with carc's options. `{t} asm --help` says them.
-  {t} explain CODE
+  {t} explain [--open] CODE
       What a code in a message means, as `rustc --explain` says it: error[RCE0002] is explained by
-      `{t} explain RCE0002`. Each is on the web too, at {codes_page}CODE/.
+      `{t} explain RCE0002`. Each is on the web too, at {codes_page}CODE/, which --open opens in your
+      browser.
       `{t} explain --json` gives every code, its kind, title, messages and explanation, as JSON.
   {t} --version
       Which cargo-cardiac this is.
@@ -189,10 +191,7 @@ impl Message<'_> {
             Message::Compiled(b) => b.line(),
             Message::Note { deck, resource, file } => codes::resource_empty(deck, resource, file.display()).to_string(),
             Message::Advice { file, said } => (*said).clone().at(file).to_string(),
-            Message::Failed(e) => match e.more() {
-                Some(more) => format!("{e}\n{more}"),
-                None => e.to_string(),
-            },
+            Message::Failed(e) => e.to_string(),
             Message::Error { why, usage: false } => format!("error: {why}"),
             Message::Error { why, usage: true } => format!("error: {why}\n\n{}", usage()),
         }
@@ -243,10 +242,30 @@ impl Message<'_> {
     }
 }
 
+/// The codes of the errors and warnings said for a person, for `more_information` to say where they are explained.
+static SAID: Mutex<Vec<&'static codes::Code>> = Mutex::new(vec![]);
+
 /// Say a message on standard error, in the format asked for, if the verbosity is at its level.
 fn tell(m: Message) {
-    if verbosity() >= m.level() {
-        eprintln!("{}", if json() { m.json().to_string() } else { m.text() })
+    if verbosity() < m.level() {
+        return;
+    }
+    if json() {
+        eprintln!("{}", m.json());
+        return;
+    }
+    eprintln!("{}", m.text());
+    if let Message::Failed(said) | Message::Advice { said, .. } = m {
+        SAID.lock().unwrap().extend(said.codes());
+    }
+}
+
+/// After a build, run, view or test: where the codes of its errors and warnings are explained, as rustc's last
+/// lines say, for a person (not in JSON, and not with -q).
+fn more_information() {
+    let said = std::mem::take(&mut *SAID.lock().unwrap());
+    if let Some(more) = codes::more_information(&said).filter(|_| verbosity() >= 0) {
+        eprintln!("{more}");
     }
 }
 
@@ -266,12 +285,14 @@ fn say(m: Message) {
 
 fn die(e: String) -> ! {
     tell(Message::Error { why: &e, usage: false });
+    more_information();
     std::process::exit(1)
 }
 
 /// Stop, saying why the program can't be built.
 fn fail(e: Diag) -> ! {
     tell(Message::Failed(&e));
+    more_information();
     std::process::exit(1)
 }
 
@@ -699,18 +720,29 @@ fn main() {
     ExitCode::SUCCESS
 }
 
-/// `cargo cardiac explain CODE`: what a code means, as `rustc --explain` says it; `--json`, every code, for the
-/// website's pages of them.
+/// `cargo cardiac explain CODE`: what a code means, as `rustc --explain` says it; with `--open`, the code's page in
+/// the browser; `--json`, every code, for the website's pages of them.
 fn explain(args: &[String]) -> ExitCode {
-    match args {
-        [json] if json == "--json" => println!("{:#}", codes::table_json()),
+    let open = args.iter().any(|a| a == "--open");
+    let rest: Vec<&String> = args.iter().filter(|a| *a != "--open").collect();
+    match rest.as_slice() {
+        [json] if *json == "--json" && !open => println!("{:#}", codes::table_json()),
         [id] if !id.starts_with('-') => match codes::find(id) {
+            Some(c) if open => {
+                let url = format!("{}{}/", codes::PAGE, c.id);
+                if !open_in_browser(&url) {
+                    eprintln!("note: no browser opened; the address is below");
+                }
+                println!("{url}");
+            }
             Some(c) => print!("{}", c.explanation),
             None => die(format!(
                 "{id} is not a cargo-cardiac code: they are RCE, RCW or RCI and four digits"
             )),
         },
-        _ => bad_usage("explain takes one CODE, RCE0002 say, or --json for all of them"),
+        _ => bad_usage(
+            "explain takes one CODE, RCE0002 say (with --open, its page in the browser), or --json for all of them",
+        ),
     }
     ExitCode::SUCCESS
 }
@@ -719,6 +751,7 @@ fn explain(args: &[String]) -> ExitCode {
 fn run(a: &Args) -> ExitCode {
     QUIET_STDOUT.store(true, Ordering::Relaxed);
     let b = built_one(a, "run", Emit::default());
+    more_information();
     let mut args = vec![b.deck_file.clone()];
     if let Some(input) = &a.input {
         args.push("--".into());
@@ -768,6 +801,7 @@ const CARDIGAN: &str = "https://lab.strangequery.com/cardigan/ide/";
 fn view(a: &Args) -> ExitCode {
     let emit = Emit { deck: true, listing: true, map: true, asm: false };
     let b = built_one(a, "view", emit);
+    more_information();
     let deck = Path::new(&b.deck_file);
     let name = deck.file_stem().and_then(|s| s.to_str()).unwrap_or("program").to_string();
     let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_else(|e| die(format!("{}: {e}", p.display())));
@@ -786,18 +820,23 @@ fn view(a: &Args) -> ExitCode {
     let fragment: Vec<String> = q.iter().map(|(k, v)| format!("{k}={}", percent(v))).collect();
     let url = format!("{base}#{}", fragment.join("&"));
     eprintln!("     Opening {} in Cardigan", b.file);
-    let opener = if cfg!(target_os = "macos") {
-        std::process::Command::new("open").arg(&url).status()
-    } else if cfg!(windows) {
-        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(&url).status()
-    } else {
-        std::process::Command::new("xdg-open").arg(&url).status()
-    };
-    if !opener.is_ok_and(|s| s.success()) {
+    if !open_in_browser(&url) {
         eprintln!("note: no browser opened; the address is below");
     }
     println!("{url}");
     ExitCode::SUCCESS
+}
+
+/// Open an address in the browser, as the system's own command does: whether it did.
+fn open_in_browser(url: &str) -> bool {
+    let opener = if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(url).status()
+    } else if cfg!(windows) {
+        std::process::Command::new("cmd").args(["/C", "start", ""]).arg(url).status()
+    } else {
+        std::process::Command::new("xdg-open").arg(url).status()
+    };
+    opener.is_ok_and(|s| s.success())
 }
 
 /// `s` for the address: letters, digits and `-_.~` as they are, every other byte as %XX.
@@ -899,10 +938,12 @@ fn main() -> ExitCode {
             for f in &a.files {
                 build_single(f, &a.rustc, a.auto_overlay, a.emit);
             }
+            more_information();
             update_note();
         }
         "build" => {
             build(&pkgs(), &a.bins, profile, a.emit);
+            more_information();
             update_note();
         }
         "run" => {
@@ -942,6 +983,7 @@ fn main() -> ExitCode {
                     &input,
                 );
             }
+            more_information();
         }
         // a command that is gone
         "cardiasm" => die(format!("cargo {TOOL} cardiasm is gone")),
