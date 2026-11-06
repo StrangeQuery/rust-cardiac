@@ -8,12 +8,14 @@
 //!   d = o.is_lt()          d = o < Equal (and so for is_le, is_gt, is_ge, is_eq, is_ne)
 //!   d = a.then(b)          if a == Equal { b } else { a }
 //!   d = o.reverse()        d = Cmp(Equal, o)
+//! Where the number of a `Cmp` is only compared with 0, the `Cmp` is that comparison of its two sides
+//! (`compared_cmps`), with no `Ordering` made.
 //! `Cmp` is two tests, not a subtraction and its sign: a - b may be past a card.
 use super::front::{local_types, place_ty};
 use super::ir::visit_mut::{walk_path, VisitMut};
 use super::ir::{
-    BinOp, Block, Body, Const, File, GenericArg, GenericArgs, Item, Local, Operand, Path, Place, Projection, Rvalue,
-    Segment, Statement, Terminator, Ty, Unwind,
+    occurrences, BinOp, Block, Body, Const, File, GenericArg, GenericArgs, Item, Local, Locals, Operand, Path, Place,
+    Projection, Rvalue, Segment, Statement, Terminator, Ty, Unwind,
 };
 use super::methods::Gains;
 
@@ -92,6 +94,71 @@ fn first_cmp(blocks: &[Block]) -> Option<(usize, usize)> {
     })
 }
 
+/// `d = Cmp(a, b); x = discriminant(d); t = op(move x, const 0)` in one block, where nothing else names d or x and
+/// nothing in between writes a or b, is `t = op(a, b)`: `Less`, `Equal` and `Greater` are -1, 0 and 1, so the
+/// number is below, at or above 0 as a is below, at or above b. rustc leaves this where it inlines a `<` of a type
+/// whose `partial_cmp` compares integers (`self.0.abs().partial_cmp(&o.0.abs())`), and the `Ordering` would be two
+/// tests and three stores before the test of it.
+fn compared_cmps(blocks: &mut [Block]) {
+    // a line the IR doesn't model may write anything
+    let writes = |s: &Statement, l: Local| match s {
+        Statement::Assign(p, _) => p.base_local() == Some(l),
+        Statement::StorageLive(x) | Statement::StorageDead(x) => *x == l,
+        Statement::Unsupported(_) => true,
+        _ => false,
+    };
+    let whole = |o: &Operand| match o {
+        Operand::Copy(p) | Operand::Move(p) => p.as_local().map(Some),
+        Operand::Constant(_) => Some(None),
+        _ => None,
+    };
+    for at in 0..blocks.len() {
+        let mut i = 0;
+        while i < blocks[at].statements.len() {
+            let found = (|| {
+                let ss = &blocks[at].statements;
+                let Statement::Assign(d, Rvalue::BinaryOp(BinOp::Cmp, a, b)) = &ss[i] else {
+                    return None;
+                };
+                let d = d.as_local()?;
+                let sides: Vec<Local> = [whole(a)?, whole(b)?].into_iter().flatten().collect();
+                let j = i + 1 + ss[i + 1..].iter().position(|s| s.mentions(d))?;
+                let Statement::Assign(x, Rvalue::Discriminant(p)) = &ss[j] else {
+                    return None;
+                };
+                let x = x.as_local().filter(|_| p.as_local() == Some(d))?;
+                let k = j + 1 + ss[j + 1..].iter().position(|s| s.mentions(x))?;
+                let Statement::Assign(t, Rvalue::BinaryOp(op, Operand::Copy(y) | Operand::Move(y), zero)) = &ss[k]
+                else {
+                    return None;
+                };
+                let compares = matches!(
+                    op,
+                    BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne
+                );
+                let zero = matches!(zero, Operand::Constant(Const::Int { value: 0, .. }));
+                let written = ss[i + 1..k].iter().any(|s| sides.iter().any(|&l| writes(s, l)));
+                let only = occurrences(blocks, d) == 2 && occurrences(blocks, x) == 2;
+                (compares && zero && y.as_local() == Some(x) && !written && only).then(|| {
+                    (
+                        j,
+                        k,
+                        Statement::Assign(t.clone(), Rvalue::BinaryOp(*op, copied(a), copied(b))),
+                    )
+                })
+            })();
+            if let Some((j, k, folded)) = found {
+                let ss = &mut blocks[at].statements;
+                ss[k] = folded;
+                ss.remove(j);
+                ss.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+    }
+}
+
 /// Every `Cmp`, `<T as Ord>::cmp` on an integer, and call to an `Ordering` method in the file becomes its tests.
 pub fn three_way_compares(file: &mut File) {
     for item in &mut file.items {
@@ -161,6 +228,7 @@ fn compares_in(params: &[(Local, Ty)], body: &mut Body) {
     }
     let gained = std::mem::take(&mut gains.blocks);
     body.blocks.extend(gained);
+    compared_cmps(&mut body.blocks);
     // then each `Cmp`, its block split in two: the statements after it go on in a block of their own
     while let Some((at, i)) = first_cmp(&body.blocks) {
         let types = local_types(params, &body.decls);
@@ -241,6 +309,22 @@ mod tests {
                 "switchInt(move _6) -> [0: bb5, otherwise: bb4];",
             ]
         );
+    }
+
+    #[test]
+    fn a_cmp_only_compared_with_0_is_that_comparison() {
+        let text = |tail: &str| {
+            format!(
+                "let mut _0: bool;\n let _1: i16;\n let _2: i16;\n let mut _3: core::cmp::Ordering;\n let mut _4: i8;\n bb0: {{\n _3 = Cmp(move _1, move _2);\n _4 = discriminant(_3);\n _0 = Lt(move _4, const 0_i8);\n {tail}\n }}\n"
+            )
+        };
+        let mut body = ir::parse_body(&text("return;"));
+        compares_in(&[], &mut body);
+        assert_eq!(lines(&body), ["bb0:", "_0 = Lt(copy _1, copy _2);", "return;"]);
+        // the Ordering read again, or a side written in between: as before, two tests
+        let mut body = ir::parse_body(&text("_4 = discriminant(_3);\n return;"));
+        compares_in(&[], &mut body);
+        assert!(lines(&body).iter().any(|l| l.contains("Gt(")));
     }
 }
 
