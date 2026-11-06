@@ -77,10 +77,9 @@ const NEVER_RETURN: [&[&str]; 9] = [
     &["core", "result", "unwrap_failed"],
 ];
 
-/// What Rust says when one of NEVER_RETURN is called. A panic's own message is in the call's arguments, as a
-/// formatted string the MIR keeps elsewhere: so `panic!("...")` is reported as an explicit panic. `expect()`'s
-/// message, and `Result::unwrap()`'s, is the call's first argument, a string (Rust adds the `Err`'s value, which
-/// isn't here).
+/// What Rust says when one of NEVER_RETURN is called. `panic`'s message is its argument, a string: a bare
+/// `panic!()` or `assert!(c)`, or a literal message (`panic_messages`). So is `expect()`'s, and `Result::unwrap()`'s
+/// (Rust adds the `Err`'s value, which isn't here).
 fn called_panic(func: &ir::Path, args: &[ir::Operand]) -> String {
     let calls_panicking = |name: &str| func.is_path(&["core", "panicking", name]) || func.is_path(&[name]);
     let calls = |module: &str, name: &str| {
@@ -89,7 +88,7 @@ fn called_panic(func: &ir::Path, args: &[ir::Operand]) -> String {
     if calls("option", "unwrap_failed") {
         return "called `Option::unwrap()` on a `None` value".into();
     }
-    if calls("option", "expect_failed") || calls("result", "unwrap_failed") {
+    if calls_panicking("panic") || calls("option", "expect_failed") || calls("result", "unwrap_failed") {
         if let Some(ir::Operand::Constant(ir::Const::Str(s))) = args.first() {
             return s.clone();
         }

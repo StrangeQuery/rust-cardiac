@@ -10,6 +10,8 @@
 //!   `P_as_Twice__twice`)
 //!   a check of an unsafe precondition, as core makes with debug assertions on, is an assert of what it checks
 //!   (`preconditions`)
+//!   a panic with a literal message, and `assert_eq!`'s, is `core::panicking::panic` of the message
+//!   (`panic_messages`)
 //! The named scalar consts are read here too, for the lowering to look up.
 use std::collections::HashMap;
 
@@ -46,6 +48,7 @@ pub type FrontEnd = (File, Ordered<String, Function>, HashMap<String, i64>);
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
+    super::panic_messages::literal_panics(&mut file);
     ne_is_not_eq(&mut file);
     super::preconditions::precondition_checks(&mut file, debug_assertions);
     // switch arms are read as their switch's type first: a discriminant's is isize
