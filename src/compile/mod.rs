@@ -870,6 +870,7 @@ fn compile(
         let mut l = Lowering::new(&r.name, r.locals, &mut sh, &callees, optimize, r.pooled)?;
         l.names = r.names;
         l.huge = huge;
+        l.results = r.results;
         let (mut code, cells) = l.lower(r.blocks)?;
         names::comments(&mut code, &shown);
         listing.extend(code);

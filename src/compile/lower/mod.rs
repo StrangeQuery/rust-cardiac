@@ -281,6 +281,8 @@ pub struct Lowering<'a> {
     pub names: Ordered<String, Local>,
     /// the usize locals that can hold a value past a card, below 0 (see `ranges::huge_usizes`)
     pub huge: HashSet<Local>,
+    /// the function's result cells besides `_0`, which its caller reads after it returns
+    pub results: HashSet<Local>,
 }
 
 impl<'a> Lowering<'a> {
@@ -320,6 +322,7 @@ impl<'a> Lowering<'a> {
             resources: HashMap::new(),
             names: Ordered::new(),
             huge: HashSet::new(),
+            results: HashSet::new(),
         };
         for (&local, ty) in locals.iter() {
             if *ty == Ty::Unit || *ty == Ty::Never {

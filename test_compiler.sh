@@ -96,13 +96,15 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
     tests/programs/crates/xchain.rs tests/programs/crates/xstruct.rs tests/programs/crates/xassume.rs || exit 1
   CRATES=$crates sh native_diff.sh --profile opt$opt-asserted tests/programs/crates/xbroken.rs tests/programs/crates/xhint.rs || exit 1
   # skip_cards() and add_times() from the built-ins crate on decks, run natively (cargo run: the cardiac
-  # crate reads them) and on CARDIAC: the same cards out, the same way of ending
+  # crate reads them) and on CARDIAC: the same cards out, the same way of ending; and cards read straight into a
+  # function's result
   repeat="8 3 0 3 1 -7 9 999 1 12 10 -27 37 1 99 -10 99 -83 -111 9 7 37"
   skip="6 0 0 11 1 7 0 12 9 $(cards 9 1) 3 $(cards 3 2) 13 10 $(cards 10 3) 0 14 37 $(cards 37 4) 1 5 15 99 $(cards 99 6)
     11 $(cards 11 7) 16 $(cards 9 8) 17"
   for p in opt$opt opt$opt-unchecked; do
-    ./target/release/cargo-cardiac build -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin xrepeat --bin xskip || exit 1
-    for run in "xrepeat:$repeat" "xskip:$skip" "xskip:1 999 $(cards 999 1) 0 18 $(cards 9 2) 19"; do
+    ./target/release/cargo-cardiac build -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin xrepeat --bin xskip --bin xread || exit 1
+    for run in "xrepeat:$repeat" "xskip:$skip" "xskip:1 999 $(cards 999 1) 0 18 $(cards 9 2) 19" \
+      "xread:4 -5 6 70 8 -9"; do
       bin=${run%%:*}; deck=${run#*:}
       native=$(echo $deck | cargo run -q --manifest-path tests/programs/crates/Cargo.toml --profile $p --bin $bin 2>/dev/null | tr '\n' ','; echo "exit $?")
       cardiac=$("$BURN" tests/programs/crates/$bin.cqb -- $deck 2>/dev/null | tr '\n' ','; echo "exit $?")
