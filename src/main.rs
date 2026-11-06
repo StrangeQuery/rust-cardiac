@@ -4,12 +4,13 @@
 //! The target is cardiac-unknown-none, the notional triple for CARDIAC. It isn't one rustc knows, so there is no
 //! `--target` to give: this subcommand is what builds for it.
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicI8, Ordering};
 
 use cargo_cardiac::cargo::{self, packages, Package, Target};
 use cargo_cardiac::compile::program::{self, Built, Emit, Rustc};
 use cargo_cardiac::driver::{self, Dep, Mode, Outcome, Program, Settings};
-use cargo_cardiac::{TARGET, TOOL};
+use cargo_cardiac::{CARDIAC, TARGET, TOOL};
 use serde_json::{json, Value};
 
 fn usage() -> String {
@@ -19,22 +20,38 @@ fn usage() -> String {
 {t}: Rust for CARDIAC
 
 Usage:
+  {t} new NAME [OPTION]...
+      Make a CARDIAC program, as `cargo new NAME` makes a Rust one (its options are cargo new's), with cardiac
+      {CARDIAC} as a dependency and src/main.rs a countdown from the number it reads.
+  {t} setup
+      Fetch what the first build needs, now rather than then: the CARDIAC driver for this platform (about
+      1 MB) and the nightly it runs on, {nightly}, in rustup's minimal profile (about 550 MB on disk).
+      When both are here already, it says so.
   {t} build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
       Compile the package's programs (its binary targets, or the ones named) for CARDIAC: the package here,
       or the workspace member -p names. Each gets its deck, NAME.cqb (and NAME.2.cqb, ... for a program in
-      phases), and its panic map, NAME.map, next to its source. Run the deck with burn, from cardiaq; with the
-      map beside it, burn says why a program panicked, as Rust does.
+      phases), and its panic map, NAME.map, next to its source.
   {t} build --emit LIST ...
       What build writes, as rustc's --emit: any of deck, listing, map and asm (deck,map when not given).
-      listing is the program in Brian Stuart's six columns, NAME.cq (NAME.2.cq, ...), which carc assembles.
+      listing is the program in Brian Stuart's six columns, NAME.cq (NAME.2.cq, ...), which asm assembles.
   {t} build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
       The same for single files that use no other crate, not even cardiac: such a file defines the
       built-ins it calls itself, as stubs (`#[inline(never)] pub fn out(_v: i16) {{}}`).
+  {t} run [build's options] [--bin NAME] [-- INPUT...]
+      Build the program as build does, then run its deck, each phase's deck in turn, with its panic map
+      beside it: a program that panics says why, and exits 101, as `cargo run` does. The input is the
+      numbers after --, or standard input. A package with more than one program runs the one --bin names.
+      Its build's messages go to standard error, so standard output is the program's alone.
+  {t} debug [OPTION]... FILE [INPUT]...
+      Debug a listing (NAME.cq) or a deck, or profile it with --profile: ekg, with ekg's options.
+      `{t} debug --help` says them.
+  {t} asm [OPTION]... FILE
+      Assemble a listing into a deck: carc, with carc's options. `{t} asm --help` says them.
 
 Resources, load_resource(\"NAME\"):
   A resource is the file resources/NAME beside the package's Cargo.toml (beside a single file, for one):
   numbers, as the input is written. A program loads it once, in main and outside any loop. build fills
-  each resource's slot in the deck from it when it is there; burn fills a slot still empty from resources/
+  each resource's slot in the deck from it when it is there; run fills a slot still empty from resources/
   beside the deck.
 
 Settings, as cargo and rustc take them:
@@ -52,7 +69,7 @@ Phases:
       [package.metadata.cardiac]
       auto-overlay = true
 
-How much it says:
+How much build and run say:
   -q, --quiet       errors only
   -v, --verbose     also where the cells go
   --message-format=json
@@ -66,7 +83,8 @@ For developing cargo-cardiac:
   {t} test [--manifest-path PATH] [-p NAME] [--release | --profile NAME] --bin NAME [-- INPUT...]
       Compile a program as the compiler's tests do, write its .mir and .asm beside it, run it from
       main_bb0 on the input, and print its cards on one line.
-"
+",
+        nightly = driver::TOOLCHAIN,
     )
 }
 
@@ -202,10 +220,14 @@ fn tell(m: Message) {
     }
 }
 
+/// Whether what build says of the programs it made goes to standard error, as for `run`, whose standard output is
+/// the program's.
+static QUIET_STDOUT: AtomicBool = AtomicBool::new(false);
+
 /// Say what a command made (build's sizes) on standard output, where it is the command's output; in
 /// JSON on standard error with the rest, so a tool reads every message from one place.
 fn say(m: Message) {
-    if json() {
+    if json() || QUIET_STDOUT.load(Ordering::Relaxed) {
         tell(m)
     } else if verbosity() >= m.level() {
         println!("{}", m.text())
@@ -259,6 +281,8 @@ struct Args {
     /// --emit, for build: what it writes beside each program
     emit: Emit,
     input: Option<Vec<String>>,
+    /// The arguments of a command whose options are another program's (`new`, `debug`, `asm`), as given.
+    rest: Vec<String>,
 }
 
 impl Args {
@@ -303,6 +327,8 @@ fn args() -> Args {
         print!("{}", usage());
         std::process::exit(0)
     }
+    // the commands whose options are another program's: everything after the command is theirs
+    let passed = matches!(command.as_str(), "new" | "debug" | "asm");
     let mut r = Args {
         command,
         files: vec![],
@@ -314,8 +340,13 @@ fn args() -> Args {
         auto_overlay: false,
         emit: Emit::default(),
         input: None,
+        rest: vec![],
     };
-    let compiles = matches!(r.command.as_str(), "build" | "test");
+    if passed {
+        r.rest = a[1..].to_vec();
+        return r;
+    }
+    let compiles = matches!(r.command.as_str(), "build" | "test" | "run");
     fn profile(r: &mut Args, name: &str) {
         if r.profile.as_deref().is_some_and(|p| p != name) {
             bad_usage("give one profile: --release is --profile release")
@@ -415,7 +446,7 @@ fn chosen<'a>(pkgs: &'a [Package], bins: &[String]) -> Vec<(&'a Package, &'a Tar
             p.problem.clone()
         };
         if let Some(why) = why {
-            die(format!("{}'s binaries can't be compiled for CARDIAC: {why}.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in cargo-cardiac's repository, or name one with --manifest-path.", p.name));
+            die(format!("{}'s binaries can't be compiled for CARDIAC: {why}.\nRun `cargo {TOOL}` in a package whose binaries are CARDIAC programs, such as examples/ in rust-cardiac's repository, or name one with --manifest-path.", p.name));
         }
     }
     for b in bins {
@@ -506,8 +537,9 @@ fn say_made(made: &[Outcome], p: &Package) {
     }
 }
 
-/// Build the programs asked for, each package checked by cargo once, and report each one's size.
-fn build(pkgs: &[Package], bins: &[String], profile: Option<&str>, emit: Emit) {
+/// Build the programs asked for, each package checked by cargo once, and report each one's size: what was built.
+fn build(pkgs: &[Package], bins: &[String], profile: Option<&str>, emit: Emit) -> Vec<Built> {
+    let mut built = vec![];
     for p in pkgs {
         let mine: Vec<&Target> = chosen(std::slice::from_ref(p), bins)
             .into_iter()
@@ -525,8 +557,139 @@ fn build(pkgs: &[Package], bins: &[String], profile: Option<&str>, emit: Emit) {
             let Outcome::Built(b) = o else { continue };
             say(Message::Compiled(&b));
             note_empty(&b, &resources_beside(&p.manifest));
+            built.push(b);
         }
     }
+    built
+}
+
+/// Build one single file, as build does: what was built.
+fn build_single(f: &str, rustc: &Rustc, auto_overlay: bool, emit: Emit) -> Built {
+    let src = std::fs::read_to_string(f).unwrap_or_else(|e| die(format!("{f}: {e}")));
+    if src.contains("cardiac::") {
+        die(format!(
+            "{f}: a single file can't use the cardiac crate (no Cargo package says where it is). Build it in a \
+            package with `cargo cardiac build`, or define the built-ins it calls in the file itself, such as \
+            `#[inline(never)] pub fn out(_v: i16) {{}}`"
+        ));
+    }
+    let Outcome::Built(b) = compile_single(f, rustc, auto_overlay, Mode::Build, emit) else {
+        die(format!("the CARDIAC driver didn't build {f}"))
+    };
+    say(Message::Compiled(&b));
+    note_empty(&b, &resources_beside(f));
+    b
+}
+
+/// `cargo cardiac new`: `cargo new` with its arguments, then the `cardiac` crate added to the package's
+/// dependencies and src/main.rs made the countdown from the README.
+fn new(args: &[String]) -> ExitCode {
+    // cargo new's options that take a value, so the path is told from them
+    const VALUED: [&str; 7] = [
+        "--vcs",
+        "--edition",
+        "--name",
+        "--registry",
+        "--color",
+        "--config",
+        "-Z",
+    ];
+    let mut path = None;
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--lib" {
+            bad_usage("a CARDIAC program is a binary: cargo cardiac new makes one, so --lib isn't for it")
+        } else if matches!(a, "--help" | "-h") {
+            print!("{}", usage());
+            return ExitCode::SUCCESS;
+        } else if VALUED.contains(&a) {
+            i += 1;
+        } else if !a.starts_with('-') {
+            if path.is_some() {
+                bad_usage("new takes one NAME (a path, as cargo new takes)")
+            }
+            path = Some(PathBuf::from(a));
+        }
+        i += 1;
+    }
+    let path = path.unwrap_or_else(|| bad_usage("new needs a NAME: cargo cardiac new countdown"));
+    let made = std::process::Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
+        .arg("new")
+        .args(args)
+        .status()
+        .unwrap_or_else(|e| die(format!("cargo new: {e}")));
+    if !made.success() {
+        return ExitCode::FAILURE;
+    }
+    let manifest = path.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).unwrap_or_else(|e| die(format!("{}: {e}", manifest.display())));
+    let dep = format!("cardiac = \"{CARDIAC}\"\n");
+    let text = match text.find("[dependencies]\n") {
+        Some(k) => {
+            let at = k + "[dependencies]\n".len();
+            format!("{}{dep}{}", &text[..at], &text[at..])
+        }
+        None => format!("{text}\n[dependencies]\n{dep}"),
+    };
+    std::fs::write(&manifest, text).unwrap_or_else(|e| die(format!("{}: {e}", manifest.display())));
+    let main = path.join("src/main.rs");
+    let countdown = "\
+use cardiac::*;
+
+fn main() {
+    let mut n = inp();
+    while n >= 0 {
+        out(n);
+        n -= 1;
+    }
+}
+";
+    std::fs::write(&main, countdown).unwrap_or_else(|e| die(format!("{}: {e}", main.display())));
+    eprintln!(
+        "      Adding cardiac {CARDIAC} to the dependencies, and a countdown from the number it reads as src/main.rs"
+    );
+    ExitCode::SUCCESS
+}
+
+/// `cargo cardiac run`: build the one program asked for, then run its deck on burn, the map beside it.
+fn run(a: &Args) -> ExitCode {
+    QUIET_STDOUT.store(true, Ordering::Relaxed);
+    let built = if a.files.is_empty() {
+        let pkgs = packages(a.manifest.as_deref(), a.package.as_deref()).unwrap_or_else(|e| die(e));
+        let programs = chosen(&pkgs, &a.bins);
+        match programs.as_slice() {
+            [(p, t)] => build(
+                std::slice::from_ref(*p),
+                &[t.name.clone()],
+                a.profile.as_deref(),
+                Emit::default(),
+            ),
+            [] => die("no program to run: the package has no binary target".into()),
+            more => {
+                let names: Vec<&str> = more.iter().map(|(_, t)| t.name.as_str()).collect();
+                bad_usage(&format!(
+                    "run runs one program, and there are {}: {}. Name one with --bin",
+                    names.len(),
+                    names.join(", ")
+                ))
+            }
+        }
+    } else {
+        if a.files.len() > 1 {
+            bad_usage("run takes one FILE.rs; its input goes after --")
+        }
+        vec![build_single(&a.files[0], &a.rustc, a.auto_overlay, Emit::default())]
+    };
+    let Some(b) = built.first() else {
+        die("nothing was built to run".into())
+    };
+    let mut args = vec![b.deck_file.clone()];
+    if let Some(input) = &a.input {
+        args.push("--".into());
+        args.extend(input.iter().cloned());
+    }
+    heartburn::tools::burn::main(&format!("cargo {TOOL} run"), args)
 }
 
 /// Compile a single file with these flags, as `mode` asks: what the driver made of it.
@@ -589,33 +752,34 @@ fn note_empty(b: &Built, dir: &Path) {
     }
 }
 
-fn main() {
+fn main() -> ExitCode {
     let a = args();
+    match a.command.as_str() {
+        "new" => return new(&a.rest),
+        "debug" => return heartburn::tools::ekg::main(&format!("cargo {TOOL} debug"), a.rest),
+        "asm" => return heartburn::tools::carc::main(&format!("cargo {TOOL} asm"), a.rest),
+        "setup" => {
+            driver::setup().unwrap_or_else(|e| die(e));
+            return ExitCode::SUCCESS;
+        }
+        _ => {}
+    }
     let single = !a.files.is_empty();
     let pkgs = || packages(a.manifest.as_deref(), a.package.as_deref()).unwrap_or_else(|e| die(e));
     let profile = a.profile.as_deref();
-    if matches!(a.command.as_str(), "build" | "test") {
+    if matches!(a.command.as_str(), "build" | "test" | "run") {
         a.settings_fit()
     }
     match a.command.as_str() {
         "build" if single => {
             for f in &a.files {
-                let src = std::fs::read_to_string(f).unwrap_or_else(|e| die(format!("{f}: {e}")));
-                if src.contains("cardiac::") {
-                    die(format!("{f}: a single file can't use the cardiac crate (no Cargo package says where it is). Build it in a \
-                        package with `cargo cardiac build`, or define the built-ins it calls in the file itself, such as \
-                        `#[inline(never)] pub fn out(_v: i16) {{}}`"));
-                }
-                let Outcome::Built(b) = compile_single(f, &a.rustc, a.auto_overlay, Mode::Build, a.emit) else {
-                    die(format!("the CARDIAC driver didn't build {f}"))
-                };
-                say(Message::Compiled(&b));
-                note_empty(&b, &resources_beside(f));
+                build_single(f, &a.rustc, a.auto_overlay, a.emit);
             }
         }
         "build" => {
             build(&pkgs(), &a.bins, profile, a.emit);
         }
+        "run" => return run(&a),
         "test" => {
             if a.files.len() > 1 {
                 bad_usage("test takes one FILE.rs; its input goes after --")
@@ -644,16 +808,9 @@ fn main() {
                 );
             }
         }
-        // commands that are gone, and where to go instead
-        "run" => die(format!(
-            "cargo {TOOL} run is gone: build writes the deck, NAME.cqb, and burn runs it (burn NAME.cqb -- INPUT...), \
-             saying why it panicked from NAME.map beside it"
-        )),
-        "asm" => die(format!(
-            "cargo {TOOL} asm is gone: build writes a program's deck, and its listing in Brian Stuart's six columns \
-             with --emit listing; carc assembles a listing edited by hand"
-        )),
+        // a command that is gone
         "cardiasm" => die(format!("cargo {TOOL} cardiasm is gone")),
         c => bad_usage(&format!("unknown command {c}")),
     }
+    ExitCode::SUCCESS
 }

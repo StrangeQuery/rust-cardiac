@@ -1,14 +1,15 @@
 [package]
 name = "cardiac"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # the [lints] table
 rust-version = "1.74"
-description = "Rust language package for cargo-cardiac. Install that, not this."
+description = "A Rust library for writing CARDIAC programs."
 license = "MIT"
 repository.workspace = true
 homepage.workspace = true
-readme = "README.md"
+# the repository's README, which both crates share
+readme = "../README.md"
 keywords = ["cardiac", "compiler", "retrocomputing", "education"]
 categories = ["compilers", "emulators"]
 

@@ -3,6 +3,27 @@
 Newest first. Each entry is the decision, why, and what it costs. (The project was called Ferritin until it was
 released on its own as rust-cardiac, and is now cargo-cardiac.)
 
+## 2026-11-06 · rust-cardiac is the project, cargo-cardiac the command, `cardiac` the library; cardiaq is gone
+
+- **Decision.** Packaged as pgrx (`pgrx` and `cargo-pgrx`) and rust-psp (`psp` and `cargo-psp`) are. The project
+  and its repository are rust-cardiac. What you install is cargo-cardiac, which now does everything from the first
+  line to the last run: `cargo cardiac new` (`cargo new`, then `cardiac` added and a countdown as `src/main.rs`),
+  `setup` (the driver and its nightly fetched up front, each said with its size), `build`, `run` (build, then the
+  deck run on burn with the panic map beside it, each phase's deck as burn loads them), `debug` (ekg) and `asm`
+  (carc). What a program uses is the `cardiac` crate, which `new` writes into its Cargo.toml. The engine is
+  heartburn: cargo-cardiac depends on it with its `tools` feature, which gives `heartburn::tools::{burn, carc,
+  ekg}::main`, so run, debug and asm are those programs under cargo's names. cardiaq, the crate of the tools and
+  the name of the runtime, is retired, and nothing tells anyone to install it. burn, carc and ekg on their own,
+  for people without Rust, come from `brew install heartburn` and heartburn's release archives. The repository's
+  README, headed rust-cardiac, is also the `cardiac` crate's; cargo-cardiac has a short one of its own,
+  CARGO-CARDIAC.md, that lists the subcommands. All three crates are 0.1.2.
+- **Why.** "Install cargo-cardiac, and cardiaq for burn" was two installs, two names and a third for the library
+  before a first program ran. One install and four commands (`cargo install cargo-cardiac`, `cargo cardiac new
+  countdown`, `cd countdown`, `cargo cardiac run`) is the quick start, as with pgrx and rust-psp.
+- **Cost.** cargo-cardiac carries burn, carc and ekg's code (heartburn with `tools`), about what cardiaq's
+  install was. The tests still run decks on a burn of their own (`BURN`, or burn on the PATH), so a contributor
+  still needs one. cargo-cardiac can't be published until heartburn 0.1.2 is on crates.io.
+
 ## 2026-11-05 · Listings use the source's names
 
 - **Decision.** A listing (and the assembly) names a cell after the variable the MIR's debug info says it holds

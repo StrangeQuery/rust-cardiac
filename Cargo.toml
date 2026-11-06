@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cardiac"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # the compiler reads the MIR text that rustc 1.97 prints, so that is the rustc it needs, to build and to run
 rust-version = "1.97"
@@ -9,14 +9,14 @@ license = "MIT"
 repository.workspace = true
 homepage.workspace = true
 # a command: its documentation is the project's page, not an API on docs.rs
-documentation = "https://lab.strangequery.com/cargo-cardiac/"
-readme = "README.md"
+documentation = "https://lab.strangequery.com/rust-cardiac/"
+readme = "CARGO-CARDIAC.md"
 keywords = ["cardiac", "compiler", "cargo-subcommand", "retrocomputing", "mir"]
 categories = ["compilers", "development-tools::cargo-plugins", "emulators"]
 # examples/ is a package of its own (the example programs), not cargo examples of this one
 autoexamples = false
 # what crates.io gets: the command, its source and how to build it
-include = ["/src", "/build.rs", "/README.md", "/LICENSE"]
+include = ["/src", "/build.rs", "/CARGO-CARDIAC.md", "/LICENSE"]
 
 [[bin]]
 name = "cargo-cardiac"
@@ -63,8 +63,8 @@ debug-assertions = true
 
 [dependencies]
 serde_json = "1"
-# CARDIAC itself: the emulator, tapes, the assembler and CARDIASM
-heartburn = "0.1.1"
+# CARDIAC itself: the emulator, decks and listings; and with `tools`, burn, ekg and carc, which run, debug and asm are
+heartburn = { version = "0.1.2", path = "../heartburn-pkg", features = ["tools"] }
 
 [workspace]
 members = ["cardiac", "examples", "examples/collatz"]
@@ -73,5 +73,5 @@ exclude = ["tests/programs/crates"]
 
 # the repository's address and the project's page, for both published crates
 [workspace.package]
-repository = "https://github.com/StrangeQuery/cargo-cardiac"
-homepage = "https://lab.strangequery.com/cargo-cardiac/"
+repository = "https://github.com/StrangeQuery/rust-cardiac"
+homepage = "https://lab.strangequery.com/rust-cardiac/"

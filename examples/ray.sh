@@ -24,7 +24,7 @@ FRAME=${FRAME:-0}
 OUT=${OUT:-ray.ppm}
 case $FRAME in *[!0-9]*|"") echo "ray.sh: FRAME is a place on the ball's path, 0 to 119"; exit 2;; esac
 [ "$FRAME" -le 119 ] || { echo "ray.sh: FRAME is a place on the ball's path, 0 to 119"; exit 2; }
-command -v "$BURN" >/dev/null || { echo "ray.sh: needs burn, from cardiaq: put it on the PATH, or set BURN"; exit 1; }
+command -v "$BURN" >/dev/null || { echo "ray.sh: needs burn, heartburn's runtime: put it on the PATH, or set BURN"; exit 1; }
 for m in sky zrow floor span norm bounce hit compose sway hop; do
   [ -f ray/$m.cqb ] || { echo "ray.sh: build it first: cargo cardiac build"; exit 1; }
 done

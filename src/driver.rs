@@ -99,11 +99,26 @@ pub fn find() -> Result<&'static Driver, String> {
 }
 
 fn look() -> Result<Driver, String> {
+    let exe = match on_disk() {
+        Some(exe) => exe,
+        // a driver named with CARDIAC_DRIVER that isn't there is a mistake to say, not one to download past
+        None if std::env::var_os("CARDIAC_DRIVER").is_some() => return Err(missing()),
+        None => download()?,
+    };
+    let libs = match sysroot() {
+        Some(libs) => libs,
+        None => install_toolchain()?,
+    };
+    Ok(Driver { exe, libs })
+}
+
+/// The driver already on this machine: the one CARDIAC_DRIVER names, else beside `cargo-cardiac`, else this
+/// repository's `driver/` build, else where an earlier run downloaded it.
+fn on_disk() -> Option<PathBuf> {
     let given = std::env::var_os("CARDIAC_DRIVER").map(PathBuf::from);
     let here = std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf));
-    let named = given.is_some();
     let candidates = given.into_iter().chain(here.iter().flat_map(|dir| {
         [
             dir.join(NAME),
@@ -111,27 +126,71 @@ fn look() -> Result<Driver, String> {
             dir.join("../../driver/target/release").join(NAME),
         ]
     }));
-    let found = candidates
+    candidates
         .chain(installed().map(|dir| dir.join(NAME)))
-        .find(|p| p.is_file());
-    let exe = match found {
+        .find(|p| p.is_file())
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
+}
+
+/// How much the pinned nightly takes, said before rustup installs it.
+const TOOLCHAIN_SIZE: &str = "about 550 MB on disk";
+
+/// How much the driver's download is, said before it starts.
+const DRIVER_SIZE: &str = "about 1 MB";
+
+/// Install the pinned nightly with rustup, in its minimal profile (all running the driver needs), and give the
+/// directory of its libraries.
+fn install_toolchain() -> Result<PathBuf, String> {
+    let name = toolchain();
+    eprintln!(
+        "  Installing {name} with rustup, in its minimal profile ({TOOLCHAIN_SIZE}), once: the CARDIAC driver runs on \
+         that nightly's libraries"
+    );
+    let _ = Command::new("rustup")
+        .args(["toolchain", "install", &name, "--profile", "minimal"])
+        .status();
+    sysroot().ok_or_else(|| format!("the CARDIAC driver needs the {name} toolchain's libraries, and rustup couldn't install it: install it with `rustup toolchain install {name} --profile minimal`"))
+}
+
+/// `cargo cardiac setup`: what the first build would fetch, fetched now: the driver for this platform and the
+/// pinned nightly. Each is said with its size before it starts; what is already here is said as being here.
+pub fn setup() -> Result<(), String> {
+    let exe = on_disk();
+    let libs = sysroot();
+    if let (Some(exe), Some(_)) = (&exe, &libs) {
+        eprintln!(
+            "cargo-cardiac is already set up: the CARDIAC driver is {}, and rustup has {}",
+            exe.display(),
+            toolchain()
+        );
+        return Ok(());
+    }
+    let mut todo = vec![];
+    if exe.is_none() {
+        todo.push(format!("the CARDIAC driver ({DRIVER_SIZE})"));
+    }
+    if libs.is_none() {
+        todo.push(format!(
+            "{} in rustup's minimal profile ({TOOLCHAIN_SIZE})",
+            toolchain()
+        ));
+    }
+    eprintln!("   Setting up cargo-cardiac: {}", todo.join(", and "));
+    let exe = match exe {
         Some(exe) => exe,
-        // a driver named with CARDIAC_DRIVER that isn't there is a mistake to say, not one to download past
-        None if named => return Err(missing()),
+        None if std::env::var_os("CARDIAC_DRIVER").is_some() => return Err(missing()),
         None => download()?,
     };
-    let libs = match sysroot() {
+    let libs = match libs {
         Some(libs) => libs,
-        None => {
-            let name = toolchain();
-            eprintln!("  Installing {name} with rustup, once: the CARDIAC driver runs on that nightly's libraries");
-            let _ = Command::new("rustup")
-                .args(["toolchain", "install", &name, "--profile", "minimal"])
-                .status();
-            sysroot().ok_or_else(|| format!("the CARDIAC driver needs the {name} toolchain's libraries, and rustup couldn't install it: install it with `rustup toolchain install {name} --profile minimal`"))?
-        }
+        None => install_toolchain()?,
     };
-    Ok(Driver { exe, libs })
+    eprintln!(
+        "    Finished: the CARDIAC driver is {}, and its libraries are in {}",
+        exe.display(),
+        libs.display()
+    );
+    Ok(())
 }
 
 /// The directory of the pinned nightly's libraries, as rustup has it, or None if rustup has no such toolchain.
@@ -149,14 +208,13 @@ fn sysroot() -> Option<PathBuf> {
 /// for the version (a newer cargo-cardiac downloads its own driver, and the old one stays for the old one).
 fn installed() -> Option<PathBuf> {
     let home = std::env::var_os("CARDIAC_HOME").map(PathBuf::from).or_else(|| {
-        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-            .map(|h| PathBuf::from(h).join(".cardiac"))
+        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(|h| PathBuf::from(h).join(".cardiac"))
     })?;
     Some(home.join(format!("driver-{}", env!("CARGO_PKG_VERSION"))))
 }
 
 /// Where the releases are: each one's driver for a platform is cardiac-driver-TARGET.tar.gz in its release.
-const RELEASES: &str = "https://github.com/StrangeQuery/cargo-cardiac/releases/download";
+const RELEASES: &str = "https://github.com/StrangeQuery/rust-cardiac/releases/download";
 
 /// Download this version's driver for this platform into `installed`, with curl and tar (both come with macOS,
 /// Windows 10 and later, and every Linux), and give where it is. Unpacked beside its place and moved there whole,
@@ -166,7 +224,10 @@ fn download() -> Result<PathBuf, String> {
     let version = env!("CARGO_PKG_VERSION");
     let dir = installed().ok_or_else(|| format!("{}: and no home directory to download one into", missing()))?;
     let url = format!("{RELEASES}/v{version}/cardiac-driver-{host}.tar.gz");
-    eprintln!(" Downloading the CARDIAC driver for {host}, once, into {}", dir.display());
+    eprintln!(
+        " Downloading the CARDIAC driver for {host} ({DRIVER_SIZE}), once, into {}",
+        dir.display()
+    );
     let part = dir.with_extension("part");
     let _ = std::fs::remove_dir_all(&part);
     std::fs::create_dir_all(&part).map_err(|e| format!("{}: {e}", part.display()))?;
@@ -194,7 +255,9 @@ fn download() -> Result<PathBuf, String> {
     let _ = std::fs::remove_file(&archive);
     if !unpacked || !part.join(NAME).is_file() {
         let _ = std::fs::remove_dir_all(&part);
-        return Err(format!("the CARDIAC driver downloaded from {url} didn't unpack to {NAME}"));
+        return Err(format!(
+            "the CARDIAC driver downloaded from {url} didn't unpack to {NAME}"
+        ));
     }
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::rename(&part, &dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -204,7 +267,7 @@ fn download() -> Result<PathBuf, String> {
 /// Why there is no driver, and how to build one.
 pub fn missing() -> String {
     format!(
-        "no CARDIAC driver ({NAME}), which compiles every program: build it in cargo-cardiac's repository with \
+        "no CARDIAC driver ({NAME}), which compiles every program: build it in rust-cardiac's repository with \
          `cd driver && cargo build --release` (rustup installs the nightly it needs, {TOOLCHAIN}, with its \
          rustc-dev component, from driver/rust-toolchain.toml), then put it beside cargo-cardiac or name it with \
          CARDIAC_DRIVER"

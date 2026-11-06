@@ -4,12 +4,12 @@
 # All of it twice: from rustc's MIR at opt-level 1, and at opt-level 2 (what `cargo cardiac build` uses: small
 # functions inlined). Programs of two crates are in tests/programs/crates, a Cargo package. A program with overlay()
 # (phases.rs) is split into phases and run as its decks are, one deck per phase; phases2.rs has a block both phases
-# need. The example programs have a test of their own, test_examples.sh. Decks run on burn, cardiaq's runtime: $BURN,
+# need. The example programs have a test of their own, test_examples.sh. Decks run on burn, heartburn's runtime: $BURN,
 # or burn on the PATH.
 cd "$(dirname "$0")"
 MARK=$(mktemp)
 BURN=${BURN:-burn}
-command -v "$BURN" >/dev/null || { echo "test_compiler.sh needs burn, from cardiaq: put it on the PATH, or set BURN"; exit 1; }
+command -v "$BURN" >/dev/null || { echo "test_compiler.sh needs burn, heartburn's runtime: put it on the PATH, or set BURN"; exit 1; }
 panicked() {   # DECK [-- INPUT...]: why a run of the deck panicked, as burn says it from the panic map, and its exit
   why=$("$BURN" "$@" 2>&1 >/dev/null); code=$?
   echo "$why" | tail -1 | sed 's/^burn: [^ ]*: //'; echo "exit $code"

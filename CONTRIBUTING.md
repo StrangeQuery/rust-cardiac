@@ -1,15 +1,22 @@
-# Building and testing cargo-cardiac
+# Building and testing rust-cardiac
 
 This is how we build the compiler from source, how we test it, and how to send us a change. If you only want to
-compile programs for CARDIAC, you don't need any of this: `cargo install cargo-cardiac` is enough (see the README).
+compile programs for CARDIAC, you don't need any of this. The quick start in the README is enough:
+
+    cargo install cargo-cardiac
+    cargo cardiac new countdown
+    cd countdown
+    cargo cardiac run
 
 ## What you need
 
 - **rustup**, not a distribution's packaged Rust. The repository uses two toolchains: stable Rust 1.97 or later for
   `cargo-cardiac`, and the nightly that `driver/rust-toolchain.toml` pins for the driver. rustup installs that
   nightly the first time you build in `driver/`, with its `rustc-dev` component. That is about 1.5 GB.
-- **burn**, from [cardiaq](https://github.com/StrangeQuery/cardiaq), on your PATH (or named with `BURN`). The tests
-  run every deck on it.
+- **burn**, heartburn's runtime, on your PATH (or named with `BURN`). The tests run every deck on it. It comes from
+  `brew install heartburn` (from Strange Query's tap, `brew tap strangequery/tap`), from the release archives of
+  [heartburn](https://github.com/StrangeQuery/heartburn/releases), or from a checkout of heartburn with
+  `cargo build --release --features tools --bins`.
 - **On Windows with the GNU toolchain**, MinGW's binutils (`as` and `dlltool`, from MSYS2's
   `mingw-w64-x86_64-binutils`) on your PATH, to build the driver. The MSVC toolchain doesn't need them.
 
@@ -19,8 +26,8 @@ There are two programs. `cargo-cardiac` is the command. The driver, in `driver/`
 does the compiling, inside rustc's own process. `driver/` is a workspace of its own because it builds on the
 pinned nightly.
 
-    git clone https://github.com/StrangeQuery/cargo-cardiac
-    cd cargo-cardiac
+    git clone https://github.com/StrangeQuery/rust-cardiac
+    cd rust-cardiac
     cargo build --release                       # target/release/cargo-cardiac
     (cd driver && cargo build --release)        # driver/target/release/cardiac-driver
 
@@ -94,4 +101,4 @@ rest of the repository.
 ## Talking to us
 
 Questions, ideas and half-finished thoughts are welcome on [Discord](https://discord.gg/VsqKEdBYzJ). Bugs and
-proposals go in [the issues](https://github.com/StrangeQuery/cargo-cardiac/issues).
+proposals go in [the issues](https://github.com/StrangeQuery/rust-cardiac/issues).

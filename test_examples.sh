@@ -1,12 +1,12 @@
 #!/bin/sh
 # The example programs, run both ways: `cargo run` on this machine, and their decks, built by `cargo cardiac build`,
-# on burn, cardiaq's runtime ($BURN, or burn on the PATH), each with the same input on standard input. The two must
+# on burn, heartburn's runtime ($BURN, or burn on the PATH), each with the same input on standard input. The two must
 # print exactly the same, and end the same: a panic exits 101 both ways (CARDIAC outputs -999; burn says why from the
 # panic map beside the deck, as `cargo run` does).
 cd "$(dirname "$0")"
 MARK=$(mktemp)
 BURN=${BURN:-burn}
-command -v "$BURN" >/dev/null || { echo "test_examples.sh needs burn, from cardiaq: put it on the PATH, or set BURN"; exit 1; }
+command -v "$BURN" >/dev/null || { echo "test_examples.sh needs burn, heartburn's runtime: put it on the PATH, or set BURN"; exit 1; }
 cargo build --release -q || exit 1
 export PATH="$PWD/target/release:$PATH"
 cd examples

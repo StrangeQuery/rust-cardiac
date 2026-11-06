@@ -245,7 +245,7 @@ fn run_with(mut cmd: Command, stdin: &str, timeout: Duration) -> Run {
 }
 
 /// Where everything is.
-/// burn, cardiaq's runtime, which runs the decks: $BURN, or burn on the PATH.
+/// burn, heartburn's runtime, which runs the decks: $BURN, or burn on the PATH.
 fn burn() -> PathBuf {
     std::env::var_os("BURN").map_or_else(|| PathBuf::from("burn"), PathBuf::from)
 }

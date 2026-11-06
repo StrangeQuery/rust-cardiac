@@ -12,8 +12,8 @@
 //! ```
 //!
 //! Built with `cargo run`, the program runs on your machine: `inp()` reads a number from standard input and
-//! `out()` prints one. Built with `cargo cardiac build`, each call is one CARDIAC instruction: `inp()` is INP, the
-//! card reader, and `out()` is OUT, the teletype. The two builds print the same numbers.
+//! `out()` prints one. Built and run with `cargo cardiac run`, each call is one CARDIAC instruction: `inp()` is
+//! INP, the card reader, and `out()` is OUT, the teletype. The two builds print the same numbers.
 //!
 //! A CARDIAC cell holds a sign and three digits, so every value a card carries is -999..=999.
 #![cfg_attr(cardiac, no_std)]

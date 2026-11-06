@@ -438,7 +438,7 @@ impl Emit {
 
 /// Whether `file` is one that an earlier build of NAME wrote: NAME.asm, NAME_data.asm, NAME_1.asm, ..., NAME.cqb,
 /// NAME.2.cqb, ..., NAME.cqb.meta, NAME.cq, NAME.2.cq, ...; and the .tape, .tape.meta and .lst files that builds
-/// wrote before decks had cardiaq's names.
+/// wrote before decks had the names they have now.
 fn earlier_output(file: &str, name: &str) -> bool {
     let Some(rest) = file.strip_prefix(name) else {
         return false;

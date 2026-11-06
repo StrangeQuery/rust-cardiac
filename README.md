@@ -1,28 +1,34 @@
-<p align="center"><img src="assets/logo.png" alt="cargo-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
-<p align="center"><a href="https://lab.strangequery.com/cargo-cardiac/"><code>lab.strangequery.com/cargo-cardiac</code></a></p>
-<p align="center"><a href="https://github.com/StrangeQuery/cargo-cardiac"><img src="https://img.shields.io/badge/GitHub-cargo--cardiac-181717?logo=github&amp;logoColor=white" alt="GitHub"></a> <a href="https://discord.gg/VsqKEdBYzJ"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Discord"></a></p>
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/logo.png" alt="rust-cardiac: Ferris, the Rust crab, in front of a CARDIAC" width="320"></p>
+<p align="center"><a href="https://lab.strangequery.com/rust-cardiac/"><code>lab.strangequery.com/rust-cardiac</code></a></p>
+<p align="center"><a href="https://github.com/StrangeQuery/rust-cardiac"><img src="https://img.shields.io/badge/GitHub-rust--cardiac-181717?logo=github&amp;logoColor=white" alt="GitHub"></a> <a href="https://discord.gg/VsqKEdBYzJ"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&amp;logoColor=white" alt="Discord"></a></p>
 
-# cargo-cardiac
+# rust-cardiac
 
-The newest member of the [Strange Query CARDIAC](https://lab.strangequery.com/cardiac) collection, [cargo-cardiac](https://lab.strangequery.com/cargo-cardiac) brings the convenience, safety and security of Rust to the most legacy of legacy platforms: the [CARDboard Illustrative Aid to Computation](https://en.wikipedia.org/wiki/CARDboard_Illustrative_Aid_to_Computation).  Compile Rust to either the classic six-column
+The newest member of the [Strange Query CARDIAC](https://lab.strangequery.com/cardiac) collection, [rust-cardiac](https://lab.strangequery.com/rust-cardiac) brings the convenience, safety and security of Rust to the most legacy of legacy platforms: the [CARDboard Illustrative Aid to Computation](https://en.wikipedia.org/wiki/CARDboard_Illustrative_Aid_to_Computation).  Compile Rust to either the classic six-column
 listing form or raw cards ready to be fed directly into a CARDIAC and executed.  For demos and the most up-to-date information see the
-[cargo-cardiac home page on Strange Query](https://lab.strangequery.com/cargo-cardiac/).  Open Source and MIT-licensed.
+[rust-cardiac home page on Strange Query](https://lab.strangequery.com/rust-cardiac/).  Open Source and MIT-licensed.
 
-## cargo-cardiac: part of a full development platform
-cargo-cardiac integrates with [Cardigan](https://lab.strangequery.com/cardigan/) and [cardiaq](https://lab.strangequery.com/cardiaq/)
-to give you a full development environment and high-performance runtime. Build Rust with `cargo cardiac build`, step through it in [Cardigan](https://lab.strangequery.com/cardigan/) or `ekg`, and run it _fast_ on `burn`.
+rust-cardiac is two crates. [cargo-cardiac](https://crates.io/crates/cargo-cardiac) is what you install: the `cargo
+cardiac` command, which makes, builds, runs and debugs CARDIAC programs. [`cardiac`](https://crates.io/crates/cardiac)
+is what your program uses: `inp()`, `out()` and CARDIAC's other built-ins, which `cargo cardiac new` adds to your
+Cargo.toml for you.
+
+## Part of a full development platform
+rust-cardiac integrates with [Cardigan](https://lab.strangequery.com/cardigan/) and [heartburn](https://github.com/StrangeQuery/heartburn)
+to give you a full development environment and high-performance runtime. Build and run Rust with `cargo cardiac run`, which runs it _fast_ on heartburn's burn, and step through it with `cargo cardiac debug` or in [Cardigan](https://lab.strangequery.com/cardigan/).
 
 ## Quick start
 ```
-cargo install cargo-cardiac cardiaq
-cargo new hello && cd hello
-cargo add cardiac
-
-<edit src/main.rs: see Hello, below>
-
-cargo cardiac build
-burn src/hello.cqb
+cargo install cargo-cardiac
+cargo cardiac new countdown
+cd countdown
+cargo cardiac run
 ```
+
+`cargo cardiac new` makes a package as `cargo new` does, with `cardiac` as a dependency and a `src/main.rs` that
+counts down from the number it reads. `cargo cardiac run` builds it for CARDIAC and runs it. Type a number and
+press Enter, and it counts down to 0. Or give it the number on standard input, `echo 5 | cargo cardiac run`, or
+after `--`, `cargo cardiac run -- 5`.
 
 ## CARDIAC
 
@@ -32,21 +38,21 @@ load, add, subtract, store, shift, test for negative, jump, output, halt), a car
 for output. See [The Strange Query CARDIAC Archive](https://lab.strangequery.com/cardiac/) for more information on CARDIAC, its
 history and lore, samples, the machine specification, the opcodes, and programming tips and tricks.
 
-<p align="center"><img src="assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/StrangeQuery/rust-cardiac/HEAD/assets/cardiac.jpg" alt="A CARDIAC: the cardboard computer, its slides pulled out" width="360"></p>
 
 ## Getting started
 
-You need rustup (https://rustup.rs, not a distribution's packaged Rust). Install cargo-cardiac, and cardiaq for
-burn, which runs what you build:
+You need rustup (https://rustup.rs, not a distribution's packaged Rust). Install cargo-cardiac:
 
-    cargo install cargo-cardiac cardiaq
+    cargo install cargo-cardiac
 
 The compiler runs inside rustc. Its backend is the CARDIAC driver, which is rustc built as a library on one
 pinned nightly, `nightly-2026-05-22`, the last of Rust 1.97's. The first time you build a program, `cargo cardiac`
-downloads the driver for your platform from this version's GitHub release (about a megabyte). If rustup doesn't
-have that nightly yet, it also asks rustup to install it, in its minimal profile: about 550 MB on disk, once. Your
+downloads the driver for your platform from this version's GitHub release (about 1 MB). If rustup doesn't
+have that nightly yet, it also asks rustup to install it, in its minimal profile: about 550 MB on disk, once.
+`cargo cardiac setup` does both now rather than at the first build, and says when there is nothing left to do. Your
 own Rust stays as it is. Programs can use what Rust 1.97 has. To build the compiler from source instead, see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/CONTRIBUTING.md).
 
 ## Hello
 `examples/hello.rs` counts down from ten to zero.
@@ -64,29 +70,27 @@ fn main() {
 
 Notice the use of `out()` instead of `println!`. CARDIAC has limited I/O. `println!` goes through Rust's formatting machinery, `core::fmt`. That's thousands of instructions of code, and CARDIAC has 96 cells. `out()` is a built-in the compiler recognises by name and turns into a single OUT instruction. CARDIAC can only print a number per line anyway, so `out()` covers everything `println!` could do there.
 
-When you run the program natively, `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
+When you run the program natively, `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
 
-[docs/RUST.md](docs/RUST.md) has a full list of what isn't supported: `println!`, `format!`, `assert_eq!` and `assert_ne!` are refused, and the suggested replacements are `out()` and `assert!(a == b)`.
+[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has a full list of what isn't supported: `println!`, `format!`, `assert_eq!` and `assert_ne!` are refused, and the suggested replacements are `out()` and `assert!(a == b)`.
 
 ## Building and running Hello
-In a checkout of this repository, in `examples/`, run it, build it for CARDIAC, and run the deck:
+In a checkout of this repository, in `examples/`, run it natively, then on CARDIAC:
 
     cargo run --bin hello                # 10, 9, ... 0, native code
-    cargo cardiac build --bin hello      # build the CARDIAC deck, hello.cqb
-    burn hello.cqb                       # the same 10, 9, ... 0, on HEARTBURN
+    cargo cardiac run --bin hello        # the same 10, 9, ... 0, on CARDIAC
+    cargo cardiac build --bin hello      # only build the CARDIAC deck, hello.cqb
 
-`cargo cardiac build` writes `hello.cqb`, the deck, and `hello.map`, its panic map, next to `hello.rs`. Leave out
-`--bin` to build every program in the package. To watch it run, open Cardigan and drop `hello.cqb` on it. To see the Rust beside the CARDIAC code, build with
+`cargo cardiac build` writes `hello.cqb`, the deck, and `hello.map`, its panic map, next to `hello.rs`. `cargo
+cardiac run` builds them the same way and then runs the deck. Leave out `--bin` to build every program in the
+package (`run` runs one, so a package of several needs it). To watch it run, open Cardigan and drop `hello.cqb` on it. To see the Rust beside the CARDIAC code, build with
 `--emit deck,listing,map`, then drop `hello.cqb`, `hello.cq` and `hello.map` on Cardigan together. It shows the
 listing, and if the program panics, it says why.
 
 ## Your own program
 
-    cargo new countdown
-    cd countdown
-    cargo add cardiac
-
-Then `src/main.rs`:
+`cargo cardiac new countdown` made a package with `cardiac` in its `[dependencies]` (`cargo add cardiac` does the
+same for a package you already have) and this `src/main.rs`:
 
 ```rust
 use cardiac::*;
@@ -101,8 +105,8 @@ fn main() {
 ```
 
     echo 5 | cargo run                  # 5 4 3 2 1 0
-    cargo cardiac build                 # src/countdown.cqb and src/countdown.map
-    burn src/countdown.cqb -- 5         # the same, on CARDIAC; or: echo 5 | burn src/countdown.cqb
+    echo 5 | cargo cardiac run          # the same, on CARDIAC; or: cargo cardiac run -- 5
+    cargo cardiac build                 # only build: src/countdown.cqb and src/countdown.map
 
 Like `cargo build`, `cargo cardiac build` uses the `dev` profile, `--release` the `release` one, and
 `--profile NAME` one of your own. cargo's `dev` profile doesn't suit CARDIAC, so for a dev build `cargo cardiac`
@@ -151,7 +155,7 @@ of its own, `examples/collatz/`, built with `-p collatz`.
 
 
 
-[voxel](https://lab.strangequery.com/cargo-cardiac/demo/voxel/) and [ray](https://lab.strangequery.com/cargo-cardiac/demo/ray/) both have extensive writeups on Strange Query's cargo-cardiac home page.
+[voxel](https://lab.strangequery.com/rust-cardiac/demo/voxel/) and [ray](https://lab.strangequery.com/rust-cardiac/demo/ray/) both have extensive writeups on Strange Query's rust-cardiac home page.
 
 
 ## What Rust is supported
@@ -171,7 +175,7 @@ rustc does all of the front end: parsing, type checking, the borrow checker. A p
   than ranges; arrays of arrays; recursion; `static`; `println!`, `assert_eq!`. The build stops with an error,
   which for the common cases says what to write instead.
 
-[docs/RUST.md](docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
+[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
 and what to write instead.
 
 ## The built-ins
@@ -226,13 +230,13 @@ The program's input comes after the deck. Any CARDIAC that follows the 1968 manu
 
 On CARDIAC a panic is the value -999 and a halt. `cargo cardiac build` also writes a panic map, `NAME.map`, beside
 the deck, as a .pdb sits beside an .exe: where the program's checks are, and what each one checks. The deck is the
-same with or without it. With the map beside the deck, burn says why a run panicked and exits 101, as `cargo run`
-does:
+same with or without it. With the map beside the deck, `cargo cardiac run` says why a run panicked and exits 101,
+as `cargo run` does:
 
-    $ echo 13 | burn days.cqb
+    $ echo 13 | cargo cardiac run -q --bin days
     -999
          halted after 103 instructions
-    burn: days.cqb: panicked in main: index out of bounds
+    cargo cardiac run: days.cqb: panicked in main: index out of bounds
 
 Cardigan reads the map too, when it is opened with the deck.
 
@@ -240,9 +244,11 @@ Cardigan reads the map too, when it is opened with the deck.
 
 A .cqb file is an ordinary CARDIAC deck, so it isn't tied to our tools. These are the places we know it runs:
 
-- **[burn](https://lab.strangequery.com/cardiaq/)**, cardiaq's runtime, from the command line. It's fast, it
-  reads the panic map, and it loads the later decks of a program in phases (`NAME.2.cqb`, ...) when the program
-  asks for them.
+- **`cargo cardiac run`**, from the command line, which runs the deck on heartburn's burn. It's fast, it reads the
+  panic map, and it loads the later decks of a program in phases (`NAME.2.cqb`, ...) when the program asks for
+  them. burn is also a program of its own, for running decks without Rust: `brew install heartburn` (from
+  Strange Query's tap, `brew tap strangequery/tap`), or the release archives of
+  [heartburn](https://github.com/StrangeQuery/heartburn/releases).
 - **[Cardigan](https://lab.strangequery.com/cardigan/)**, in the browser. Drop the deck on it to step through the
   program one instruction at a time, and drop the listing and the panic map with it to see the source and why a
   run panicked.
@@ -283,9 +289,20 @@ and [FPGA](http://www.drdobbs.com/embedded-systems/paper-to-fpga/240155922) vers
 
 ## The command
 
+    cargo cardiac new NAME [cargo new's options]
+    cargo cardiac setup
+    cargo cardiac run [build's options] [--bin NAME] [-- INPUT...]
+    cargo cardiac debug [ekg's options] FILE [INPUT]...
+    cargo cardiac asm [carc's options] FILE
     cargo cardiac build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
     cargo cardiac build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
     cargo cardiac build --emit deck,listing,map,asm ...
+
+`new` is `cargo new`, with `cardiac` added and the countdown as `src/main.rs`. `setup` fetches the driver and its
+nightly. `run` builds as `build` does and runs the deck, input from after `--` or from standard input, with the
+build's messages on standard error, so standard output is the program's. `debug` is heartburn's debugger and
+profiler, ekg, on a listing or a deck, and `asm` is its assembler, carc, which makes a deck of a listing. Each
+takes the options the program of its own does, and `--help` says them.
 
 The settings are cargo's. A package is built with the `dev` profile, `--release` with `release`, and `--profile
 NAME` with a profile of the workspace's `Cargo.toml`, resolved by cargo itself. Its `opt-level` is rustc's, and it
@@ -350,9 +367,9 @@ is lowered as rustc wrote it.
 Cells, for the programs in `tests/programs`. "Literal lowering" is MIR at opt-level 0, overflow checks on, with the
 optimizer off; `cargo cardiac build` is opt-level 2, overflow checks off.
 
-## Developing cargo-cardiac
+## Developing rust-cardiac
 
-[CONTRIBUTING.md](CONTRIBUTING.md) says how to build and test the compiler, and how to send us a pull request.
+[CONTRIBUTING.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/CONTRIBUTING.md) says how to build and test the compiler, and how to send us a pull request.
 
 The compiler's test programs in `tests/programs` are single files that define the built-ins they call themselves,
 as stubs the compiler knows by name, so they need no package and no `cardiac` crate:
@@ -365,7 +382,7 @@ pub fn out(_v: i16) {}
 pub fn main() { out(7); }
 ```
 
-The tests run decks on burn: the one on the PATH, or the one `BURN` names.
+The tests run decks on burn, heartburn's runtime: the one on the PATH, or the one `BURN` names.
 
     ./test_compiler.sh       # every test program in tests/programs natively and on CARDIAC, outputs compared;
                              # and the programs that must not compile
