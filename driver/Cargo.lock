@@ -20,6 +20,8 @@ dependencies = [
 [[package]]
 name = "heartburn"
 version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb1a67631427c8a0888daac1eed87fa92db86222226e0c3a07ad7aadf4bedea8"
 
 [[package]]
 name = "itoa"
