@@ -19,7 +19,7 @@ fn repeatable(o: &ir::Operand) -> bool {
             Projection::Field(_, t) => !matches!(t, Ty::Array(..) | Ty::Slice(_)),
             _ => false,
         }),
-        ir::Operand::Aggregate(..) => false,
+        ir::Operand::Aggregate(..) | ir::Operand::Fn(_) => false,
     }
 }
 

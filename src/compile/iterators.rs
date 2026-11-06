@@ -979,7 +979,7 @@ fn closure_of(func: &Path, arg: &Operand, closures: &HashMap<String, String>) ->
     if c.starts_with("{closure@<i16 as Sum") || c.starts_with("{closure@<u8 as Sum") {
         return Some(Closure::Sum);
     }
-    matches!(arg, Operand::Constant(Const::Unit)).then(|| closures.get(c).cloned().map(Closure::Fn))?
+    matches!(arg, Operand::Constant(Const::ZeroSized(_))).then(|| closures.get(c).cloned().map(Closure::Fn))?
 }
 
 /// Methods of an iterator over an array or a range that rustc calls rather than inlines, as the loops they are:

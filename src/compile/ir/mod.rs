@@ -150,8 +150,57 @@ pub enum Ty {
     /// A named type: a struct, an enum, a type from core (`core::ops::Range<i16>`).
     Path(Path),
     Dyn(Path),
-    /// A type the IR does not model (a closure's, a function pointer's), as rustc wrote it.
+    /// A safe Rust function pointer, `fn(i16) -> i16` (`fn(i16)` when it returns `()`).
+    FnPtr {
+        params: Vec<Ty>,
+        ret: Box<Ty>,
+    },
+    /// A type the IR does not model (a closure's, an `unsafe` or `extern` function pointer's), as rustc wrote it.
     Other(String),
+}
+
+impl Ty {
+    /// Whether a function pointer's type is anywhere in it.
+    pub fn has_fn_pointer(&self) -> bool {
+        let path = |p: &Path| {
+            p.qself.as_ref().is_some_and(|q| {
+                q.ty.has_fn_pointer()
+                    || q.as_trait
+                        .as_ref()
+                        .is_some_and(|t| Ty::Path(t.clone()).has_fn_pointer())
+            }) || p.segments.iter().any(|s| match s {
+                Segment::Name { args: Some(a), .. } => a
+                    .args
+                    .iter()
+                    .any(|a| matches!(a, GenericArg::Ty(t) if t.has_fn_pointer())),
+                Segment::Impl(t) => t.has_fn_pointer(),
+                Segment::Name { args: None, .. } => false,
+            })
+        };
+        match self {
+            Ty::FnPtr { .. } => true,
+            Ty::Tuple(ts) => ts.iter().any(Ty::has_fn_pointer),
+            Ty::Array(t, _) | Ty::Slice(t) | Ty::Ref { to: t, .. } | Ty::Ptr { to: t, .. } => t.has_fn_pointer(),
+            Ty::Path(p) | Ty::Dyn(p) => path(p),
+            Ty::Int(_) | Ty::Bool | Ty::Char | Ty::Str | Ty::Unit | Ty::Never | Ty::Other(_) => false,
+        }
+    }
+
+    /// A function pointer, an array of them, or a shared reference to either: what the front end makes numbers of
+    /// (`indirect::function_pointers`).
+    pub fn is_fn_pointers(&self) -> bool {
+        fn pointers(t: &Ty) -> bool {
+            match t {
+                Ty::FnPtr { .. } => true,
+                Ty::Array(e, ArrayLen::Known(_)) => matches!(**e, Ty::FnPtr { .. }),
+                _ => false,
+            }
+        }
+        match self {
+            Ty::Ref { mutable: false, to, .. } => pointers(to),
+            t => pointers(t),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -307,6 +356,9 @@ pub enum Operand {
     /// A struct value written out field by field, `Point { x: const 0_i16, y: const 2_i16 }`: a struct constant,
     /// inlined where it is used.
     Aggregate(Path, Vec<(String, Operand)>),
+    /// A function as a value, `double`, as MIR writes the function a pointer is made of (`double as fn(i16) -> i16
+    /// (PointerCoercion(ReifyFnPointer(Safe), Implicit))`).
+    Fn(Path),
 }
 
 /// A constant operand, `const ...`.
@@ -336,6 +388,9 @@ pub enum Const {
     /// A reference to a value rustc promoted out of a function into a constant of its own, `main::promoted[1]`:
     /// the function's path (`main`), and the promoted's number.
     Promoted(Path, u32),
+    /// A closure that captures nothing, as a value of its type: `ZeroSized: {closure@src/main.rs:4:13: 4:16}`. (A
+    /// value of any other type with no bytes is `()`.)
+    ZeroSized(Ty),
 }
 
 impl Const {
@@ -344,7 +399,7 @@ impl Const {
         match self {
             Const::Int { .. } | Const::Bool(_) | Const::Char(_) => true,
             Const::Path(p) => p.is_plain(),
-            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) => false,
+            Const::Unit | Const::Str(_) | Const::Bytes(_) | Const::Alloc(..) | Const::Adt(..) | Const::Variant(..) | Const::Promoted(..) | Const::ZeroSized(_) => false,
         }
     }
 }
@@ -495,6 +550,11 @@ pub enum CastKind {
     PointerWithExposedProvenance,
     /// `PointerCoercion(Unsize, Implicit)`: a pointer to an array made a pointer to a slice.
     Unsize(CoercionSource),
+    /// `PointerCoercion(ReifyFnPointer(Safe), Implicit)`: a pointer to a safe function made of the function.
+    ReifyFnPointer(CoercionSource),
+    /// `PointerCoercion(ClosureFnPointer(Safe), Implicit)`: a function pointer made of a closure that captures
+    /// nothing.
+    ClosureFnPointer(CoercionSource),
     /// A kind the IR does not model (another pointer coercion, say), as rustc wrote it.
     Other(String),
 }
@@ -534,6 +594,10 @@ impl fmt::Display for CastKind {
             CastKind::PointerExposeProvenance => "PointerExposeProvenance",
             CastKind::PointerWithExposedProvenance => "PointerWithExposedProvenance",
             CastKind::Unsize(source) => return write!(f, "PointerCoercion(Unsize, {source})"),
+            CastKind::ReifyFnPointer(source) => return write!(f, "PointerCoercion(ReifyFnPointer(Safe), {source})"),
+            CastKind::ClosureFnPointer(source) => {
+                return write!(f, "PointerCoercion(ClosureFnPointer(Safe), {source})")
+            }
             CastKind::Other(text) => text,
         };
         f.write_str(name)
@@ -638,6 +702,15 @@ pub enum Terminator {
         target: Option<BasicBlock>,
         unwind: Unwind,
     },
+    /// `dest = copy _3(args) -> [return: target, unwind ...]`: a call through a function pointer. The front end
+    /// makes each a call of the functions it can be (`indirect::function_pointers`), so no pass after it meets one.
+    CallIndirect {
+        dest: Place,
+        func: Operand,
+        args: Vec<Operand>,
+        target: Option<BasicBlock>,
+        unwind: Unwind,
+    },
     /// `assert(cond, "message", args) -> [success: target, unwind ...]`: panics unless cond is `expected`.
     Assert {
         cond: Operand,
@@ -730,6 +803,15 @@ impl fmt::Display for Ty {
             Ty::Ptr { mutable, to } => write!(f, "*{} {to}", if *mutable { "mut" } else { "const" }),
             Ty::Path(p) => write!(f, "{p}"),
             Ty::Dyn(p) => write!(f, "dyn {p}"),
+            Ty::FnPtr { params, ret } => {
+                f.write_str("fn(")?;
+                comma_list(f, params)?;
+                f.write_str(")")?;
+                if **ret != Ty::Unit {
+                    write!(f, " -> {ret}")?;
+                }
+                Ok(())
+            }
             Ty::Other(t) => f.write_str(t),
         }
     }
@@ -839,6 +921,7 @@ impl fmt::Display for Operand {
                 }
                 f.write_str(" }")
             }
+            Operand::Fn(p) => write!(f, "{p}"),
         }
     }
 }
@@ -875,6 +958,7 @@ impl fmt::Display for Const {
                 f.write_str(")")
             }
             Const::Promoted(p, n) => write!(f, "{p}::promoted[{n}]"),
+            Const::ZeroSized(t) => write!(f, "ZeroSized: {t}"),
         }
     }
 }
@@ -1005,6 +1089,20 @@ impl fmt::Display for Terminator {
                 f.write_str("];")
             }
             Terminator::Call {
+                dest,
+                func,
+                args,
+                target,
+                unwind,
+            } => {
+                write!(f, "{dest} = {func}(")?;
+                comma_list(f, args)?;
+                match target {
+                    Some(t) => write!(f, ") -> [return: {t}, {unwind}];"),
+                    None => write!(f, ") -> {unwind};"),
+                }
+            }
+            Terminator::CallIndirect {
                 dest,
                 func,
                 args,

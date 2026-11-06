@@ -359,7 +359,7 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                 // function, as the good variant of the result; the other variant as it is (None, or Err of its E)
                 "map" => {
                     let x = x?;
-                    let [_, Operand::Constant(Const::Unit)] = args.as_slice() else {
+                    let [_, Operand::Constant(Const::ZeroSized(_))] = args.as_slice() else {
                         return None;
                     };
                     let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
@@ -396,7 +396,7 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                 // of the value where it holds, else None; None as it is
                 "filter" if option => {
                     let x = x?;
-                    let [_, Operand::Constant(Const::Unit)] = args.as_slice() else {
+                    let [_, Operand::Constant(Const::ZeroSized(_))] = args.as_slice() else {
                         return None;
                     };
                     let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
@@ -440,7 +440,9 @@ pub fn inline_enum_methods(f: &mut Function, defs: &[EnumDef], closures: &HashMa
                     let closures_given = if method == "map_or_else" { 2 } else { 1 };
                     let (value, given) = args.split_at(args.len() - closures_given);
                     if value.len() != if method == "map_or" { 2 } else { 1 }
-                        || !given.iter().all(|a| matches!(a, Operand::Constant(Const::Unit)))
+                        || !given
+                            .iter()
+                            .all(|a| matches!(a, Operand::Constant(Const::ZeroSized(_))))
                     {
                         return None;
                     }

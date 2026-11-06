@@ -14,7 +14,7 @@
 //! the built-ins crate, and from then on it is the built-in `inp`, whichever crate defined it.
 use std::collections::HashSet;
 
-use super::ir::{File, Item, Segment, Terminator};
+use super::ir::{File, Item, Operand, Path, Rvalue, Segment, Statement, Terminator};
 use super::Fail;
 use super::BUILTINS;
 
@@ -139,50 +139,62 @@ pub fn link(main: &File, deps: &[Crate]) -> Result<File, Fail> {
             consts.push((n.to_string(), *name));
         }
     }
+    // a function a call or a pointer names, by a path of plain names, the last perhaps with generic arguments:
+    // renamed to the one it reaches
+    let rename = |k: usize, func: &mut Path| -> Result<(), Fail> {
+        if func.qself.is_some() {
+            return Ok(());
+        }
+        let Some((last, before)) = func.segments.split_last() else {
+            return Ok(());
+        };
+        if !before.iter().all(|s| matches!(s, Segment::Name { args: None, .. })) {
+            return Ok(());
+        }
+        let Segment::Name { args: generic, .. } = last else {
+            return Ok(());
+        };
+        let callee = func.to_string();
+        let callee = match generic {
+            Some(g) => callee.strip_suffix(&g.to_string()).unwrap().to_string(),
+            None => callee,
+        };
+        let own = defined[k].contains(&callee);
+        match resolve(k, &callee)? {
+            Some(to) if generic.is_some() && !own && !BUILTINS.contains(&to.as_str()) => {
+                return Err(format!("{}call to {callee}{}, a generic function in another crate: rustc writes its MIR \
+                    only in the generic form, which this compiler can't use. Make it non-generic, or #[inline] so rustc \
+                    inlines it", within_crate(k), generic.as_ref().unwrap()));
+            }
+            Some(to) => {
+                let args = generic.clone();
+                func.segments = to
+                    .split("::")
+                    .map(|n| Segment::Name {
+                        name: n.to_string(),
+                        args: None,
+                    })
+                    .collect();
+                if let Some(Segment::Name { args: a, .. }) = func.segments.last_mut() {
+                    *a = args;
+                }
+            }
+            None => {}
+        }
+        Ok(())
+    };
     for (k, (_, file)) in crates.iter_mut().enumerate() {
         for b in file.bodies_mut().flat_map(|b| &mut b.blocks) {
-            let Terminator::Call { dest, func, .. } = &mut b.terminator else {
-                continue;
-            };
-            // a call by a path of plain names, the last perhaps with generic arguments, into a local
-            if dest.as_local().is_none() || func.qself.is_some() {
-                continue;
-            }
-            let Some((last, before)) = func.segments.split_last() else {
-                continue;
-            };
-            if !before.iter().all(|s| matches!(s, Segment::Name { args: None, .. })) {
-                continue;
-            }
-            let Segment::Name { args: generic, .. } = last else {
-                continue;
-            };
-            let callee = func.to_string();
-            let callee = match generic {
-                Some(g) => callee.strip_suffix(&g.to_string()).unwrap().to_string(),
-                None => callee,
-            };
-            let own = defined[k].contains(&callee);
-            match resolve(k, &callee)? {
-                Some(to) if generic.is_some() && !own && !BUILTINS.contains(&to.as_str()) => {
-                    return Err(format!("{}call to {callee}{}, a generic function in another crate: rustc writes its MIR \
-                        only in the generic form, which this compiler can't use. Make it non-generic, or #[inline] so rustc \
-                        inlines it", within_crate(k), generic.as_ref().unwrap()));
+            for s in b.statements.iter_mut() {
+                if let Statement::Assign(_, Rvalue::Cast(Operand::Fn(func), ..)) = s {
+                    rename(k, func)?;
                 }
-                Some(to) => {
-                    let args = generic.clone();
-                    func.segments = to
-                        .split("::")
-                        .map(|n| Segment::Name {
-                            name: n.to_string(),
-                            args: None,
-                        })
-                        .collect();
-                    if let Some(Segment::Name { args: a, .. }) = func.segments.last_mut() {
-                        *a = args;
-                    }
+            }
+            // a call into a local
+            if let Terminator::Call { dest, func, .. } = &mut b.terminator {
+                if dest.as_local().is_some() {
+                    rename(k, func)?;
                 }
-                None => {}
             }
         }
         if k > 0 {

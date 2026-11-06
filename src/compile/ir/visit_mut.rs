@@ -84,6 +84,13 @@ pub fn walk_terminator<V: VisitMut + ?Sized>(v: &mut V, t: &mut Terminator) {
                 v.visit_operand(a);
             }
         }
+        Terminator::CallIndirect { dest, func, args, .. } => {
+            v.visit_place(dest);
+            v.visit_operand(func);
+            for a in args {
+                v.visit_operand(a);
+            }
+        }
         Terminator::Assert { cond, msg_args, .. } => {
             v.visit_operand(cond);
             for a in msg_args {
@@ -147,6 +154,7 @@ pub fn walk_operand<V: VisitMut + ?Sized>(v: &mut V, o: &mut Operand) {
                 v.visit_operand(o);
             }
         }
+        Operand::Fn(p) => v.visit_path(p),
     }
 }
 
@@ -188,7 +196,7 @@ pub fn walk_const<V: VisitMut + ?Sized>(v: &mut V, c: &mut Const) {
         | Const::Str(_)
         | Const::Bytes(_)
         | Const::Promoted(..) => {}
-        Const::Alloc(_, t) => v.visit_ty(t),
+        Const::Alloc(_, t) | Const::ZeroSized(t) => v.visit_ty(t),
     }
 }
 
@@ -201,6 +209,12 @@ pub fn walk_ty<V: VisitMut + ?Sized>(v: &mut V, t: &mut Ty) {
         }
         Ty::Array(t, _) | Ty::Slice(t) | Ty::Ref { to: t, .. } | Ty::Ptr { to: t, .. } => v.visit_ty(t),
         Ty::Path(p) | Ty::Dyn(p) => v.visit_path(p),
+        Ty::FnPtr { params, ret } => {
+            for t in params {
+                v.visit_ty(t);
+            }
+            v.visit_ty(ret);
+        }
         Ty::Int(_) | Ty::Bool | Ty::Char | Ty::Str | Ty::Unit | Ty::Never | Ty::Other(_) => {}
     }
 }

@@ -45,6 +45,7 @@ pub mod stack;
 pub mod structs;
 pub mod tails;
 pub mod hoist;
+pub mod indirect;
 pub mod util;
 pub mod wide;
 

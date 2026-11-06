@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use super::ir::visit_mut::{walk_const, walk_operand, walk_path, walk_rvalue, walk_terminator, walk_ty, VisitMut};
 use super::ir::{
-    ArrayLen, BinOp, Block, Body, CastKind, Const, ConstItem, ConstValue, File, IntTy, Item, Local, Operand, Path,
-    Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp,
+    ArrayLen, BinOp, Block, Body, CastKind, Const, ConstItem, ConstValue, File, IntTy, Item, ItemPath, Local, Operand,
+    Path, Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty, UnOp,
 };
 use super::structs::Function;
 use super::util::Ordered;
@@ -57,6 +57,9 @@ pub struct Statics {
 /// The file's functions, by name, in the order the file gives them, and the named scalar consts' values.
 pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::EnumDef]) -> Result<FrontEnd, Fail> {
     promoted_consts(&mut file);
+    // function pointers as numbers, and calls through them as calls of what they can be (after the promoteds,
+    // which may make them)
+    super::indirect::function_pointers(&mut file);
     super::panic_messages::literal_panics(&mut file);
     byte_strings(&mut file);
     file.visit(&mut CharIsUsize);
@@ -1337,6 +1340,16 @@ fn word(w: &str) -> bool {
     !w.is_empty() && w.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
 }
 
+/// A closure's own function, `main::{closure#0}`, by the name the compiler reads it as, `main_closure0` (a call
+/// to it is `map`'s, say).
+pub(super) fn closure_name(path: &ItemPath) -> Option<String> {
+    let [owner, c] = path.segments.as_slice() else {
+        return None;
+    };
+    let n = c.strip_prefix("{closure#")?.strip_suffix('}')?;
+    (word(owner) && word(n) && n.bytes().all(|b| b.is_ascii_digit())).then(|| format!("{owner}_closure{n}"))
+}
+
 /// The functions the compiler reads: those named by one plain name (not an impl's), and closures' (as
 /// `OWNER_closureN`), in the order the file gives them. Of two of the same name (a const fn and its `// MIR FOR CTFE` copy), the later body is the one kept, in
 /// the earlier one's place.
@@ -1345,10 +1358,9 @@ fn functions(file: &File) -> Ordered<String, Function> {
     for item in &file.items {
         let Item::Fn(f) = item else { continue };
         let name = match f.path.segments.as_slice() {
-            // a closure's own function, `main::{closure#0}`, as `main_closure0` (a call to it is `map`'s)
-            [owner, c] if word(owner) => match c.strip_prefix("{closure#").and_then(|c| c.strip_suffix('}')) {
-                Some(n) if n.bytes().all(|b| b.is_ascii_digit()) => format!("{owner}_closure{n}"),
-                _ => continue,
+            [owner, _] if word(owner) => match closure_name(&f.path) {
+                Some(name) => name,
+                None => continue,
             },
             _ => match f.path.single().filter(|_| f.path.is_plain()) {
                 Some(name) => name.to_string(),

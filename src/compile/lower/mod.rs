@@ -146,7 +146,7 @@ fn bare(o: &ir::Operand) -> String {
     match o {
         ir::Operand::Copy(p) | ir::Operand::Move(p) | ir::Operand::Place(p) => p.to_string(),
         ir::Operand::Constant(c) => format!("const {c}"),
-        ir::Operand::Aggregate(..) => o.to_string(),
+        ir::Operand::Aggregate(..) | ir::Operand::Fn(_) => o.to_string(),
     }
 }
 

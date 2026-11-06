@@ -213,9 +213,26 @@ pub fn calls(tcx: TyCtxt<'_>, defs: &[DefId]) -> std::collections::HashSet<DefId
     called
 }
 
-/// The functions the calls in a body reach, each resolved to the definition it runs, added to `called`.
+/// The functions the calls in a body reach, each resolved to the definition it runs, added to `called`; and those
+/// a call through a pointer can: the functions it makes pointers to.
 pub fn calls_in<'tcx>(tcx: TyCtxt<'tcx>, body: &mmir::Body<'tcx>, called: &mut std::collections::HashSet<DefId>) {
+    use mty::adjustment::PointerCoercion;
     let env = mty::TypingEnv::post_analysis(tcx, body.source.def_id());
+    for s in body.basic_blocks.iter().flat_map(|b| &b.statements) {
+        let mmir::StatementKind::Assign(assign) = &s.kind else {
+            continue;
+        };
+        let mmir::Rvalue::Cast(mmir::CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer(_), _), f, _) =
+            &assign.1
+        else {
+            continue;
+        };
+        if let Some((callee, args)) = f.const_fn_def() {
+            if let Ok(Some(instance)) = mty::Instance::try_resolve(tcx, env, callee, args) {
+                called.insert(instance.def_id());
+            }
+        }
+    }
     for b in body.basic_blocks.iter() {
         let mmir::TerminatorKind::Call { func, .. } = &b.terminator().kind else {
             continue;
@@ -633,14 +650,18 @@ impl<'tcx> Convert<'tcx> {
                 ir::Rvalue::Ref(kind, self.place(p, locals)?)
             }
             R::Cast(kind, o, t) => {
-                let mmir::Rvalue::Cast(internal_kind, ..) = internal else {
+                let mmir::Rvalue::Cast(internal_kind, internal_o, _) = internal else {
                     return None;
                 };
-                ir::Rvalue::Cast(
-                    self.operand(o, locals)?,
-                    self.ty_read(*t, Paths::Full)?,
-                    cast_kind(kind, internal_kind),
-                )
+                let kind = cast_kind(kind, internal_kind);
+                let o = match (&kind, o) {
+                    // the function a pointer is made of, named as a call names it (`double`)
+                    (ir::CastKind::ReifyFnPointer(_), pmir::Operand::Constant(_)) => {
+                        ir::Operand::Fn(ir::parse_path(&self.trimmed(format!("{internal_o:?}"))).ok()?)
+                    }
+                    _ => self.operand(o, locals)?,
+                };
+                ir::Rvalue::Cast(o, self.ty_read(*t, Paths::Full)?, kind)
             }
             R::BinaryOp(op, a, b) => {
                 let (a, b) = (self.operand(a, locals)?, self.operand(b, locals)?);
@@ -757,13 +778,32 @@ impl<'tcx> Convert<'tcx> {
                 otherwise: Some(bb(targets.otherwise())),
             },
             T::Call {
+                func: func @ (pmir::Operand::Copy(_) | pmir::Operand::Move(_)),
+                args,
+                destination,
+                target,
+                unwind,
+            } => {
+                // a call through a function pointer, `copy _3(..)`
+                if target.is_none() && matches!(unwind, pmir::UnwindAction::Cleanup(_)) {
+                    return None;
+                }
+                ir::Terminator::CallIndirect {
+                    dest: self.place(destination, locals)?,
+                    func: self.operand(func, locals)?,
+                    args: args.iter().map(|a| self.operand(a, locals)).collect::<Option<_>>()?,
+                    target: target.map(bb),
+                    unwind: self.unwind(unwind, internal)?,
+                }
+            }
+            T::Call {
                 func,
                 args,
                 destination,
                 target,
                 unwind,
             } => {
-                // a call of a function by name; one through a pointer (`move _3(..)`) isn't read
+                // a call of a function by name
                 let pmir::Operand::Constant(f) = func else { return None };
                 if !matches!(f.ty().kind(), pty::TyKind::RigidTy(pty::RigidTy::FnDef(..))) {
                     return None;
@@ -1140,6 +1180,20 @@ fn cast_kind(kind: &pmir::CastKind, internal: &mmir::CastKind) -> ir::CastKind {
             }
             other => ir::CastKind::Other(format!("{other:?}")),
         },
+        C::PointerCoercion(
+            c @ (pmir::PointerCoercion::ReifyFnPointer(pmir::Safety::Safe)
+            | pmir::PointerCoercion::ClosureFnPointer(pmir::Safety::Safe)),
+        ) => {
+            let source = match internal {
+                mmir::CastKind::PointerCoercion(_, mmir::CoercionSource::Implicit) => ir::CoercionSource::Implicit,
+                mmir::CastKind::PointerCoercion(_, mmir::CoercionSource::AsCast) => ir::CoercionSource::AsCast,
+                other => return ir::CastKind::Other(format!("{other:?}")),
+            };
+            match c {
+                pmir::PointerCoercion::ReifyFnPointer(_) => ir::CastKind::ReifyFnPointer(source),
+                _ => ir::CastKind::ClosureFnPointer(source),
+            }
+        }
         // another coercion, as rustc names it
         C::PointerCoercion(_) => ir::CastKind::Other(format!("{internal:?}")),
     }

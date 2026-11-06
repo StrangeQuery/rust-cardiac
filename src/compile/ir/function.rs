@@ -64,6 +64,8 @@ pub fn parse_params(text: &str) -> Vec<(Local, String)> {
     for (i, &c) in b.iter().enumerate() {
         match c {
             b'[' | b'(' | b'<' => depth += 1,
+            // (the `>` of a function pointer's `->` closes nothing)
+            b'>' if i > 0 && b[i - 1] == b'-' => {}
             b']' | b')' | b'>' => depth -= 1,
             b',' if depth == 0 => {
                 pieces.push(&text[start..i]);

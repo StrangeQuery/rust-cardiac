@@ -823,7 +823,7 @@ fn operator(
     let ty = |o: &Operand| match o {
         Operand::Constant(_) => o.int().map(|(_, t)| Ty::Int(t)),
         Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => super::ranges::place_ty(types, p),
-        Operand::Aggregate(..) => None,
+        Operand::Aggregate(..) | Operand::Fn(_) => None,
     };
     let int = |o: &Operand| match ty(o) {
         Some(Ty::Int(t @ (IntTy::I16 | IntTy::U8))) => Some(t),

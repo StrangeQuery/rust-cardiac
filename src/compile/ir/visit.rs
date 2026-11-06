@@ -45,7 +45,7 @@ impl Locals for Operand {
     fn visit_locals(&self, f: &mut dyn FnMut(Local)) {
         match self {
             Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => p.visit_locals(f),
-            Operand::Constant(_) => {}
+            Operand::Constant(_) | Operand::Fn(_) => {}
             Operand::Aggregate(_, fields) => fields.iter().for_each(|(_, o)| o.visit_locals(f)),
         }
     }
@@ -91,6 +91,11 @@ impl Locals for Terminator {
                 dest.visit_locals(f);
                 args.iter().for_each(|a| a.visit_locals(f));
             }
+            Terminator::CallIndirect { dest, func, args, .. } => {
+                dest.visit_locals(f);
+                func.visit_locals(f);
+                args.iter().for_each(|a| a.visit_locals(f));
+            }
             Terminator::Assert { cond, msg_args, .. } => {
                 cond.visit_locals(f);
                 msg_args.iter().for_each(|a| a.visit_locals(f));
@@ -112,7 +117,9 @@ impl Terminator {
         match self {
             Terminator::Goto(b) => vec![*b],
             Terminator::SwitchInt { arms, otherwise, .. } => arms.iter().map(|(_, b)| *b).chain(*otherwise).collect(),
-            Terminator::Call { target, unwind, .. } => target.iter().copied().chain(cleanup(unwind)).collect(),
+            Terminator::Call { target, unwind, .. } | Terminator::CallIndirect { target, unwind, .. } => {
+                target.iter().copied().chain(cleanup(unwind)).collect()
+            }
             Terminator::Assert { target, unwind, .. } | Terminator::Drop { target, unwind, .. } => {
                 std::iter::once(*target).chain(cleanup(unwind)).collect()
             }
@@ -173,6 +180,7 @@ impl Terminator {
         match self {
             Terminator::SwitchInt { discr, .. } => vec![discr],
             Terminator::Call { args, .. } => args.iter().collect(),
+            Terminator::CallIndirect { func, args, .. } => std::iter::once(func).chain(args).collect(),
             Terminator::Assert { cond, msg_args, .. } => std::iter::once(cond).chain(msg_args).collect(),
             _ => vec![],
         }
@@ -184,7 +192,7 @@ impl Operand {
     pub fn place(&self) -> Option<&Place> {
         match self {
             Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => Some(p),
-            Operand::Constant(_) | Operand::Aggregate(..) => None,
+            Operand::Constant(_) | Operand::Aggregate(..) | Operand::Fn(_) => None,
         }
     }
 
@@ -240,7 +248,7 @@ impl Operand {
     pub fn place_mut(&mut self) -> Option<&mut Place> {
         match self {
             Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => Some(p),
-            Operand::Constant(_) | Operand::Aggregate(..) => None,
+            Operand::Constant(_) | Operand::Aggregate(..) | Operand::Fn(_) => None,
         }
     }
 }
@@ -275,7 +283,7 @@ impl Terminator {
     /// Every place it names: a call's destination, then what it reads.
     pub fn places(&self) -> Vec<&Place> {
         let dest = match self {
-            Terminator::Call { dest, .. } => Some(dest),
+            Terminator::Call { dest, .. } | Terminator::CallIndirect { dest, .. } => Some(dest),
             Terminator::Drop { place, .. } => Some(place),
             _ => None,
         };
@@ -288,6 +296,11 @@ impl Terminator {
         match self {
             Terminator::Call { dest, args, .. } => {
                 f(dest);
+                args.iter_mut().filter_map(Operand::place_mut).for_each(f);
+            }
+            Terminator::CallIndirect { dest, func, args, .. } => {
+                f(dest);
+                func.place_mut().into_iter().for_each(&mut *f);
                 args.iter_mut().filter_map(Operand::place_mut).for_each(f);
             }
             Terminator::SwitchInt { discr, .. } => discr.place_mut().into_iter().for_each(f),
@@ -331,6 +344,7 @@ impl Terminator {
         match self {
             Terminator::SwitchInt { discr, .. } => vec![discr],
             Terminator::Call { args, .. } => args.iter_mut().collect(),
+            Terminator::CallIndirect { func, args, .. } => std::iter::once(func).chain(args.iter_mut()).collect(),
             Terminator::Assert { cond, msg_args, .. } => std::iter::once(cond).chain(msg_args.iter_mut()).collect(),
             _ => vec![],
         }
@@ -351,7 +365,9 @@ impl Terminator {
             Terminator::SwitchInt { arms, otherwise, .. } => {
                 arms.iter_mut().map(|(_, b)| b).chain(otherwise.as_mut()).collect()
             }
-            Terminator::Call { target, unwind, .. } => target.as_mut().into_iter().chain(cleanup(unwind)).collect(),
+            Terminator::Call { target, unwind, .. } | Terminator::CallIndirect { target, unwind, .. } => {
+                target.as_mut().into_iter().chain(cleanup(unwind)).collect()
+            }
             Terminator::Assert { target, unwind, .. } | Terminator::Drop { target, unwind, .. } => {
                 std::iter::once(target).chain(cleanup(unwind)).collect()
             }

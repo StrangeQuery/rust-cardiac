@@ -120,8 +120,9 @@ impl fmt::Display for ItemPath {
 
 impl FnItem {
     /// Whether a parameter's type holds a tuple (other than one of numbers and bools, or a reference to one) or is
-    /// `()`, or the return type is one the IR does not model and that contains a brace. The compiler does not read
-    /// such a function (yet). A `()` in a type's arguments (`Option<()>`) takes no cell, as an enum's field.
+    /// `()`, or a function pointer the front end doesn't make a number of, or the return type is one the IR does not
+    /// model and that contains a brace. The compiler does not read such a function (yet). A `()` in a type's
+    /// arguments (`Option<()>`) takes no cell, as an enum's field.
     pub fn unread(&self) -> bool {
         fn tuple(t: &Ty) -> bool {
             match t {
@@ -129,7 +130,8 @@ impl FnItem {
                 Ty::Other(text) => text.contains(')'),
                 Ty::Array(t, _) | Ty::Slice(t) | Ty::Ref { to: t, .. } | Ty::Ptr { to: t, .. } => tuple(t),
                 Ty::Path(p) | Ty::Dyn(p) => path_tuple(p),
-                Ty::Int(_) | Ty::Bool | Ty::Char | Ty::Str | Ty::Never => false,
+                // (the front end makes a function pointer a number: `indirect::function_pointers`)
+                Ty::Int(_) | Ty::Bool | Ty::Char | Ty::Str | Ty::Never | Ty::FnPtr { .. } => false,
             }
         }
         fn path_tuple(p: &Path) -> bool {
@@ -155,7 +157,10 @@ impl FnItem {
                 _ => false,
             }
         }
-        self.params.iter().any(|(_, t)| tuple(t) && !scalars(t)) || matches!(&self.ret, Ty::Other(t) if t.contains('{'))
+        // (and one that holds a function pointer other than as the front end makes a number of it)
+        let pointer = |t: &Ty| t.has_fn_pointer() && !t.is_fn_pointers();
+        self.params.iter().any(|(_, t)| (tuple(t) && !scalars(t)) || pointer(t))
+            || matches!(&self.ret, Ty::Other(t) if t.contains('{'))
     }
 }
 

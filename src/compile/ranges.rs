@@ -1094,7 +1094,7 @@ pub fn mark_wrapping(blocks: &mut [Block], locals: &HashMap<Local, Ty>) {
     let ty = |o: &Operand| match o {
         Operand::Constant(_) => o.int().map(|(_, t)| Ty::Int(t)),
         Operand::Copy(p) | Operand::Move(p) | Operand::Place(p) => place_ty(locals, p),
-        Operand::Aggregate(..) => None,
+        Operand::Aggregate(..) | Operand::Fn(_) => None,
     };
     for s in blocks.iter_mut().flat_map(|b| b.statements.iter_mut()) {
         let Statement::Assign(d, Rvalue::BinaryOp(op @ (BinOp::Add | BinOp::Sub | BinOp::Mul), a, c)) = s else {
