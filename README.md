@@ -72,7 +72,7 @@ Notice the use of `out()` instead of `println!`. CARDIAC has limited I/O. `print
 
 When you run the program natively, `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
 
-[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has a full list of what isn't supported: `println!`, `format!`, `assert_eq!` and `assert_ne!` are refused, and the suggested replacements are `out()` and `assert!(a == b)`.
+[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the list of what is and isn't supported. `println!` and `format!` are refused: `out()` prints a value. `assert_eq!`, `assert_ne!` and panics with a literal message work, and say what Rust's would.
 
 ## Building and running Hello
 In a checkout of this repository, in `examples/`, run it natively, then on CARDIAC:
@@ -162,18 +162,21 @@ of its own, `examples/collatz/`, built with `-p collatz`.
 
 rustc does all of the front end: parsing, type checking, the borrow checker. A program it rejects never reaches CARDIAC, and you get Rust's own errors. cargo-cardiac compiles what rustc writes out. In short:
 
-- **Works well:** `i16` (a card's -999..=999), `u8`, `usize`, `bool`; `+`, `-` and comparisons, `*` by a constant,
-  `/` and `%` by a power of ten; `if`, `while`, `loop`, `match` on integers, `for` over a range; fixed-size arrays,
-  `const` tables, tuples, structs of scalar fields with methods; functions, traits, inlined generics and closures;
-  `&mut` and array references; bounds and overflow checks, `assert!`, `panic!()`.
+- **Works well:** `i16` (a card's -999..=999), `i8`, `u8`, `usize`, `bool`, `char` (one that fits on a card);
+  `+`, `-` and comparisons, `*` by a constant, `/` and `%` by a power of ten, `!`, and `<<` and `>>` by a constant;
+  `if`, `while`, `loop`, `match` on integers, `for` over a range; fixed-size arrays, `const` tables, `static`s,
+  tuples, structs (unit ones too) with methods; functions, traits, inlined generics and closures, and a function
+  calling itself as the last thing it does; `&mut` and array references; `Ordering` and `cmp`; bounds and overflow
+  checks, `assert!`, `assert_eq!`, `panic!` with a message.
 - **Works, but costs more than it looks:** `*`, `/` and `%` of two variables (a multiply or divide routine, and as
   many steps as the numbers are big), arrays passed by value (copied at every call), anything read through an
   index or a pointer (self-modifying code), arrays of structs (one array per field), overflow checks on.
-- **Enums:** C-like ones are one cell. An enum with data, and so `Option` and `Result` with `?`, `if let`,
-  `unwrap_or` and the like, is a tag cell and its fields' cells.
-- **Refused:** other integer types and floats; bit operations; strings and the heap; slices and iterators other
-  than ranges; arrays of arrays; recursion; `static`; `println!`, `assert_eq!`. The build stops with an error,
-  which for the common cases says what to write instead.
+- **Enums:** C-like ones are one cell. An enum with data, named fields or not, and so `Option` and `Result` with
+  `?`, `if let` and most of their methods, is a tag cell and its fields' cells.
+- **Refused:** integers wider than 16 bits (an `i32` is held as an `i16` is) and floats; `&`, `|` and `^` between
+  integers, and shifts by a variable; strings and the heap; slices and iterators other than ranges; arrays of
+  arrays; recursion other than a call to itself at the end; `println!` and `format!`. The build stops with an
+  error, which for the common cases says what to write instead.
 
 [docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
 and what to write instead.

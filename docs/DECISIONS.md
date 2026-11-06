@@ -1,7 +1,8 @@
 # Decision log
 
 Newest first. Each entry is the decision, why, and what it costs. (The project was called Ferritin until it was
-released on its own as rust-cardiac, and is now cargo-cardiac.)
+released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
+rust-cardiac, and cargo-cardiac is what you install.)
 
 ## 2026-11-06 · rust-cardiac is the project, cargo-cardiac the command, `cardiac` the library; cardiaq is gone
 
@@ -23,6 +24,280 @@ released on its own as rust-cardiac, and is now cargo-cardiac.)
 - **Cost.** cargo-cardiac carries burn, carc and ekg's code (heartburn with `tools`), about what cardiaq's
   install was. The tests still run decks on a burn of their own (`BURN`, or burn on the PATH), so a contributor
   still needs one. cargo-cardiac can't be published until heartburn 0.1.2 is on crates.io.
+
+## 2026-11-06 · A wrapping `*` is refused where the product can pass the accumulator
+
+- **Decision.** A `u8`'s or an `i8`'s wrapping `*` (with overflow checks off, or `wrapping_mul` inlined) that the
+  range pass hasn't shown stays in its type's range is the plain multiply and then the wrap, only when one side is
+  a constant from -39 to 39, so the product is at most 9999, what the accumulator holds. Any other is refused.
+- **Why.** Two `u8`s' product reaches 65025, and the multiply kept what was left of it: `200u8.wrapping_mul(200)`
+  was 0, not 64 (cargo-cardiac-support#142).
+
+## 2026-11-05 · A unit struct is no cells; the driver says which structs have no fields
+
+- **Decision.** The driver writes down, beside the enums, each struct the crate's locals have, by its name and
+  whether it has no fields (`facts::structs`, `structs::StructDef`). The struct pass gives a unit struct
+  (`struct Flag;`) a layout of no fields: a local of it is no cells, a parameter no argument, a `&Flag` (a struct
+  behind a shared reference, the struct by value) nothing, and its value (`Flag`, which MIR prints as a unit
+  variant, or `const Flag`) nothing to write. A name a struct with fields also has, or a const, gets no unit layout,
+  as the pass knows structs by their names.
+- **Why.** The pass learns a struct's fields from the values that build it, and at opt-level 1 rustc leaves a unit
+  struct a local that nothing builds (`debug d => const Doubler`): it was refused as a local of an unknown type.
+- **Cost.** None: a unit struct took no cells where it compiled before (opt-level 2, rustc having dropped it).
+
+## 2026-11-05 · A function that returns `!` is called with no way back
+
+- **Decision.** A call of the program's own function declared `-> !` (`fn fail() -> !`), which MIR writes with no
+  return block, is its arguments and the jump to the function; the function keeps no return instruction (no
+  `CLA 99`, no exit cell), and a local of type `!` needs no cell.
+- **Why.** It was refused as a terminator the backend doesn't have, though it is an ordinary call.
+
+## 2026-11-05 · A function that can't unwind is compiled as any other
+
+- **Decision.** A call or a check whose unwind is `terminate(abi)` (in an `extern "C"` function, where Rust aborts
+  rather than unwinds a panic) is read as `unwind continue`: CARDIAC never unwinds, and a panic stops the machine.
+- **Cost.** Natively such a panic aborts, exit code 134, where burn exits 101 as for any panic; the output is the
+  same. The panic map can't say otherwise without a message burn reads as an abort.
+
+## 2026-11-05 · A char is a usize that fits on a card
+
+- **Decision.** The IR reads a char constant (`'b'`, `Const::Char`; the lexer a char literal as rustc writes one),
+  and the front end makes every char a usize: its type, and each constant its code point. A char is compared,
+  matched and cast (`as u8` mod 256, `as i16`, `u8 as char`) as a usize is. A literal past a card (`'Ϩ'`, 1000)
+  is refused as any constant past a card is, as Jason decided on cargo-cardiac-support#27.
+- **Why.** Rust has no arithmetic on chars, and a program can make one only from a literal or a `u8`: every char at
+  run time is below 1000, never negative, where a usize lives. What it takes from a usize is what a usize below
+  1000 does.
+- **Cost.** A listing says `98_usize` where the source says `'b'`. `char::from_u32`, `from_digit`, `to_digit`,
+  `is_ascii_digit` at opt-level 1 and the like stay refused (calls, or `u32`).
+
+## 2026-11-05 · `i8`: a cell from -128 to 127
+
+- **Decision.** An `i8` is one cell, as an `i16` is, its range -128..=127: a local, a parameter, an array's element,
+  and an overflow-checked op's pair, checked against that range. With overflow checks off its `+` and `-` (and `-x`)
+  wrap, as a `u8`'s do: the plain op, then 256 added or taken away until the value is back in range (`wrap_i8`),
+  unless the range pass shows it already is. `as i8` keeps the value mod 256 from any integer type, `i8 as u8` adds
+  256 to a negative one, `i8 as usize` is a usize past a card for a negative one, as an `i16`'s is.
+- **Not supported.** An `i8`'s wrapping `*` (checks off), which can pass what the accumulator holds; an `i8` in a
+  struct or an enum; `i8`'s methods.
+- **Cost.** About 12 cells for each `as i8` and each wrapping op. Dividing two `i8`s checks `-128 / -1`, which an
+  `i16`'s needn't (no card holds `i16::MIN`).
+
+## 2026-11-05 · A byte string is an array of its bytes, built where it is used
+
+- **Decision.** The IR reads a byte string constant (`b"CARD"`, `Const::Bytes`, escapes as rustc writes them). The
+  front end makes each use a `[u8; N]` of the bytes, in a local of the function's own at the start of the block,
+  and its borrow, as a promoted constant is built.
+- **Cost.** N cells a use, and in a function other than main's opening blocks N stores.
+
+## 2026-11-05 · A static is a fixed run of cells, as every variable on CARDIAC is
+
+- **Decision.** The IR reads a static (`Item::Static`), the allocation rustc says is its (`Item::Alloc`,
+  `alloc1 (static: T, ..)`), and a pointer into an allocation (`Const::Alloc`, `{alloc1: &[i16; 4]}`). A static
+  whose first value is a literal of numbers or bools (or an array of them) is cells in the data section, with
+  those values, `static_NAME`; a pointer to it is the constant holding its address, so every read and write goes
+  through it, from any function, as through any raw pointer. `static mut` is the same cells: a call that changes
+  one is seen by its caller, since no pass keeps what a pointer read gave across anything.
+- **Why.** Every CARDIAC variable is a fixed cell already; a static is one no function owns.
+- **Cost.** Each access is through the address (self-modifying code), a few cells and steps more than a local's.
+  A dependency's statics have no MIR in its metadata, and stay refused; so does one rustc works out otherwise.
+- **The oracle.** rustc's text writes a pointer to a static `&[u8; N]` as `<static(DefId(..))>`, which it can't
+  read: the driver gives it as the allocation, as for any other type, and the two differ there.
+
+## 2026-11-05 · A const table rustc works out is the literal it works out to
+
+- **Decision.** For a const array of numbers or bools whose body works it out (`[A, B, A + B]`, a const fn's
+  table), the driver gives the body as the literal rustc evaluates it to (`const_eval_poly`), which the front end
+  reads as any const table. Tables of `i8`, `usize` and `bool` are read as those of `i16` and `u8` are.
+- **The oracle.** The text keeps the body that works the value out, so such an item differs from the text's
+  there; no test program has one.
+
+## 2026-11-05 · A call of a function to itself, as the last thing it does, is a loop
+
+- **Decision.** In the front end, `f`'s call of `f` whose result is `f`'s own and after which nothing but the way
+  to the return comes is each argument into a temporary, each temporary into its parameter, and a jump to the
+  function's start (a block of its own that the entry goes to). The parameters' cells hold the next round's values,
+  as the callee's would; nothing else of the caller is read after the call. Not where a parameter or an argument is
+  a reference or a pointer, which could point into the cells reused. Other recursion still needs a stack.
+
+## 2026-11-05 · An integer method of core's that works in i32 is refused
+
+- **Decision.** The IR keeps, for each body, the locals rustc declared in a function it inlined and that
+  function's path, as the scope says it (`scope 3 (inlined core::num::<impl i16>::midpoint) {`; `Body::inlined`,
+  read from the text and from rustc's source scopes alike). A function into which rustc inlined an integer method of
+  core's, of a type other than i32, that has an i32 local (`i16::midpoint`, which adds the two in i32) is refused:
+  "core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32
+  is a card".
+- **Why.** i32 is i16 on CARDIAC (`front::I32IsI16`), which is right for a program's own i32: on a card either way,
+  and past one it differs as an i16 does. But core widens to i32 only so as to work past what the narrower type
+  holds, and on a card that is a wrong answer for values the program never sees: `999.midpoint(998)` printed 598.
+  An i32 method's own i32 (a range of i32's step, `<impl i32>::overflowing_add_unsigned`) is the program's, and
+  stays.
+- **Cost.** `i16::midpoint` doesn't compile at any opt-level (at 1 and s it was already a refused call).
+
+## 2026-11-05 · No card holds i16::MIN or i16::MAX: a test against one is settled, a value refused
+
+- **Decision.** Before any pass, at every opt-level (`settled_by_the_card`), a comparison of an i16 with
+  `i16::MIN` or `i16::MAX` is the constant the card makes it (`x == i16::MIN` false, `x < i16::MAX` true), with an
+  `&` or `|` of it that one side settles and an assert of the result; and a switch on an i16 loses its arms past a
+  card (`match x { i16::MIN => .. }`). Anything else that reads a limit is the value, which is refused as any
+  constant past a card is: "constant out of range: i16::MAX (32767) is past what a card holds". The assembler
+  refuses a `DAT` past a card too, should one get that far, rather than writing a deck burn can't load.
+- **Why.** A limit used as a value (`i16::MAX - a`, or what `saturating_mul` saturates to) became a cell of 32767,
+  and the compiler crashed running it (heartburn's "a card holds -999..999"); so did a test against one where
+  lowering's own special case (`==` and `!=` with the limit on the right) didn't reach it. rustc writes these tests
+  in its own checks (`-x`, `x / y`) and in the methods it inlines at opt-level 2.
+- **Cost.** None measured: no test program or example changed size. `checked_neg`, `checked_div` and
+  `checked_rem` on an i16 now compile at opt-level 2 (the test for i16::MIN goes, the test for 0 stays), and
+  `saturating_mul` is refused where it crashed.
+
+## 2026-11-05 · rustc's MIR inliner runs at opt-level 1 and s too
+
+- **Decision.** For a crate built for CARDIAC at opt-level 1, s or z, the driver turns on rustc's MIR inliner
+  (`-Zinline-mir`, unless the build sets that flag itself), so the MIR is what opt-level 2 makes: rustc runs the
+  same MIR passes at 1 as at 2 and differs only in that one (`Inline::is_enabled`). Two kinds of call into core stay
+  calls, marked `#[inline(never)]` in the session's view of core (`driver/src/inline.rs`, an override of
+  `codegen_fn_attrs` for other crates' functions): the integer methods the compiler writes itself
+  (`methods::written_here`), which keep the code they had at 1, `signum` and a u8's `abs_diff` among them, whose
+  inlined forms (a `Cmp`, a subtraction in `i32`) are refused; and six methods whose inlined body the compiler
+  compiles wrongly or crashes on today (`WRONG_INLINED`: `i16::midpoint`, `u8::overflowing_add`, and `i16`'s
+  `checked_div`, `checked_rem`, `checked_neg` and `saturating_mul`), which stay refused at 1 rather than take the
+  fault on. Once those are fixed at opt-level 2 they come off the list.
+- **Why.** At 1 and s rustc left small library functions as calls (`Option::and_then`, `u8::checked_add`,
+  `From::from`, `mem::take`, `bool::then`), and closures, generic functions and trait default methods too, and the
+  compiler has no MIR to compile a call to core with: they were refused, the largest group of refusals in the
+  support matrix, while at 2 the inlined body worked. One switch covers all of them, with rustc's own inlining
+  rules, where writing each method here (as `methods` and `enum_methods` do) would be forty special cases.
+- **Considered.** Converting each callee's MIR (core's, monomorphized) and compiling it as a function of the
+  program: the calls would still pass `&mut self`, closures and whole structs, which the call path refuses. Keeping
+  the program's own non-generic functions as calls (only core's, closures and generic functions inlined): it keeps
+  opt-level 1 meaning "your helpers stay calls", but leaves trait methods taking a struct refused, and
+  `#[inline(never)]` already keeps a call at every level. Raising the inliner's thresholds so that `map_or` and
+  `filter` inline too: it inlines everything else more as well, and the examples grow (hello 8 to 23 cells) or
+  stop compiling.
+- **Cost.** Opt-level 1 and s are opt-level 2 in the MIR, so a helper is inlined there as at 2 (a helper called in
+  several places is copied into each; `#[inline(never)]` keeps one copy). The test suite's run at opt-level 1
+  covers calls less, and much of `enum_methods` (`is_some`, `unwrap_or`, `Try::branch` as calls) now runs only
+  where rustc doesn't inline. docs/RUST.md's notes on what works "at opt-level 1 and s" need updating to say the
+  levels now behave as 2 does.
+- **Evidence.** Support matrix: 59 rows better, 0 worse; every row now gets the same outcome at opt-level 1 as at
+  2 but for the eight above (signum and abs_diff work at 1 only, as before; the six stay refused at 1). Of the rows
+  that matched before at opt-level 1, 103 settings shrank and 16 grew (`inline_always` and `inline_plain` 56 to
+  85, as at 2; `enum_derive_partialeq` 71 to 77; `option_eq` 57 to 60; `checked_add` 38 to 39). The examples
+  build at opt-level 2 and 3, so no listing of theirs changed. test_compiler.sh all MATCH, test_examples.sh all
+  SAME, the fuzzer's targets in every setting no failure. `?` converting its error with `From` at opt-level 1
+  now matches native Rust, as `From::from` is inlined.
+
+## 2026-11-05 · `Ordering` is a C-like enum; `Cmp` is two tests
+
+- **Decision.** rustc's three-way compare is an operation of the IR, `BinOp::Cmp` (the driver used to hand it on
+  as a variant named `Cmp`). The front end makes each `d = Cmp(a, b)` two tests before the C-like pass, `a < b`
+  then `a > b`, setting d to `Ordering::Less`, `Greater` or `Equal`, which the C-like pass then numbers from the
+  driver's facts (-1, 1, 0); the block is split at the `Cmp`. At opt-level 1, `<T as Ord>::cmp(&a, &b)` on an
+  integer is that `Cmp` of what the references borrow, `Ordering::is_lt` and its kin are a comparison with
+  `Equal`, `then` is a test of the first for `Equal`, and `reverse` is `Cmp(Equal, o)`. A local holding a C-like
+  enum's discriminant in a type the backend lacks (`Ordering` is `#[repr(i8)]`) is an i16, with the constants it
+  is compared with, but only where it is set by `discriminant` alone and only compared, switched on or cast:
+  those give the same answer in both types, where arithmetic in an i8 could overflow where an i16 doesn't. A
+  variant rustc names alone (`const Less`, in core's code it inlines) is the one of the enum it is set to or
+  compared with.
+- **Why.** `a.cmp(&b)`, `match` on an `Ordering`, `is_lt`, `then`, `partial_cmp` and `signum` at opt-level 2,
+  and the derived `Ord` and `PartialOrd`, all were refused for want of `Cmp`, and an `Ordering` is a cell already.
+  Two tests, not a subtraction and its sign: a - b may be past a card (`999.cmp(&-999)`).
+- **Cost.** Two tests and three stores of a constant: the matrix's `out(a.cmp(&b) as i16)`, three times round, is
+  27 cells at both opt-levels, as is the `match` on it, where jump threading takes each constant straight to its
+  arm. No test program or example changed. Still refused: `partial_cmp` at opt-level 1 (it builds an
+  `Option<Ordering>` in a way the enum pass refuses), and the derived `Ord` and `PartialOrd` methods rustc calls
+  at opt-level 1 for a C-like enum (`<Lvl as Ord>::max`, `<Lvl as PartialOrd>::lt`), whose bodies are not compiled.
+
+## 2026-11-05 · `i16 as u8` wraps as Rust's does; a usize compared with a constant past a card
+
+- **Decision.** `x as u8` of an i16 is x mod 256, as Rust's two's complement gives it: a negative x is raised by
+  256s, then the value lowered by 256s until it is below 0 and raised once (the code `usize as u8` already had for
+  a usize past a card). Where the range pass knows x is 0..=255 the cast is a copy. The cast now takes the type of
+  what it casts from the place, so an array's element or what a reference points to is cast by its type: before,
+  `t[i] as u8` of an i16 element was stored as it was (-1 stayed -1, #139). A usize compared with a constant k
+  past a card (1000 up to 2^64 - 1000), as rustc's inlined `i16::try_from(n)` tests `n > 32767`, is compared with
+  999: a usize on a card is at most 999, and one past a card, held below 0, is above every k.
+- **Why.** `i16 as u8` was refused, and so `u8::try_from` of an i16 at opt-level 2 (the range check, then the
+  cast), and every row that has to read its u8s from a table; `i16::try_from` of a usize at opt-level 2 was refused
+  for its constant.
+- **Cost.** A cast the range pass can't settle is about 12 instructions and a pass of a three-instruction loop
+  per 256 (at most four). `TryFrom` at opt-level 1, where rustc calls `try_from`, is still refused: the call
+  builds a `Result` whose `Err` holds a `TryFromIntError`, a struct the enum pass has no cells for.
+
+## 2026-11-05 · u16 and u32 locals as cells, where the program can't tell; more integer methods
+
+- **Decision.** A u16 or u32 local (not a parameter or a result) is an i16 cell in one of two ways (`wide`). Where
+  its value is known to be on a card, 0..=999 (a constant, a cast of a u8 or a bool, a sum, difference or quotient
+  by a constant of such values whose bounds stay on the card, or the result of `abs_diff`, `unsigned_abs` or
+  `ilog10` on an i16), the cell holds the value and the local is used as any number is. Otherwise, where it is a
+  cast of an i16, an i32 or a usize, or a sum or difference of such, the cell holds a number equal to it modulo
+  2^16 (2^32): `-500i16 as u16`, 65036, is -500. Such a local may only be cast to i16 or u8, or added to or
+  subtracted from into another, which keep the equality; each of those sums and differences is overflow-checked
+  in every profile, so a cell never holds a wrong number. Anything else (a comparison, a division, a wider cast, a
+  call) and the local keeps its type, which the lowering refuses. The methods, where rustc calls them: on an i16,
+  `abs_diff` (the subtraction checked, as 999 and -999 are 1998 apart), `unsigned_abs` (`abs`), `ilog10` (a panic
+  below 1, then tests against 10 and 100), `wrapping_div` and `overflowing_div` (`/` and its check of a zero
+  divisor; no card holds i16::MIN), `div_euclid` by a variable, and `pow` by a constant up to 10 (its
+  multiplications checked in every profile); on a u8, `saturating_add` (also the intrinsic, at opt-level 2) and
+  `midpoint`, whose sum an i16 cell holds.
+- **Why.** These methods' answers fit on a card; what was refused was the wider type rustc works in, or the call.
+  A wider type can hold what a card can't (`-500i16 as u16` is 65036, and core's `abs_diff` relies on it wrapping
+  back), so it is only a cell where the program can't tell the difference, and only with the checks that keep
+  the cell's number right.
+- **Cost.** Where Rust's answer is past a card, CARDIAC panics in every profile, though Rust wouldn't (`(-999).
+  abs_diff(999)` is 1998; `10.pow(3)` with overflow checks off). A `pow` costs the multiply routine. Still refused:
+  `ilog10` at opt-level 2 (rustc inlines bit operations on constants past a card), and a u16 compared or divided
+  where it may have come from a negative i16. `div_euclid` by a variable compiles but costs the divide routine
+  and the remainder routine both: the matrix's row doesn't fit in 96 cells.
+
+## 2026-11-05 · `!`, `<<` and `>>` by a constant on an i16 and a u8, and `^` of two bools, as arithmetic
+
+- **Decision.** `methods::inline_operators` writes each as the arithmetic it is in two's complement, before the
+  passes, so the range pass and the rest see ops they know. On a u8: `!a` is `255 - a`; `a << k` is the low
+  8 - k bits of a times 2^k (`(a & (2^(8-k) - 1)) * 2^k`, never past 255, so nothing wraps); `a >> k` is the
+  quotient by 2^k. On an i16: `a >> k` is `a.div_euclid(2^k)`, worked as the quotient of a for a not below 0 and
+  `-1 - (-1 - a) / 2^k` below it, so only values not below 0 are divided (one short unsigned loop, not the signed
+  divide and remainder routines: 46 cells for the row, where `div_euclid`'s own code took 81). `a ^ b` of two bools
+  is `a != b`. k goes up to 9 on an i16 (512 is the last power of two a card holds) and 7 on a u8; past that, by a
+  variable, and on a usize they stay refused, now with a message that says so.
+- **Where Rust's value is past a card.** Rust's `!` and `<<` never panic over the value (overflow checks look at
+  the shift amount only), but on an i16 they can make a value no card holds: `!999` is -1000, and `a << k` is
+  a * 2^k wrapped in 16 bits (`300 << 7` is -27136; `513 << 7` wraps all the way round to 128, which a card does
+  hold). A card can't keep 16 bits, so the result is checked against a card with overflow checks on and off
+  alike, and the program panics there (`the value doesn't fit on a card`), rather than keep the low three digits
+  as an unchecked `+` does: `!a` is `assert(a < 999)` and then `-1 - a`, and `a << k` is `MulWithOverflow(a,
+  2^k)` and its assert. So `a << k` panics wherever a * 2^k is past a card, even the few times the 16-bit wrap
+  lands back on one: a panic, never a wrong answer. The range pass drops either check where it can prove the
+  value fits (`!i` and `i << 3` of a loop counter 0..12 have none). `a >> k` is always on a card.
+- **Measured.** Every value a card holds, through every k, on both types, at opt-level 1 and 2 with overflow
+  checks on and off, compared with Rust's value: no wrong answer, and a panic only where Rust's value (for `<<`,
+  a * 2^k) is past a card. Five matrix rows refused before match at every setting; no test program or example
+  changed.
+
+## 2026-11-05 · Literal panic messages go in the panic map; `assert_eq!` says Rust's first line
+
+- **Decision.** A panic whose message is a literal (`panic!("negative card")`, `assert!(a > 0, "...")`,
+  `unreachable!("...")`, `unimplemented!("...")`, `todo!("...")`) and every `assert_eq!` and `assert_ne!`, with a
+  literal message or none, become in the front end the call a bare `assert!` makes, `core::panicking::panic(const
+  "message")` (`panic_messages`), and `panic`'s string is the message the map gives the check, as `expect()`'s is.
+  rustc builds a `core::fmt::Arguments` for the message: at opt-level 1 with a call to `Arguments::from_str` in
+  the block before the panic, which becomes a goto; at opt-level 2 in the panic's block, its template the
+  string's address and its `args` the length shifted with the low bit set, which is what marks a template that is
+  only a string. The panic's block keeps no statements (nothing it did can be seen once the program has
+  panicked), and the locals that only fed the message go, with their declarations: `assert_eq!`'s borrows of its
+  two values, the `Arguments`, the string. `assert_eq!(a, b)` calls `core::panicking::assert_failed` with the two
+  borrows; its message is Rust's first line, ``assertion `left == right` failed`` (`!=` for `assert_ne!`), and
+  `: message` after it for one with a message. A bare `assert!(c)` and `unreachable!()` now say what Rust says
+  (`assertion failed: a > 0`, `internal error: entered unreachable code`), where the map said `explicit panic`.
+- **Why.** Seven rows of the support matrix were refused only for the message, and the comparison before the
+  panic was already compiled (`assert!(a == b)` worked).
+- **Cost.** Rust prints the two values under `assert_eq!`'s first line (`  left: 7` and ` right: 3`); the map
+  doesn't. It is written before the program runs, and its format has one message a check, so it would need the
+  cells the values were in at the panic, which the compiler shares with other locals by then. A message with
+  `{}` arguments (`panic!("bad card: {}", a)`) is no literal and stays refused, as do `assert_matches!` and a
+  message built any other way. No program grew: `assert_eq!(a, b)` is the same 20 cells as `assert!(a == b)`.
 
 ## 2026-11-05 · Listings use the source's names
 
