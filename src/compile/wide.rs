@@ -7,11 +7,13 @@
 //!     (`methods::exact_result`). It can then be used as any number on a card is;
 //!   or else a number on a card equal to its value modulo 2^16 (2^32 for a u32): `-500i16 as u16` is 65036, held
 //!     as -500. A cast to i16 or u8 keeps that true (65036 as i16 is -500), and so does a sum or a difference that
-//!     is exact, so each is overflow-checked here, in every profile: past a card it panics, as an i16 does.
-//!     Nothing else may read such a local: not a comparison, a division, a wider cast or a call.
+//!     is exact, so each is overflow-checked here, in every profile: past a card it panics, as an i16 does. A
+//!     comparison with a constant on a card can read it too, as the cell cast to a usize (`unsigned_compare`).
+//!     Nothing else may: not another comparison, a division, a wider cast or a call.
 //! A local that is neither keeps its type, which the lowering refuses.
 use std::collections::HashMap;
 
+use super::bits;
 use super::front::local_types;
 use super::ir::visit_mut::{walk_const, walk_ty, VisitMut};
 use super::ir::{
@@ -74,11 +76,24 @@ fn width(t: IntTy) -> u32 {
 
 /// Every function's u16 and u32 locals that can be cells are i16s.
 pub fn wide_locals(file: &mut File) {
+    let own = own_functions(file);
+    let defined = |name: &str| own.iter().any(|n| n == name);
     for item in &mut file.items {
         if let Item::Fn(f) = item {
-            wide_in(&f.params, &mut f.body);
+            wide_in(&f.params, &mut f.body, &defined);
         }
     }
+}
+
+/// The program's own functions, which a bare intrinsic's name may be (`bits`).
+fn own_functions(file: &File) -> Vec<String> {
+    file.items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Fn(f) => Some(f.path.segments.last()?.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The whole local an operand reads.
@@ -89,9 +104,9 @@ fn read(o: &Operand) -> Option<Local> {
     }
 }
 
-fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
+fn wide_in(params: &[(Local, Ty)], body: &mut Body, defined: &impl Fn(&str) -> bool) {
     let types = local_types(params, &body.decls);
-    let (cells, held) = wide_cells(body, params, &types);
+    let (cells, held) = wide_cells(body, params, &types, defined);
     if cells.is_empty() {
         return;
     }
@@ -99,7 +114,12 @@ fn wide_in(params: &[(Local, Ty)], body: &mut Body) {
 }
 
 /// The u16 and u32 locals that can be cells, and what each holds.
-fn wide_cells(body: &Body, params: &[(Local, Ty)], types: &HashMap<Local, Ty>) -> (Vec<Local>, HashMap<Local, Held>) {
+fn wide_cells(
+    body: &Body,
+    params: &[(Local, Ty)],
+    types: &HashMap<Local, Ty>,
+    defined: &impl Fn(&str) -> bool,
+) -> (Vec<Local>, HashMap<Local, Held>) {
     // not a parameter or the result, which a caller passes or reads as the type
     let wide: Vec<Local> = body
         .decls
@@ -139,16 +159,14 @@ fn wide_cells(body: &Body, params: &[(Local, Ty)], types: &HashMap<Local, Ty>) -
             }
             if let Terminator::Call { dest, func, .. } = &b.terminator {
                 if let Some(x) = dest.as_local().filter(|x| wide.contains(x)) {
-                    join(
-                        x,
-                        super::methods::exact_result(func).map_or(Held::Refused, |[lo, hi]| Held::Exact(lo, hi)),
-                    );
+                    let bounds = super::methods::exact_result(func).or_else(|| bits::exact_result(func, defined));
+                    join(x, bounds.map_or(Held::Refused, |[lo, hi]| Held::Exact(lo, hi)));
                 }
             }
         }
         // what each use needs; a use of any other kind and it keeps its type
         for &w in &wide {
-            let (seen, needs) = uses(body, w, &types);
+            let (seen, needs) = uses(body, w, &types, defined);
             let h = held.get(&w).copied();
             let refused = seen != occurrences(&body.blocks, w) || (needs == Needs::Exact && h == Some(Held::Modular));
             if refused {
@@ -218,7 +236,7 @@ fn value(rv: &Rvalue, types: &HashMap<Local, Ty>, held: &HashMap<Local, Held>) -
 }
 
 /// How many times the function names `w` in a way this file knows, and what the strictest of those needs it to hold.
-fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
+fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>, defined: &impl Fn(&str) -> bool) -> (usize, Needs) {
     let mut seen = 0;
     let mut needs = Needs::Either;
     let mut need = |n: Needs| {
@@ -258,6 +276,12 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
                         {
                             need(Needs::Exact)
                         }
+                        // a shift by it, which takes it modulo the bits, 2^16 or fewer
+                        Rvalue::BinaryOp(BinOp::Shl | BinOp::Shr, a, c) if is(c) && !is(a) => need(Needs::Either),
+                        // against a constant on a card, the cell tells: see `unsigned_compare`
+                        Rvalue::BinaryOp(op, a, c) if compare_to_constant(*op, a, c).is_some() && (is(a) || is(c)) => {
+                            need(Needs::Either)
+                        }
                         Rvalue::BinaryOp(
                             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge,
                             a,
@@ -285,11 +309,60 @@ fn uses(body: &Body, w: Local, types: &HashMap<Local, Ty>) -> (usize, Needs) {
                 if super::methods::takes_exponent(func) && args.get(1).is_some_and(is) {
                     need(Needs::Either);
                 }
+                // a bit method's intrinsic reads the bits, which the value modulo the type's size has
+                if bits::reads_bits(func, defined) {
+                    for _ in args.iter().filter(|a| is(a)) {
+                        need(Needs::Either);
+                    }
+                }
             }
             _ => {}
         }
     }
     (seen, needs)
+}
+
+/// A comparison of a local and a constant on a card, as `local op constant`: the op, the local's operand and the
+/// constant.
+fn compare_to_constant<'a>(op: BinOp, a: &'a Operand, c: &'a Operand) -> Option<(BinOp, &'a Operand, i128)> {
+    let k = |o: &Operand| o.int().map(|(k, _)| k).filter(|k| (0..=999).contains(k));
+    let flipped = match op {
+        BinOp::Lt => BinOp::Gt,
+        BinOp::Le => BinOp::Ge,
+        BinOp::Gt => BinOp::Lt,
+        BinOp::Ge => BinOp::Le,
+        BinOp::Eq | BinOp::Ne => op,
+        _ => return None,
+    };
+    match (read(a), read(c)) {
+        (Some(_), None) => Some((op, a, k(c)?)),
+        (None, Some(_)) => Some((flipped, c, k(a)?)),
+        _ => None,
+    }
+}
+
+/// `x op k` of a u16 or u32 held modulo its size, for k a constant on a card: its value is the cell's where that is
+/// 0 or more, and where it is below 0 2^16 - 999 or more (2^32 - 999 for a u32), above every k, as a usize past a
+/// card is (held below 0 too, `ranges::huge_usizes`). So the cell, cast to a usize, compares as the value does: the
+/// statements that set `d`. rustc's check of a shift by an i16, `b as u16 < 16`, is one.
+fn unsigned_compare(gains: &mut Gains, d: &Place, op: BinOp, x: &Operand, k: i128) -> Vec<Statement> {
+    let usize = |v: i128| {
+        Operand::Constant(Const::Int {
+            value: v,
+            ty: IntTy::Usize,
+        })
+    };
+    let wide = gains.local(Ty::Int(IntTy::Usize));
+    vec![
+        Statement::Assign(
+            Place::local(wide),
+            Rvalue::Cast(x.clone(), Ty::Int(IntTy::Usize), super::ir::CastKind::IntToInt),
+        ),
+        Statement::Assign(
+            d.clone(),
+            Rvalue::BinaryOp(op, Operand::Move(Place::local(wide)), usize(k)),
+        ),
+    ]
 }
 
 fn types_int(types: &HashMap<Local, Ty>, l: Local) -> IntTy {
@@ -352,6 +425,28 @@ fn rewrite(
     for (bi, si) in checked.into_iter().rev() {
         check(params, body, bi, si);
     }
+    // a comparison of one held modulo its size with a constant: of the cell as a usize
+    let modular = |o: &Operand| read(o).is_some_and(|l| cells.contains(&l) && held.get(&l) == Some(&Held::Modular));
+    let mut gains = Gains::new(params, &body.blocks, &mut body.decls);
+    for b in body.blocks.iter_mut() {
+        let compares = b.statements.iter().any(|s| {
+            matches!(s, Statement::Assign(_, Rvalue::BinaryOp(op, a, c))
+                if compare_to_constant(*op, a, c).is_some_and(|(_, x, _)| modular(x)))
+        });
+        if !compares {
+            continue;
+        }
+        let statements = std::mem::take(&mut b.statements);
+        for s in statements {
+            match &s {
+                Statement::Assign(d, Rvalue::BinaryOp(op, a, c)) => match compare_to_constant(*op, a, c) {
+                    Some((op, x, k)) if modular(x) => b.statements.extend(unsigned_compare(&mut gains, d, op, x, k)),
+                    _ => b.statements.push(s),
+                },
+                _ => b.statements.push(s),
+            }
+        }
+    }
 }
 
 /// Statement `si` of block `bi`, `w = Add(a, b)` or `Sub`, as rustc writes an overflow-checked one: the op with its
@@ -408,9 +503,11 @@ fn check(params: &[(Local, Ty)], body: &mut Body, bi: usize, si: usize) {
 /// is a local of a function rustc inlined (core's may rely on a u16's wrapping), or where `wide_locals` can make
 /// every one a cell, which is exact where Rust's value is past a card and its own cast back is on one.
 pub fn u16_cells(file: &mut File) {
+    let own = own_functions(file);
+    let defined = |name: &str| own.iter().any(|n| n == name);
     for item in &mut file.items {
         if let Item::Fn(f) = item {
-            u16_cells_in(&f.params, &mut f.body);
+            u16_cells_in(&f.params, &mut f.body, &defined);
         }
     }
 }
@@ -429,7 +526,7 @@ enum Check {
     Difference { checked: bool },
 }
 
-fn u16_cells_in(params: &[(Local, Ty)], body: &mut Body) {
+fn u16_cells_in(params: &[(Local, Ty)], body: &mut Body, defined: &impl Fn(&str) -> bool) {
     let types = local_types(params, &body.decls);
     let inlined: Vec<Local> = body.inlined.iter().map(|(l, _)| *l).collect();
     let mut cells: Vec<Local> = body
@@ -479,7 +576,7 @@ fn u16_cells_in(params: &[(Local, Ty)], body: &mut Body) {
             break;
         }
     }
-    let (wide, _) = wide_cells(body, params, &types);
+    let (wide, _) = wide_cells(body, params, &types, defined);
     let ours: Vec<usize> = cells.iter().filter(|c| !wide.contains(c)).map(|c| group[c]).collect();
     cells.retain(|c| ours.contains(&group[c]));
     if cells.is_empty() {
@@ -699,7 +796,7 @@ mod tests {
     #[test]
     fn a_difference_of_casts_read_as_an_i16_is_checked() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         assert!(matches!(
             b.blocks[0].statements[2],
@@ -709,9 +806,25 @@ mod tests {
     }
 
     #[test]
-    fn a_value_known_only_modulo_its_size_is_not_compared() {
+    fn a_value_known_only_modulo_its_size_is_compared_with_a_constant_as_a_usize() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _7 = Lt(copy _3, const 5_u16);");
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
+        assert_eq!(ty(&b, 3), Ty::Int(IntTy::I16));
+        assert!(matches!(
+            &b.blocks[0].statements[1],
+            Statement::Assign(_, Rvalue::Cast(_, Ty::Int(IntTy::Usize), _))
+        ));
+        assert!(matches!(
+            &b.blocks[0].statements[2],
+            Statement::Assign(_, Rvalue::BinaryOp(BinOp::Lt, ..))
+        ));
+    }
+
+    #[test]
+    fn two_values_known_only_modulo_their_size_are_not_compared() {
+        let mut b =
+            body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _7 = Lt(copy _3, copy _4);");
+        wide_in(&[], &mut b, &|_| false);
         assert_eq!(ty(&b, 3), Ty::Int(IntTy::U16));
     }
 
@@ -720,7 +833,7 @@ mod tests {
         let mut b = ir::parse_body(
             "let mut _0: ();\n let _1: u8;\n let _2: u8;\n let mut _3: u16;\n let mut _4: u16;\n let mut _5: u16;\n let mut _6: u8;\n bb0: {\n _3 = copy _1 as u16 (IntToInt);\n _4 = copy _2 as u16 (IntToInt);\n _5 = Add(move _3, move _4);\n _3 = Div(move _5, const 2_u16);\n _6 = move _3 as u8 (IntToInt);\n return;\n }\n",
         );
-        wide_in(&[], &mut b);
+        wide_in(&[], &mut b, &|_| false);
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         // nothing to check: at most 510
         assert!(matches!(b.blocks[0].terminator, Terminator::Return));
@@ -729,7 +842,7 @@ mod tests {
     #[test]
     fn a_compared_cast_of_an_i16_is_checked_to_be_on_a_card() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _7 = Lt(copy _3, copy _4);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
-        u16_cells_in(&[], &mut b);
+        u16_cells_in(&[], &mut b, &|_| false);
         assert!([3, 4, 5].iter().all(|&l| ty(&b, l) == Ty::Int(IntTy::I16)));
         // each cast, and the difference, after a test that ends its block
         let mut tests: Vec<String> = b
@@ -754,7 +867,7 @@ mod tests {
     #[test]
     fn a_group_the_modular_cells_take_whole_is_theirs() {
         let mut b = body("_3 = copy _2 as u16 (IntToInt);\n _4 = copy _1 as u16 (IntToInt);\n _5 = Sub(copy _3, copy _4);\n _6 = copy _5 as i16 (IntToInt);");
-        u16_cells_in(&[], &mut b);
+        u16_cells_in(&[], &mut b, &|_| false);
         assert_eq!(ty(&b, 3), Ty::Int(IntTy::U16));
         assert_eq!(b.blocks.len(), 1);
     }

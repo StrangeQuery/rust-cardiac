@@ -58,6 +58,9 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
     };
     own.items.extend(made.items);
     instances.rename_calls(&mut own);
+    if !tcx.sess.overflow_checks() {
+        cargo_cardiac::compile::front::drop_inherited_overflow_checks(&mut own);
+    }
     let bodies: Vec<&rustc_middle::mir::Body<'_>> = instances.bodies.iter().map(|(_, b)| *b).collect();
     let enums = facts::enums(tcx, &local, &bodies);
     let structs = facts::structs(tcx, &local, &bodies);
@@ -107,6 +110,10 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
             if let Some((natural, renamed)) = quietly(|| convert::items(tcx, &defs, None)) {
                 check::write_report(to, &check::report_items(tcx, &defs, &natural, &renamed, &label));
             }
+        }
+        let mut file = file;
+        if !tcx.sess.overflow_checks() {
+            cargo_cardiac::compile::front::drop_inherited_overflow_checks(&mut file);
         }
         crates.push(Crate {
             name: dep.name.clone(),
