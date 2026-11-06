@@ -31,6 +31,7 @@ pub mod lower;
 pub mod machine;
 pub mod methods;
 pub mod names;
+pub mod panic_messages;
 pub mod peephole;
 pub mod phases;
 pub mod preconditions;
@@ -585,6 +586,7 @@ fn compile(
     // abs, min and their kin, which rustc calls at opt-level 1 and s: the code it inlines at 2
     for n in &names {
         methods::inline_methods(fns.get_mut(n).unwrap());
+        methods::inline_operators(fns.get_mut(n).unwrap());
     }
     // the teletype, the card reader and the loader are not functions
     for f in ["out", "inp", "overlay"] {
