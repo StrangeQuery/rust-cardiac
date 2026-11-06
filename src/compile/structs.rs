@@ -39,6 +39,8 @@ pub struct Function {
 pub struct StructDef {
     pub name: String,
     pub unit: bool,
+    /// one of the program's own, not another crate's (core's `Skip`, `StepBy`)
+    pub in_crate: bool,
 }
 
 /// A field of a struct: its name and type.
@@ -79,8 +81,8 @@ fn plain_path(p: &Path) -> bool {
 
 /// Each instance of a generic struct of the crate's (`Pair<i16>`, built as `Pair::<i16> { .. }`) as a struct of its
 /// own, `Pair__i16`, as a tuple is `tuple__i16_i16`: the pass knows a struct by its name, and `Pair<i16>` and
-/// `Pair<bool>` have cells of different types. A type of core's, `core::slice::Iter<'_, i16>`, is left to the passes
-/// that know it.
+/// `Pair<bool>` have cells of different types. Another crate's (core's `Skip<Range<i16>>`, which prints as one
+/// word too) is left to the passes that know it.
 fn instances_as_structs(fns: &mut Ordered<String, Function>, structs: &[StructDef]) {
     use super::ir::visit_mut::{walk_path, VisitMut};
     use super::ir::GenericArg;
@@ -91,7 +93,7 @@ fn instances_as_structs(fns: &mut Ordered<String, Function>, structs: &[StructDe
             let [Segment::Name { name, args: Some(g) }] = p.segments.as_slice() else {
                 return;
             };
-            if p.qself.is_some() || !self.0.iter().any(|s| s.name == *name) {
+            if p.qself.is_some() || !self.0.iter().any(|s| s.in_crate && s.name == *name) {
                 return;
             }
             let mut tys = vec![];

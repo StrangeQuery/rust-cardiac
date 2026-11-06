@@ -81,10 +81,13 @@ pub fn enums<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'
 /// (`struct Flag;`) needs no cells, which the MIR doesn't show where nothing builds one.
 pub fn structs<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'tcx>]) -> Vec<StructDef> {
     let mut structs: Vec<StructDef> = vec![];
+    let krate = defs.first().map(|d| d.krate);
     for (adt, _) in adts(tcx, defs, instances).iter().filter(|(a, _)| a.kind().is_struct()) {
+        let def: DefId = internal(tcx, adt.def_id());
         let s = StructDef {
             name: adt.name().rsplit("::").next().unwrap_or_default().to_string(),
             unit: adt.variants_iter().all(|v| v.fields().is_empty()),
+            in_crate: Some(def.krate) == krate,
         };
         if !structs.contains(&s) {
             structs.push(s);

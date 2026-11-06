@@ -8,8 +8,8 @@ rust-cardiac, and cargo-cardiac is what you install.)
 
 - **Decision.** Before the struct pass, each instance of one of the program's generic structs (`Pair<i16>`, built
   as `Pair::<i16> { .. }`) is renamed a plain struct of its own, `Pair__i16`, as a tuple of scalars is
-  `tuple__i16_i16` (`structs::instances_as_structs`). A generic type of core's (`core::slice::Iter<'_, i16>`) is
-  left to the passes that know it.
+  `tuple__i16_i16` (`structs::instances_as_structs`). Another crate's generic struct is left to the passes that
+  know it: core's `Skip<Range<i16>>` prints as one word too, so the driver says which structs are the program's.
 - **Why.** The struct pass knows a struct by its name alone, so it left every path with type arguments alone, and
   a `Pair<i16>` local was refused wherever rustc didn't take it apart first: where its method stays a call
   (`#[inline(never)]`, or an instance of the entry below). By name, `Pair<i16>` and `Pair<bool>` would have shared
