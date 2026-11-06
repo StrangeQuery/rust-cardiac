@@ -38,3 +38,13 @@
 - **Cost.** `rotate_left(k)` turns the slice k times by one, k times n moves, where core's moves each element
   once: the fewest cells (the support row is 87 cells). `chunks_mut`, `split_at_mut`, `rotate_right`, the other
   sorts and searches stay refused.
+
+## 2026-11-06 · `find`, `max` and `min` on an array's iterator; a reference to a reference is a cell
+
+- **Decision.** `iterators::iterator_methods` writes three more of the calls rustc leaves on a slice iterator
+  into one array: `find` with a closure that captures nothing (the closure given a reference to the item, as
+  core gives it), and `reduce` with the closures core's `max` and `min` pass, as a loop keeping the index of the
+  greatest (the later of equals, as `max_by` keeps) or the least (the earlier). A reference to a cell that holds a
+  reference to a card's value (`&&i16`, what `find`'s closure takes) is one cell, its address, read through twice.
+- **Why.** Each is the loop `for i in 0..N`; the result is `Option<&T>`, which the enum pass already holds.
+- **Cost.** None found. `find` on a closure that captures, and these on a slice of run-time length, stay refused.

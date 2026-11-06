@@ -961,6 +961,38 @@ fn variant(t: &Ty, some: Option<Operand>) -> Rvalue {
     Rvalue::Variant(Path { qself: None, segments }, some.into_iter().collect())
 }
 
+/// `reduce` with the closure core's `max` gives it (true) or `min`'s (false), on references to a card's type:
+/// `{closure@core::iter::Iterator::max_by::fold<&i16, .. {<&i16 as Ord>::cmp}>::{closure#0}}`.
+fn extreme(func: &Path) -> Option<bool> {
+    let Some(Segment::Name { args: Some(g), .. }) = func.segments.last() else {
+        return None;
+    };
+    let Some(GenericArg::Ty(Ty::Other(c))) = g.args.last() else {
+        return None;
+    };
+    let by = |m: &str| {
+        ["i16", "u8", "i8", "usize"].iter().any(|t| {
+            c.starts_with(&format!("{{closure@core::iter::Iterator::{m}_by::fold<&{t}, "))
+                && c.ends_with(&format!("{{<&{t} as Ord>::cmp}}>::{{closure#0}}}}"))
+        })
+    };
+    if by("max") {
+        Some(true)
+    } else if by("min") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// A path's last segment's last type argument.
+fn last_arg_of(p: &Path) -> Option<&GenericArg> {
+    match p.segments.last() {
+        Some(Segment::Name { args: Some(g), .. }) => g.args.last(),
+        _ => None,
+    }
+}
+
 /// The closure a method is given, by its type among the method's type arguments: its function, which captures
 /// nothing (the closure passed is `()`), or a closure of core's that sums.
 enum Closure {
@@ -1219,6 +1251,85 @@ pub fn iterator_methods(f: &mut Function, closures: &HashMap<String, String>) {
                 };
                 fresh.block(tested, vec![], t);
                 Some(done_block(&mut fresh, miss))
+            }
+            // `find` on a slice's iterator: the closure is given a reference to the item, itself a reference
+            ("find", [_, cl]) if o.elements.is_some() => {
+                let Some(Closure::Fn(callee)) = closure_of(&func, cl, closures) else {
+                    continue;
+                };
+                let (x, made) = item(&mut fresh);
+                let Some(x_ty) = fresh.decls.iter().find(|d| d.local == x).map(|d| d.ty.clone()) else {
+                    continue;
+                };
+                let rx = fresh.local(Ty::Ref {
+                    lifetime: None,
+                    mutable: false,
+                    to: Box::new(x_ty.clone()),
+                });
+                let r = fresh.local(Ty::Bool);
+                let tested = fresh.name();
+                fresh.block(
+                    body,
+                    vec![made, assign(rx, Rvalue::Ref(BorrowKind::Shared, Place::local(x)))],
+                    call(Place::local(r), &callee, vec![Operand::Move(Place::local(rx))], tested),
+                );
+                let hit = done_block(&mut fresh, vec![set(variant(&x_ty, Some(copy_of(x))))]);
+                fresh.block(tested, vec![], branch(r, step, hit));
+                Some(done_block(&mut fresh, vec![set(variant(&x_ty, None))]))
+            }
+            // `max()` and `min()` on a slice's iterator, a reduce with core's closure that keeps the greater (the
+            // later of equals) or the lesser (the earlier): the index of the one kept, and a reference to it
+            ("reduce", [_, Operand::Constant(Const::Unit)]) if o.elements.is_some() && extreme(&func).is_some() => {
+                let a = o.elements.as_ref().unwrap();
+                let max = extreme(&func) == Some(true);
+                let Some(Ty::Path(option)) = types.get(&d) else { continue };
+                let Some(GenericArg::Ty(r @ Ty::Ref { .. })) = last_arg_of(option) else {
+                    continue;
+                };
+                let Ty::Ref { to: elem, .. } = r else { continue };
+                let (seen, k) = (fresh.local(Ty::Bool), fresh.local(Ty::Int(IntTy::Usize)));
+                entry.push(assign(seen, bool_const(false)));
+                entry.push(assign(k, Rvalue::Use(usize_const(0))));
+                let at = |l: Local| {
+                    let mut e = a.clone();
+                    e.projection.push(Projection::Index(l));
+                    e
+                };
+                let (first, compare, keep) = (fresh.name(), fresh.name(), fresh.name());
+                fresh.block(body, vec![], Terminator::SwitchInt {
+                    discr: copy_of(seen),
+                    arms: vec![(0, first)],
+                    otherwise: Some(compare),
+                });
+                fresh.block(
+                    first,
+                    vec![assign(seen, bool_const(true)), assign(k, Rvalue::Use(copy_of(i)))],
+                    Terminator::Goto(step),
+                );
+                let (x, y, above) = (fresh.local((**elem).clone()), fresh.local((**elem).clone()), fresh.local(Ty::Bool));
+                // max: the new one is kept unless the kept one is above it; min: only if the kept one is above it
+                fresh.block(
+                    compare,
+                    vec![
+                        assign(x, Rvalue::Use(Operand::Copy(at(k)))),
+                        assign(y, Rvalue::Use(Operand::Copy(at(i)))),
+                        assign(above, Rvalue::BinaryOp(ir::BinOp::Gt, copy_of(x), copy_of(y))),
+                    ],
+                    if max { branch(above, keep, step) } else { branch(above, step, keep) },
+                );
+                fresh.block(keep, vec![assign(k, Rvalue::Use(copy_of(i)))], Terminator::Goto(step));
+                let kept = fresh.local((*r).clone());
+                let some = done_block(
+                    &mut fresh,
+                    vec![
+                        assign(kept, Rvalue::Ref(BorrowKind::Shared, at(k))),
+                        set(variant(r, Some(copy_of(kept)))),
+                    ],
+                );
+                let none = done_block(&mut fresh, vec![set(variant(r, None))]);
+                let done = fresh.name();
+                fresh.block(done, vec![], branch(seen, none, some));
+                Some(done)
             }
             ("count", [_]) if o.elements.is_none() => {
                 let n = fresh.local(Ty::Int(IntTy::Usize));

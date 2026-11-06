@@ -338,13 +338,15 @@ impl<'a> Lowering<'a> {
             // above 999), or a reference or raw pointer, which is a cell address 00-99. An array's element is one of
             // them too, but a usize past a card: only a local holds one (`ranges::huge_usizes`), and storing one
             // anywhere else panics. A slice's pointer is its address too: its length is a local of its own
-            // (`slices::run_time_lengths`).
+            // (`slices::run_time_lengths`); and so is a reference to a cell that holds a reference (`find`'s closure
+            // takes `&&i16`).
             let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16));
             let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
             let pointee = |t: &Ty| {
                 card(t)
                     || matches!(t, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
                     || matches!(t, Ty::Slice(e) if element(e))
+                    || matches!(t, Ty::Ref { to, .. } | Ty::Ptr { to, .. } if card(to))
             };
             let one_cell = match ty {
                 Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
