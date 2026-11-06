@@ -5,7 +5,7 @@
 //! that is already code the compiler writes, once the types are ones it knows:
 //!   a slice made from an array of known length N (every definition of it, through copies, casts and reborrows) is
 //!     a reference to `[T; N]`, one cell: its address; its length (`PtrMetadata`) is the constant N
-//!   `NonNull<T>` is a `*mut T`
+//!   `NonNull<T>` is a `*mut T`, and `MaybeUninit<T>` a T
 //!   `&raw const (*p)`, `&(*p)` and `&mut (*p)` of a pointer p are p
 //!   `slice::Iter<'_, T>` and `slice::IterMut<'_, T>` are a plain struct of their two pointers, `ptr` and
 //!     `end_or_len` (its `PhantomData` field goes), which the struct pass takes apart
@@ -32,6 +32,23 @@ fn non_null(p: &Path) -> Option<&Ty> {
     }
     match g.args.as_slice() {
         [GenericArg::Ty(t)] => Some(t),
+        _ => None,
+    }
+}
+
+/// `core::mem::MaybeUninit<T>`'s T, for T a card's type: a cell holds some value, and the value is the T (an
+/// array's `IntoIter` holds its elements so, and `swap` its element in passing).
+fn maybe_uninit(p: &Path) -> Option<&Ty> {
+    let [Segment::Name { name: a, args: None }, Segment::Name { name: b, args: None }, Segment::Name { name, args: Some(g) }] =
+        p.segments.as_slice()
+    else {
+        return None;
+    };
+    if p.qself.is_some() || a != "core" || b != "mem" || name != "MaybeUninit" {
+        return None;
+    }
+    match g.args.as_slice() {
+        [GenericArg::Ty(t @ (Ty::Int(IntTy::I16 | IntTy::U8) | Ty::Bool))] => Some(t),
         _ => None,
     }
 }
@@ -75,6 +92,8 @@ impl VisitMut for Pointers {
             };
         } else if let Some(name) = slice_iter(p) {
             *t = Ty::Path(plain(name));
+        } else if let Some(v) = maybe_uninit(p) {
+            *t = v.clone();
         }
     }
 
@@ -128,6 +147,8 @@ fn defined_length(r: &Rvalue, types: &HashMap<Local, Ty>, known: &HashMap<Local,
     };
     match r {
         Rvalue::Cast(o, _, CastKind::Unsize(_)) => array_length(types.get(&local(o)?)?),
+        // a slice's pointer made of its parts, its length in the type (`ir::Rvalue::slice_from_parts`)
+        Rvalue::Cast(_, t @ Ty::Ptr { .. }, CastKind::PtrToPtr) if array_length(t).is_some() => array_length(t),
         Rvalue::Cast(o, _, CastKind::Transmute | CastKind::PtrToPtr) | Rvalue::Use(o) => known.get(&local(o)?).copied(),
         Rvalue::Ref(_, p) => known.get(&deref_of(p)?).copied(),
         _ => None,
@@ -199,6 +220,35 @@ pub fn known_lengths(f: &mut Function) {
         if let Some(n) = known.get(&d.local) {
             array(&mut d.ty, *n);
             types.insert(d.local, d.ty.clone());
+        }
+    }
+    // `core::intrinsics::copy::<T>(src, dst, 1)`, as a slice's swap moves an element: the copy itself
+    for b in f.body.blocks.iter_mut() {
+        let Terminator::Call {
+            func,
+            args,
+            target: Some(t),
+            ..
+        } = &b.terminator
+        else {
+            continue;
+        };
+        let [src, dst, count] = args.as_slice() else { continue };
+        let intrinsic = func.qself.is_none() && func.segments.len() == 3 && {
+            let n: Vec<&str> = func
+                .segments
+                .iter()
+                .filter_map(|s| match s {
+                    Segment::Name { name, .. } => Some(name.as_str()),
+                    _ => None,
+                })
+                .collect();
+            n == ["core", "intrinsics", "copy"]
+        };
+        if let (true, Some(s)) = (intrinsic, Statement::copy_one(src.clone(), dst.clone(), count.clone())) {
+            let t = *t;
+            b.statements.push(s);
+            b.terminator = Terminator::Goto(t);
         }
     }
     let pointer = |l: Local| matches!(types.get(&l), Some(Ty::Ref { .. } | Ty::Ptr { .. }));
@@ -375,9 +425,14 @@ pub fn pointers_as_indexes(f: &mut Function) {
             .count()
     };
     let array_local = |l: Local| matches!(types.get(&l), Some(Ty::Array(e, ArrayLen::Known(_))) if element(e));
+    // a pointer assigned once, the address of a whole array local (or a copy of such a pointer): that array,
+    // wherever it is dereferenced
+    let targets = whole_targets(f);
+    let array_of = |l: Local| targets.get(&l).copied().filter(|a| array_local(*a));
     let base_of = |p: &Place| -> Option<(Base, Operand)> {
         let l = p.base_local()?;
         let (base, rest) = match p.projection.split_first() {
+            Some((Projection::Deref, rest)) if array_of(l).is_some() => (Base::Array(array_of(l)?), rest),
             Some((Projection::Deref, rest)) => {
                 let fixed = matches!(types.get(&l), Some(t) if candidate(t))
                     && !pointers.contains(&l)
@@ -569,6 +624,129 @@ pub fn pointers_as_indexes(f: &mut Function) {
     }
     forward_index_copies(f, &indexes);
     late_steps(f, &indexes);
+}
+
+/// The pointers assigned once that hold the address of a whole local: `p = &x` (or `&raw mut x`), or a copy of
+/// another such pointer. Each with x.
+fn whole_targets(f: &Function) -> HashMap<Local, Local> {
+    let params: Vec<Local> = f.params.iter().map(|(l, _)| *l).collect();
+    let mut sets: HashMap<Local, usize> = HashMap::new();
+    for d in f.body.blocks.iter().flat_map(|b| b.defs()).flatten() {
+        *sets.entry(d).or_default() += 1;
+    }
+    let mut target: HashMap<Local, Local> = HashMap::new();
+    loop {
+        let before = target.len();
+        for s in f.body.blocks.iter().flat_map(|b| &b.statements) {
+            let Statement::Assign(d, r) = s else { continue };
+            let Some(p) = d.as_local().filter(|p| sets.get(p) == Some(&1) && !params.contains(p)) else {
+                continue;
+            };
+            let x = match r {
+                Rvalue::Ref(_, x) => x.as_local().filter(|x| !params.contains(x)),
+                Rvalue::Use(Operand::Copy(q) | Operand::Move(q)) => q.as_local().and_then(|q| target.get(&q).copied()),
+                _ => None,
+            };
+            if let Some(x) = x {
+                target.insert(p, x);
+            }
+        }
+        if target.len() == before {
+            return target;
+        }
+    }
+}
+
+/// A pointer assigned once, the address of a whole scalar local x (or a copy of one), and used only as `*p` (read
+/// or written) or copied into another such pointer: `*p` is x itself, and the pointers go. (A slice's `swap`
+/// moves an element through a temporary so.)
+pub fn pointers_to_locals(f: &mut Function) {
+    let scalar = |t: &Ty| matches!(t, Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool);
+    let types: HashMap<Local, Ty> = f
+        .params
+        .iter()
+        .cloned()
+        .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+        .collect();
+    let targets: HashMap<Local, Local> = whole_targets(f)
+        .into_iter()
+        .filter(|(p, x)| {
+            matches!(types.get(p), Some(Ty::Ref { .. } | Ty::Ptr { .. }))
+                && types.get(x).is_some_and(scalar)
+                && *p != Local(0)
+                && !f.results.contains(p)
+        })
+        .collect();
+    // every mention of each: its definition, `*p` as a whole place, a copy into another of them, its storage
+    let fits = |p: Local| {
+        let mut n = 0;
+        for b in &f.body.blocks {
+            for s in &b.statements {
+                n += match s {
+                    Statement::StorageLive(l) | Statement::StorageDead(l) if *l == p => 1,
+                    Statement::Assign(d, _) if d.as_local() == Some(p) => 1,
+                    Statement::Assign(d, Rvalue::Use(Operand::Copy(q) | Operand::Move(q)))
+                        if q.as_local() == Some(p) && d.as_local().is_some_and(|d| targets.contains_key(&d)) =>
+                    {
+                        1
+                    }
+                    _ => 0,
+                };
+            }
+            let places = b
+                .statements
+                .iter()
+                .flat_map(|s| s.places())
+                .chain(b.terminator.places());
+            n += places
+                .filter(|q| q.base_local() == Some(p) && q.projection.as_slice() == [Projection::Deref])
+                .count();
+        }
+        n == ir::occurrences(&f.body.blocks, p)
+    };
+    // (all of a chain of copies, or none: a copy into one that can't go would be left reading nothing)
+    let mut gone: Vec<Local> = targets.keys().copied().filter(|p| fits(*p)).collect();
+    loop {
+        let before = gone.len();
+        let keep: Vec<Local> = gone
+            .iter()
+            .copied()
+            .filter(|p| {
+                f.body.blocks.iter().flat_map(|b| &b.statements).all(|s| match s {
+                    Statement::Assign(d, Rvalue::Use(Operand::Copy(q) | Operand::Move(q)))
+                        if q.as_local() == Some(*p) =>
+                    {
+                        d.as_local().is_some_and(|d| gone.contains(&d))
+                    }
+                    _ => true,
+                })
+            })
+            .collect();
+        gone = keep;
+        if gone.len() == before {
+            break;
+        }
+    }
+    if gone.is_empty() {
+        return;
+    }
+    for b in f.body.blocks.iter_mut() {
+        b.statements.retain(|s| {
+            !s.def().is_some_and(|d| gone.contains(&d))
+                && !matches!(s, Statement::StorageLive(l) | Statement::StorageDead(l) if gone.contains(l))
+        });
+        let mut to_x = |q: &mut Place| {
+            if let (Some(p), [Projection::Deref]) = (q.base_local(), q.projection.as_slice()) {
+                if gone.contains(&p) {
+                    *q = Place::local(targets[&p]);
+                }
+            }
+        };
+        for s in b.statements.iter_mut() {
+            s.places_mut(&mut to_x);
+        }
+        b.terminator.places_mut(&mut to_x);
+    }
 }
 
 /// An index made of constants alone (`&t` is 0, the end pointer `&t` stepped by N is N): each read of it is the

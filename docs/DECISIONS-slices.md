@@ -84,3 +84,16 @@
   model, and they stay refused.
 - **Why.** A rest binding is a few element copies; swap and reverse are the obvious loop.
 - **Cost.** The rest binding's elements are copied into cells of their own.
+
+## 2026-11-06 · `swap` and `reverse` at opt-level 2: one-element copies, slices from parts, pointers to locals
+
+- **Decision.** What rustc inlines of a slice's `swap` and `reverse` at opt-level 2 is read: `copy_nonoverlapping`
+  of one element, and `core::intrinsics::copy` of one, are the assignment `(*dst) = copy (*src)`;
+  `_t = const <uninit>` is no statement; `*mut [T] from (p, n)` with n a constant is p cast to a pointer to `[T;
+  n]` (the length in the type, where `slices` finds it); `MaybeUninit<T>` of a card's T is T; and `revswap(a, b,
+  n)`, the swaps `reverse` calls, is written out (n up to 8). After the struct pass, a pointer assigned once to
+  the address of a whole local (or a copy of one), used only as `*p`, is that local (`pointers_to_locals`), and a
+  pointer into an array through such a pointer to the whole array is an index into the array.
+- **Why.** `swap` moves one element through a temporary; with these it is the four copies it is.
+- **Cost.** None found. A `copy_nonoverlapping` of more than one element, and a slice from parts of a length not
+  known, stay refused.

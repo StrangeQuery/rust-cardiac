@@ -631,9 +631,10 @@ fn element_pointer(f: &Function, defs: &HashMap<Local, Vec<At>>, o: &Operand) ->
     };
     match r {
         Rvalue::Use(o) => element_pointer(f, defs, o),
+        // (an `Offset` by an `isize` may go back)
         Rvalue::BinaryOp(ir::BinOp::Add, o, Operand::Constant(Const::Int { value, .. })) => {
             let (a, k) = element_pointer(f, defs, o)?;
-            Some((a, k + u64::try_from(*value).ok()?))
+            Some((a, u64::try_from(k as i128 + *value).ok()?))
         }
         Rvalue::Ref(_, p) => {
             let array = |t: Option<&Ty>| matches!(t, Some(Ty::Array(_, ArrayLen::Known(_))));
@@ -1320,6 +1321,58 @@ pub fn slice_methods(f: &mut Function) {
             _ => None,
         };
         let defs = definitions(f);
+        // `reverse`'s own swaps, as rustc inlines it: `revswap(a, b, n)` exchanges a's first n elements with b's
+        // last n, last first
+        let in_reverse = names(&func).is_some_and(|n| n.ends_with(&["reverse", "revswap"]))
+            || matches!(func.segments.as_slice(), [Segment::Name { name: s, .. }, Segment::Impl(Ty::Slice(_)), Segment::Name { name: r, .. }, Segment::Name { name: w, .. }] if s == "slice" && r == "reverse" && w == "revswap");
+        if let (true, [a, b, n]) = (in_reverse, args.as_slice()) {
+            let (Some((pa, a0)), Some((pb, b0)), Some((n, _))) =
+                (element_pointer(f, &defs, a), element_pointer(f, &defs, b), n.int())
+            else {
+                continue;
+            };
+            let Some(elem) = array_element(f, &pa) else { continue };
+            let n = n as u64;
+            let len = |p: &Place| match f
+                .params
+                .iter()
+                .map(|(l, t)| (*l, t))
+                .chain(f.body.decls.iter().map(|d| (d.local, &d.ty)))
+                .find(|(l, _)| Some(*l) == p.base_local())
+                .map(|(_, t)| t)
+            {
+                Some(Ty::Array(_, ArrayLen::Known(m))) => Some(*m),
+                Some(Ty::Ref { to, .. }) => match &**to {
+                    Ty::Array(_, ArrayLen::Known(m)) => Some(*m),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let (Some(la), Some(lb)) = (len(&pa), len(&pb)) else { continue };
+            if a0 + n > la || b0 + n > lb || n > 8 {
+                continue;
+            }
+            let at = |p: &Place, k: u64, m: u64| {
+                let mut e = p.clone();
+                e.projection.push(Projection::ConstantIndex { offset: k, min_length: m });
+                e
+            };
+            let mut swaps = vec![];
+            for k in 0..n {
+                let (x, y) = (fresh.local(elem.clone()), fresh.local(elem.clone()));
+                let (ea, eb) = (at(&pa, a0 + k, la), at(&pb, b0 + n - 1 - k, lb));
+                swaps.extend([
+                    assign(x, Rvalue::Use(Operand::Copy(ea.clone()))),
+                    assign(y, Rvalue::Use(Operand::Copy(eb.clone()))),
+                    Statement::Assign(ea, Rvalue::Use(copy_of(y))),
+                    Statement::Assign(eb, Rvalue::Use(copy_of(x))),
+                ]);
+            }
+            let b = &mut f.body.blocks[bi];
+            b.statements.extend(swaps);
+            b.terminator = Terminator::Goto(ret);
+            continue;
+        }
         if impl_of_slice && matches!(func.name(), "swap" | "reverse") {
             swap_or_reverse(f, &mut fresh, &defs, bi, func.name(), &args, ret);
             continue;
@@ -1916,5 +1969,21 @@ fn swap_or_reverse(
         }
         ("reverse", [_]) => f.body.blocks[bi].terminator = Terminator::Goto(ret),
         _ => {}
+    }
+}
+
+/// The element type of the array a place (an array local, or one behind a pointer) holds.
+fn array_element(f: &Function, a: &Place) -> Option<Ty> {
+    let base = a.base_local();
+    let ty = f.params.iter().find(|(p, _)| Some(*p) == base).map(|(_, t)| t).or_else(|| {
+        f.body.decls.iter().find(|d| Some(d.local) == base).map(|d| &d.ty)
+    })?;
+    match ty {
+        Ty::Array(e, _) => Some((**e).clone()),
+        Ty::Ref { to, .. } | Ty::Ptr { to, .. } => match &**to {
+            Ty::Array(e, _) => Some((**e).clone()),
+            _ => None,
+        },
+        _ => None,
     }
 }

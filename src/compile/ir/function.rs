@@ -137,7 +137,8 @@ pub fn parse_body(text: &str) -> Body {
 
 /// A statement no pass needs: storage markers, rustc's own bookkeeping, `nop`.
 fn skipped(l: &str) -> bool {
-    if l == "nop;" {
+    // `_t = const <uninit>`: a value written before it is read
+    if l == "nop;" || l.ends_with(" = const <uninit>;") {
         return true;
     }
     [

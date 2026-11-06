@@ -602,6 +602,7 @@ fn compile(
     // the pointers into an array that a slice iterator leaves, once taken out of its struct: indexes
     for n in &names {
         slices::pointers_as_indexes(fns.get_mut(n).unwrap());
+        slices::pointers_to_locals(fns.get_mut(n).unwrap());
     }
     // abs, min and their kin, which rustc calls at opt-level 1 and s: the code it inlines at 2
     for n in &names {

@@ -38,7 +38,43 @@ pub fn predecessors(blocks: &[Block]) -> HashMap<BasicBlock, Vec<BasicBlock>> {
     preds
 }
 
+impl Rvalue {
+    /// `*mut [T] from (p, n)`, a slice's pointer made of its first element's and its length, for a constant n: the
+    /// pointer, cast to a pointer to the array of n it points into (the length kept in the type).
+    pub fn slice_from_parts(p: Operand, to: Ty, mutable: bool, n: &Operand) -> Option<Rvalue> {
+        let (Ty::Slice(e), Some((n, _))) = (to, n.int()) else {
+            return None;
+        };
+        let array = Ty::Array(e, ArrayLen::Known(u64::try_from(n).ok()?));
+        Some(Rvalue::Cast(
+            p,
+            Ty::Ptr {
+                mutable,
+                to: Box::new(array),
+            },
+            CastKind::PtrToPtr,
+        ))
+    }
+}
+
 impl Statement {
+    /// `copy_nonoverlapping(dst = p, src = q, count = 1)`, one element copied through two pointers, as the
+    /// assignment it is: `(*p) = copy (*q)`. None for another count, or pointers not in locals.
+    pub fn copy_one(src: Operand, dst: Operand, count: Operand) -> Option<Statement> {
+        let deref = |o: &Operand| {
+            let l = o.local()?;
+            Some(Place {
+                base: PlaceBase::Local(l),
+                projection: vec![Projection::Deref],
+            })
+        };
+        matches!(count.int(), Some((1, _))).then_some(())?;
+        Some(Statement::Assign(
+            deref(&dst)?,
+            Rvalue::Use(Operand::Copy(deref(&src)?)),
+        ))
+    }
+
     /// The whole local it assigns, `x = ...`.
     pub fn def(&self) -> Option<Local> {
         match self {

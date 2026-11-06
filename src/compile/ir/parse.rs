@@ -274,6 +274,23 @@ impl Parser<'_> {
         if self.is_ident("drop") && self.peek_at(1) == Some(&Tok::Punct("(")) {
             return self.drop_line().map(Line::Terminator);
         }
+        if self.is_ident("copy_nonoverlapping") && self.peek_at(1) == Some(&Tok::Punct("(")) {
+            self.pos += 2;
+            let arg = |p: &mut Self, name: &str, last: bool| -> Parsed<Operand> {
+                p.keyword(name)?;
+                p.punct("=")?;
+                let o = p.operand()?;
+                p.punct(if last { ")" } else { "," })?;
+                Ok(o)
+            };
+            let dst = arg(self, "dst", false)?;
+            let src = arg(self, "src", false)?;
+            let count = arg(self, "count", true)?;
+            self.punct(";")?;
+            return Statement::copy_one(src, dst, count)
+                .map(Line::Statement)
+                .ok_or_else(|| self.error("a copy of one element through two pointers"));
+        }
         if self.is_ident("assume") && self.peek_at(1) == Some(&Tok::Punct("(")) {
             self.pos += 2;
             let o = self.operand()?;
@@ -650,6 +667,22 @@ impl Parser<'_> {
                 BorrowKind::Shared
             };
             return Ok(Rvalue::Ref(kind, self.place()?));
+        }
+        // `*mut [T] from (p, n)`
+        if self.is_punct("*") {
+            let back = self.pos;
+            if let Ok(Ty::Ptr { mutable, to }) = self.ty() {
+                if self.eat_ident("from") {
+                    self.punct("(")?;
+                    let p = self.operand()?;
+                    self.punct(",")?;
+                    let n = self.operand()?;
+                    self.punct(")")?;
+                    return Rvalue::slice_from_parts(p, *to, mutable, &n)
+                        .ok_or_else(|| self.error("a slice's pointer of a constant length"));
+                }
+            }
+            self.pos = back;
         }
         if self.eat_punct("[") {
             let first = self.operand()?;
