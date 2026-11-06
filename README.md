@@ -173,8 +173,8 @@ rustc does all of the front end: parsing, type checking, the borrow checker. A p
   index or a pointer (self-modifying code), arrays of structs (one array per field), overflow checks on.
 - **Enums:** C-like ones are one cell. An enum with data, named fields or not, and so `Option` and `Result` with
   `?`, `if let` and most of their methods, is a tag cell and its fields' cells.
-- **Refused:** integers wider than 16 bits (an `i32` is held as an `i16` is) and floats; `&`, `|` and `^` between
-  integers, and shifts by a variable; strings and the heap; slices and iterators other than ranges; arrays of
+- **Refused:** integers wider than 16 bits (an `i32` is held as an `i16` is) and floats; `|`, `^` and `&` between
+  integers (but `x & 3` and other masks one below a power of two), and shifts by a variable; strings and the heap; slices and iterators other than ranges; arrays of
   arrays; recursion other than a call to itself at the end; `println!` and `format!`. The build stops with an
   error, which for the common cases says what to write instead.
 
