@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use super::ir::{File, Item, Operand, Path, Rvalue, Segment, Statement, Terminator};
 use super::Fail;
 use super::BUILTINS;
+use crate::codes;
 
 /// One crate's IR, the name other crates know it by, and its enums and structs.
 pub struct Crate {
@@ -114,14 +115,14 @@ pub fn link(main: &File, deps: &[Crate]) -> Result<File, Fail> {
         match found.len() {
             0 => Ok(None),
             1 => Ok(Some(joined(found[0].0, &found[0].1))),
-            _ => Err(format!(
-                "{}call to {callee} could be any of {}",
+            _ => Err(codes::ambiguous_call(
                 within_crate(k),
+                callee,
                 found
                     .iter()
                     .map(|(j, f)| format!("{}::{f}", names[*j]))
                     .collect::<Vec<_>>()
-                    .join(", ")
+                    .join(", "),
             )),
         }
     };
@@ -134,7 +135,7 @@ pub fn link(main: &File, deps: &[Crate]) -> Result<File, Fail> {
                 continue;
             };
             if let Some((_, other)) = consts.iter().find(|(c, _)| c == n) {
-                return Err(format!("const {n} is defined in both {other} and {name}: rename one"));
+                return Err(codes::const_in_two_crates(n, other, name));
             }
             consts.push((n.to_string(), *name));
         }
@@ -162,9 +163,11 @@ pub fn link(main: &File, deps: &[Crate]) -> Result<File, Fail> {
         let own = defined[k].contains(&callee);
         match resolve(k, &callee)? {
             Some(to) if generic.is_some() && !own && !BUILTINS.contains(&to.as_str()) => {
-                return Err(format!("{}call to {callee}{}, a generic function in another crate: rustc writes its MIR \
-                    only in the generic form, which this compiler can't use. Make it non-generic, or #[inline] so rustc \
-                    inlines it", within_crate(k), generic.as_ref().unwrap()));
+                return Err(codes::generic_in_crate(
+                    within_crate(k),
+                    &callee,
+                    generic.as_ref().unwrap(),
+                ));
             }
             Some(to) => {
                 let args = generic.clone();

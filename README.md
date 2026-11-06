@@ -303,6 +303,7 @@ and [FPGA](http://www.drdobbs.com/embedded-systems/paper-to-fpga/240155922) vers
     cargo cardiac build [--manifest-path PATH] [-p NAME] [--release | --profile NAME] [--bin NAME]...
     cargo cardiac build [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] [--auto-overlay] FILE.rs...
     cargo cardiac build --emit deck,listing,map,asm ...
+    cargo cardiac explain CODE
 
 `new` is `cargo new`, with `cardiac` added and the countdown as `src/main.rs`. `setup` fetches the driver and its
 nightly. `run` builds as `build` does and runs the deck, input from after `--` or from standard input, with the
@@ -321,6 +322,11 @@ Brian Stuart's six columns, which carc assembles), `map` (`NAME.map`) and `asm` 
 or `main_n` when another function has an `n` too), and say each line as the Rust it came from (`height = cell / 10`).
 The default is `deck,map`. `-q` says only errors, `-v` also says where the cells go, and
 `--message-format=json` says it all as JSON Lines on standard error, as cargo does.
+
+Each message about a program has a code, as rustc's errors do: `error[RCE0013]` for an error, `warning[RCW0001]`
+for a warning and `note[RCI0001]` for a note. The message is one line; `cargo cardiac explain CODE` says what it
+means on CARDIAC and what to write instead, as `rustc --explain` does, and so does the code's page in
+[the message codes](https://lab.strangequery.com/rust-cardiac/codes/). In JSON the code is the message's `code`.
 
 The target is `cardiac-unknown-none`, a notional triple: rustc doesn't know it, so there is no `--target` to give,
 and `cargo build` builds natively. `cargo cardiac` is what builds for CARDIAC, with the CARDIAC driver as rustc.

@@ -63,6 +63,19 @@ fn called(func: &Path, defined: &impl Fn(&str) -> bool) -> Option<(Bits, IntTy)>
     core.then_some((bits, *t))
 }
 
+impl Bits {
+    /// The method of Rust's it is, as the program calls it.
+    fn method(self) -> &'static str {
+        match self {
+            Bits::CountOnes => "`count_ones()`",
+            Bits::LeadingZeros | Bits::LeadingZerosNonzero => "`leading_zeros()`",
+            Bits::TrailingZeros | Bits::TrailingZerosNonzero => "`trailing_zeros()`",
+            Bits::RotateLeft => "`rotate_left()`",
+            Bits::RotateRight => "`rotate_right()`",
+        }
+    }
+}
+
 fn width(t: IntTy) -> i128 {
     match t {
         IntTy::U8 => 8,
@@ -363,8 +376,11 @@ fn ones_shifted(
     (vec![mask, st], test)
 }
 
-/// Every call in `f` to one of the intrinsics becomes the code for it, and every `T::MAX >> n` by a variable.
-pub fn inline_bit_intrinsics(f: &mut Function, defined: impl Fn(&str) -> bool) {
+/// Every call in `f` to one of the intrinsics becomes the code for it, and every `T::MAX >> n` by a variable. What
+/// was written, as the program says it (`count_ones()`, `>>` by a variable), for the warning that each is a walk
+/// over the bits.
+pub fn inline_bit_intrinsics(f: &mut Function, defined: impl Fn(&str) -> bool) -> Vec<&'static str> {
+    let mut written = vec![];
     let mut gains = Gains::new(&f.params, &f.body.blocks, &mut f.body.decls);
     for b in f.body.blocks.iter_mut() {
         let Terminator::Call {
@@ -392,6 +408,7 @@ pub fn inline_bit_intrinsics(f: &mut Function, defined: impl Fn(&str) -> bool) {
         if let Some((statements, t)) = expand(&mut gains, bits, ty, &dest, &args, back) {
             b.statements.extend(statements);
             b.terminator = t;
+            written.push(bits.method());
         }
     }
     // each `T::MAX >> n` splits its block: the rest goes on in a block of its own
@@ -418,9 +435,14 @@ pub fn inline_bit_intrinsics(f: &mut Function, defined: impl Fn(&str) -> bool) {
         b.statements.extend(statements);
         b.terminator = t;
         blocks.append(&mut gains.blocks);
+        written.push(SHIFT_BY_A_VARIABLE[0]);
     }
     blocks.append(&mut gains.blocks);
+    written
 }
+
+/// How the warning names a shift by a variable: `>>`'s, `<<`'s.
+pub const SHIFT_BY_A_VARIABLE: [&str; 2] = ["`>>` by a variable", "`<<` by a variable"];
 
 #[cfg(test)]
 mod tests {

@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use crate::codes::{self, Diag};
 use crate::compile::program::CFG;
 use crate::driver::{Listener, Report, Settings};
 use serde_json::Value as Json;
@@ -36,7 +37,7 @@ pub struct Package {
     pub manifest: String,
     pub programs: Vec<Target>,
     pub deps: Vec<Extern>,
-    pub problem: Option<String>,
+    pub problem: Option<Diag>,
     pub target_dir: PathBuf,
     /// The workspace's own Cargo.toml, whose `[profile.dev]` says what `dev_defaults` leaves alone.
     pub workspace_manifest: PathBuf,
@@ -118,7 +119,7 @@ pub fn packages(manifest: Option<&str>, package_name: Option<&str>) -> Result<Ve
             as_name: Option<&str>,
             seen: &mut HashSet<String>,
             deps: &mut Vec<Extern>,
-            problem: &mut Option<String>,
+            no_library: &mut Option<String>,
         ) -> Result<(), String> {
             if !seen.insert(id.to_string()) {
                 return Ok(());
@@ -133,14 +134,14 @@ pub fn packages(manifest: Option<&str>, package_name: Option<&str>) -> Result<Ve
                         d["name"].as_str(),
                         seen,
                         deps,
-                        problem,
+                        no_library,
                     )?;
                 }
             }
             if let Some(name) = as_name {
                 let p = package(meta, id).ok_or_else(|| format!("cargo metadata: no package {id}"))?;
                 let Some(lib) = lib_of(meta, id) else {
-                    problem.get_or_insert(format!("it uses {}, a crate with no library (a proc-macro crate, say), which can't be compiled for CARDIAC", p["name"].as_str().unwrap_or(id)));
+                    no_library.get_or_insert(p["name"].as_str().unwrap_or(id).to_string());
                     return Ok(());
                 };
                 deps.push(Extern {
@@ -151,8 +152,9 @@ pub fn packages(manifest: Option<&str>, package_name: Option<&str>) -> Result<Ve
             }
             Ok(())
         }
-        let (mut deps, mut problem) = (vec![], None);
-        visit(&meta, id, None, &mut HashSet::new(), &mut deps, &mut problem)?;
+        let (mut deps, mut no_library) = (vec![], None);
+        visit(&meta, id, None, &mut HashSet::new(), &mut deps, &mut no_library)?;
+        let problem = no_library.map(|krate| codes::no_library(text(&p["name"]), krate));
         found.push(Package {
             name: text(&p["name"]),
             id: id.to_string(),

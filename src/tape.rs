@@ -3,6 +3,7 @@
 pub use heartburn::tape::*;
 
 use crate::asm;
+use crate::codes::{self, Diag};
 use crate::compile::machine::{Kind, Line};
 use crate::compile::Phases;
 
@@ -46,7 +47,7 @@ struct Assembled {
 /// Each phase of a compiled program, from what `split_phases` made of it, and the slots of the first. The first
 /// phase loads onto cleared memory, so its cells that hold 0 are left off its tape (but not a slot's: those cards
 /// are filled in when it is bound); a later phase loads over the one before, so all of its cells are punched.
-fn assembled(r: &Phases) -> Result<(Vec<Assembled>, Vec<Slot>), String> {
+fn assembled(r: &Phases) -> Result<(Vec<Assembled>, Vec<Slot>), Diag> {
     let mut phases = vec![];
     let mut found = vec![];
     let data = r.data_text();
@@ -80,7 +81,10 @@ fn assembled(r: &Phases) -> Result<(Vec<Assembled>, Vec<Slot>), String> {
         } else {
             format!("p{}", i + 1)
         };
-        let start = *p.labels.get(&start).ok_or(format!("no label {start}"))?;
+        let start = *p
+            .labels
+            .get(&start)
+            .ok_or_else(|| codes::internal(format!("no label {start}")))?;
         phases.push(Assembled {
             text,
             program: p,
@@ -92,7 +96,7 @@ fn assembled(r: &Phases) -> Result<(Vec<Assembled>, Vec<Slot>), String> {
 }
 
 /// The tape of a compiled program, its slots empty: a deck for each phase (see `assembled`).
-pub fn of(r: &Phases) -> Result<Tape, String> {
+pub fn of(r: &Phases) -> Result<Tape, Diag> {
     let (phases, slots) = assembled(r)?;
     Ok(Tape {
         phases: phases.iter().map(|p| asm::tape(p.start, &p.cells)).collect(),
@@ -104,7 +108,7 @@ pub fn of(r: &Phases) -> Result<Tape, String> {
 /// its tape loads, and the first phase's that hold 0 too (they are the program's variables), each with its label,
 /// its instruction or DATA (what the compiler wrote: DAT, and CUT and LDC, whose words are negative, are DATA), and
 /// the comment the compiler gave its line.
-pub fn listings(r: &Phases) -> Result<Vec<String>, String> {
+pub fn listings(r: &Phases) -> Result<Vec<String>, Diag> {
     let (phases, _) = assembled(r)?;
     let mut out = vec![];
     for (i, ph) in phases.iter().enumerate() {
