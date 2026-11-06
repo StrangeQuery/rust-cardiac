@@ -122,14 +122,9 @@ impl Diag {
         self
     }
 
-    /// rustc's last line for an error, which says where it is explained.
-    pub fn more(&self) -> Option<String> {
-        let c = self.code.filter(|c| c.kind == Kind::Error)?;
-        Some(format!(
-            "For more information about this error, try `cargo {} explain {}`.",
-            crate::TOOL,
-            c.id
-        ))
+    /// Its code and its notes' codes.
+    pub fn codes(&self) -> Vec<&'static Code> {
+        self.code.into_iter().chain(self.notes.iter().flat_map(Diag::codes)).collect()
     }
 
     /// As `--message-format=json` says it: its kind in `reason`, as cargo's messages have, and its code.
@@ -178,6 +173,33 @@ impl Display for Diag {
 
 /// Where the codes are explained on the web: an index, and a page for each, PAGE/CODE/.
 pub const PAGE: &str = "https://lab.strangequery.com/rust-cardiac/messages/";
+
+/// rustc's last lines after its errors, which say where they are explained, for the codes of the errors and warnings
+/// said (a note's never makes them): none when there are none.
+pub fn more_information(said: &[&'static Code]) -> Option<String> {
+    let mut codes: Vec<&Code> = said.iter().copied().filter(|c| c.kind != Kind::Note).collect();
+    codes.sort_by_key(|c| c.id);
+    codes.dedup();
+    let first = codes.first()?;
+    let word = first.kind.word();
+    let (tool, id) = (crate::TOOL, first.id);
+    let try_it = format!("try `cargo {tool} explain {id}`, or see {PAGE}{id}/");
+    if codes.len() == 1 {
+        return Some(format!("For more information about this {word}, {try_it}"));
+    }
+    // an error's code sorts before a warning's, so the first is an error's when there are both
+    let kinds = if codes.iter().all(|c| c.kind == first.kind) {
+        format!("{word}s")
+    } else {
+        "errors and warnings".to_string()
+    };
+    let ids: Vec<&str> = codes.iter().map(|c| c.id).collect();
+    let a = if first.kind == Kind::Error { "an" } else { "a" };
+    Some(format!(
+        "Some {kinds} have detailed explanations: {}.\nFor more information about {a} {word}, {try_it}",
+        ids.join(", ")
+    ))
+}
 
 /// The code of this name, in any case: `rce0002` is RCE0002.
 pub fn find(id: &str) -> Option<&'static Code> {
@@ -1087,6 +1109,27 @@ mod tests {
         assert_eq!(e.json()["code"], "RCE0002");
         assert_eq!(find("rce0002").map(|c| c.id), Some("RCE0002"));
         assert_eq!(Diag::tool("no driver").to_string(), "error: no driver");
-        assert_eq!(Diag::tool("no driver").more(), None);
+        assert_eq!(e.codes().iter().map(|c| c.id).collect::<Vec<_>>(), ["RCE0002", "RCI0003"]);
+    }
+
+    #[test]
+    fn the_last_lines_say_where_the_codes_are_explained() {
+        assert_eq!(more_information(&[&RCI0003]), None);
+        assert_eq!(
+            more_information(&[&RCE0013, &RCI0003]).as_deref(),
+            Some(
+                "For more information about this error, try `cargo cardiac explain RCE0013`, or see \
+                 https://lab.strangequery.com/rust-cardiac/messages/RCE0013/"
+            )
+        );
+        assert_eq!(
+            more_information(&[&RCW0001, &RCE0013, &RCE0002, &RCE0013]).as_deref(),
+            Some(
+                "Some errors and warnings have detailed explanations: RCE0002, RCE0013, RCW0001.\n\
+                 For more information about an error, try `cargo cardiac explain RCE0002`, or see \
+                 https://lab.strangequery.com/rust-cardiac/messages/RCE0002/"
+            )
+        );
+        assert!(more_information(&[&RCW0001]).unwrap().starts_with("For more information about this warning"));
     }
 }
