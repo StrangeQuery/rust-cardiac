@@ -4,6 +4,31 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · Every message about a program has a code, explained on the web and by `cargo cardiac explain`
+
+- **Decision.** What cargo-cardiac says about a program carries a code, as rustc's errors do:
+  `error[RCE0013]: src/main.rs: recursion (main -> f -> f) needs a stack; this backend has none yet`, with
+  `warning[RCW....]` for a warning and `note[RCI....]` for a note. Rust numbers only its errors and names its
+  warnings as lints; we number all three, because on CARDIAC a warning or a note (a bool better as a `Flag`, an
+  expensive operation) needs as much explaining as a refusal. The message stays one line; the explanation (what it
+  means on CARDIAC, why, what to write instead, an example) is Markdown in the code's entry of one table,
+  `src/codes.rs`, which `cargo cardiac explain CODE` prints, as `rustc --explain` does, and which the website's
+  pages, `/rust-cardiac/messages/` and `/rust-cardiac/messages/CODE/`, are made from (`cargo cardiac explain --json`,
+  committed in the site's repository). Each message is a constructor in its code's entry, so a message can't be made
+  without one: the compiler's `Fail` is a `codes::Diag` (its code, its line, its notes), not a `String`, and travels
+  from the driver to `cargo cardiac` as JSON. A code is what went wrong, not where: 48 codes cover about 170 places.
+  In `--message-format=json` the code is the message's `code`, and a note under an error is in its `children`. A
+  usage error and the tool's own failures (no driver, a file it can't write) have no code (`Diag::tool`) and stay
+  plain `error:` lines. A program that uses `&`, `|` or `^` between values, a shift by a variable or the bit
+  methods gets one warning, RCW0001, naming them (`expensive operation, consider an alternative: \`&\`,
+  \`count_ones()\``), also under the error when it is too big; `*` and `/` of two variables don't.
+- **Why.** The messages had grown into paragraphs (the dev profile's note was five lines). A code keeps the line
+  short and gives the reason a place to live, searchable, the same offline and on the web.
+- **Cost.** A code is never renumbered or reused. The old per-word check of which errors `explain` may restate
+  in Rust's terms (`println!`, `Vec`) is a check of the code, so a few messages that happened to contain
+  "unsupported" (a struct copy) are now said as they are. The dev profile's note and the generic-function error
+  are shorter, their reasons in the explanation. No listing or test outcome changed.
+
 ## 2026-11-06 · A `&str` is the slice of its bytes
 
 - **Decision.** `front::strings_as_bytes`, before byte strings are built: a `&str` local, parameter or result is

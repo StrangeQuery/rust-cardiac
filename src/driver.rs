@@ -35,6 +35,7 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
+use crate::codes::Diag;
 use crate::compile::program::{Built, Emit, OptLevel, Rustc, CFG};
 
 /// The nightly the driver is built with: the last of 1.97's, whose MIR is the same as 1.97's.
@@ -399,7 +400,7 @@ pub enum Outcome {
     /// `test`: the listing's file, as it is shown, and the opt-level, for a hint if the run fails.
     Tested { asm: String, opt_level: OptLevel },
     /// It doesn't compile for CARDIAC: the error, as `cargo cardiac` says it.
-    Failed(String),
+    Failed(Diag),
 }
 
 /// The driver's line about one program (`{"$message_type": "cardiac", "program": NAME, ...}`).
@@ -416,7 +417,7 @@ impl Report {
         match &self.outcome {
             Outcome::Built(b) => v["built"] = b.json(),
             Outcome::Tested { asm, opt_level } => v["tested"] = json!({"asm": asm, "opt_level": opt_level.to_string()}),
-            Outcome::Failed(e) => v["error"] = e.as_str().into(),
+            Outcome::Failed(e) => v["error"] = e.json(),
         }
         v.to_string()
     }
@@ -426,8 +427,8 @@ impl Report {
         if v["$message_type"] != "cardiac" {
             return None;
         }
-        let outcome = if let Some(e) = v["error"].as_str() {
-            Outcome::Failed(e.to_string())
+        let outcome = if v["error"].is_object() {
+            Outcome::Failed(Diag::from_json(&v["error"])?)
         } else if v["built"].is_object() {
             Outcome::Built(Built::from_json(&v["built"])?)
         } else {
@@ -461,7 +462,7 @@ impl Listener {
     pub fn take(&mut self, m: &Value) {
         if let Some(r) = Report::of(m) {
             if let Outcome::Failed(e) = &r.outcome {
-                self.pending.push(e.clone());
+                self.pending.push(e.to_string());
             }
             self.reports.insert(r.program.clone(), r);
             return;

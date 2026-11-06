@@ -86,10 +86,10 @@ impl<'a> Lowering<'a> {
             if p.projection.is_empty() {
                 return Ok(Loc::At(Sym::local(func, Local(*local)).into()));
             }
-            fail!("unsupported place {p}")
+            fail!(unsupported_place(p))
         }
         let Some(l) = p.base_local().and_then(numbered) else {
-            fail!("unsupported place {p}")
+            fail!(unsupported_place(p))
         };
         match p.projection.as_slice() {
             [Projection::Field(k, t)] if *k < 10 && one_word(t) => Ok(Loc::At(self.cell(l, Some(*k)).into())),
@@ -107,14 +107,14 @@ impl<'a> Lowering<'a> {
             [Projection::IndexPlus(i, k)] if numbered(*i).is_some() => {
                 let (base, i) = (self.cell(l, None), self.cell(*i, None));
                 if !self.arrays.has(&base) {
-                    fail!("indexing a non-array {p}")
+                    fail!(indexing_non_array(p))
                 }
                 Ok(Loc::Computed(Dyn::IndexPlus(base, i, *k)))
             }
             [Projection::Index(i)] if numbered(*i).is_some() => {
                 let (base, i) = (self.cell(l, None), self.cell(*i, None));
                 if !self.arrays.has(&base) {
-                    fail!("indexing a non-array {p}")
+                    fail!(indexing_non_array(p))
                 }
                 Ok(Loc::Computed(Dyn::Index(base, i)))
             }
@@ -122,7 +122,7 @@ impl<'a> Lowering<'a> {
                 let (r, i) = (self.cell(l, None), self.cell(*i, None));
                 Ok(Loc::Computed(Dyn::DerefIndex(r, i)))
             }
-            _ => fail!("unsupported place {p}"),
+            _ => fail!(unsupported_place(p)),
         }
     }
 
@@ -178,7 +178,7 @@ impl<'a> Lowering<'a> {
     pub(super) fn place(&mut self, p: &ir::Place) -> Result<Cell, Fail> {
         match self.place_any(p)? {
             Loc::At(c) => Ok(c),
-            Loc::Computed(_) => fail!("expected a plain local, got {p}"),
+            Loc::Computed(_) => fail!(internal(format!("expected a plain local, got {p}"))),
         }
     }
 
@@ -220,17 +220,14 @@ impl<'a> Lowering<'a> {
                     // overflow known at compile time is an error, as rustc's `arithmetic_overflow` makes it for an
                     // i16: here past a card, which rustc can't see
                     if v < lo || v > hi {
-                        fail!(
-                            "constant out of range: {v} is past what a card holds ({lo} to {hi}): a literal that size, \
-                             or arithmetic rustc worked out to it at compile time, would overflow a card"
-                        )
+                        fail!(constant_past_card(v, lo, hi))
                     }
                     return Ok(Value::Const(v));
                 }
                 // a static's address: the cell holding it, a constant (see `front::Statics`)
                 Const::Alloc(alloc, _) => {
                     let Some(name) = self.sh.statics.of_alloc.get(alloc).cloned() else {
-                        fail!("unsupported place {c}: a pointer into memory this backend doesn't have (a static's is, when its first value is a literal of numbers or bools)")
+                        fail!(outside_memory(c))
                     };
                     if !self.sh.statics_used.contains(&name) {
                         self.sh.statics_used.push(name.clone());
@@ -241,27 +238,23 @@ impl<'a> Lowering<'a> {
                 // a comparison with one is settled before lowering (`settled_by_the_card`): what is left is the value
                 Const::Path(p) if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]) => {
                     let v = if p.name() == "MIN" { -32768 } else { 32767 };
-                    fail!(
-                        "constant out of range: i16::{} ({v}) is past what a card holds (-999 to 999): no i16 on a \
-                         card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled",
-                        p.name()
-                    )
+                    fail!(limit_past_card(p.name(), v))
                 }
                 // a named `const` item, resolved from the MIR
                 Const::Path(p) if p.qself.is_none() && is_const_path(&p.segments) => {
                     let name = p.name();
                     return match self.sh.named.get(name) {
                         Some(v) => Ok(Value::Const(*v)),
-                        None => fail!("unknown const {name}"),
+                        None => fail!(unknown_const(name)),
                     };
                 }
                 Const::Bool(true) => return Ok(Value::Const(1)),
                 Const::Bool(false) => return Ok(Value::Const(0)),
-                _ => fail!("unsupported place {}", bare(o)),
+                _ => fail!(unsupported_place(bare(o))),
             }
         }
         let Some(p) = o.place() else {
-            fail!("unsupported place {o}")
+            fail!(unsupported_place(o))
         };
         Ok(match self.place_any(p)? {
             Loc::Computed(d) => Value::Computed(d),
@@ -383,7 +376,7 @@ impl<'a> Lowering<'a> {
     /// The cell holding a materialized value.
     pub(super) fn arith(&mut self, op: &Value) -> Result<Operand, Fail> {
         match op {
-            Value::Computed(_) => fail!("internal: unmaterialized operand"),
+            Value::Computed(_) => fail!(internal("unmaterialized operand")),
             Value::Const(k) => Ok(self.konst(*k)),
             Value::At(c) => Ok(c.clone().into()),
         }

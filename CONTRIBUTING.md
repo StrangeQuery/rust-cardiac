@@ -71,6 +71,8 @@ Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR
 ## Where things are
 
 - `src/compile/` is the compiler: the IR, lowering, the passes, and the machine that lays out cells.
+- `src/codes.rs` is every message the compiler gives about a program, each with its code and explanation. A new
+  message goes there (its top says how), and the website's pages are made from it.
 - `driver/src/` turns rustc's MIR into the compiler's IR, and holds the oracle that `ir_check.sh` runs.
 - `cardiac/` is the crate programs depend on: `inp()`, `out()` and the rest of the built-ins.
 - `docs/RUST.md` lists the Rust that compiles for CARDIAC, the Rust that compiles but costs more than it looks, and

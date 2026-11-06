@@ -1196,9 +1196,9 @@ fn scalar_consts(file: &File) -> Result<HashMap<String, i64>, Fail> {
                 ty: IntTy::U8 | IntTy::I16 | IntTy::Usize,
             }) => *value as i64,
             ConstValue::Const(Const::Bool(b)) => *b as i64,
-            ConstValue::Const(Const::Int { .. }) => return Err(format!("unsupported const {name}: {ty}")),
+            ConstValue::Const(Const::Int { .. }) => return Err(crate::codes::unsupported_const(name, ty)),
             _ if matches!(ty, Ty::Path(p) if p.is("f32") || p.is("f64")) => {
-                return Err(format!("unsupported const {name}: {ty}"))
+                return Err(crate::codes::unsupported_const(name, ty))
             }
             _ => continue,
         };

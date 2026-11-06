@@ -132,13 +132,13 @@ impl<'a> Lowering<'a> {
             }
         }
         let Statement::Assign(dest, rv) = s else {
-            fail!("unsupported statement: {s}")
+            fail!(unsupported_statement(s))
         };
         match rv {
             Rvalue::BinaryOp(op @ (BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow), x, y) => {
                 // the result into .0 and whether it left its type's range into .1
                 let Some(d) = dest.as_local() else {
-                    fail!("unsupported place {dest}")
+                    fail!(unsupported_place(dest))
                 };
                 let f0 = self.cell(d, Some(0));
                 let f1 = self.cell(d, Some(1));
@@ -151,10 +151,7 @@ impl<'a> Lowering<'a> {
                 let plain = plain_op(*op);
                 if w == Some(IntTy::U8) && plain == BinOp::Mul {
                     // the product wraps, as a u8's does, but past a card it can't be held to be wrapped
-                    fail!(
-                        "a u8 product with its overflow flag (`overflowing_mul`, `checked_mul`) is not supported: \
-                         past a card it can't be wrapped"
-                    )
+                    fail!(overflowing_mul_u8())
                 }
                 self.arith_acc(plain, a, b, w.map(|_| &bad), src)?;
                 self.emit(Op::Sto, f0.clone());
@@ -238,7 +235,7 @@ impl<'a> Lowering<'a> {
                 // a product the accumulator holds (9999 at most): a u8's or an i8's by a constant to 39
                 let held = |o: &ir::Operand| o.int().is_some_and(|(k, _)| (-39..=39).contains(&k));
                 if plain == BinOp::Mul && !(held(x) || held(y)) {
-                    fail!("a wrapping * of two values that can pass what the accumulator holds is not supported: {src}")
+                    fail!(wrapping_mul_wide(src))
                 }
                 self.arith_acc(plain, a, b, None, src)?;
                 if ty == Some(Ty::Int(IntTy::I8)) {
@@ -276,7 +273,7 @@ impl<'a> Lowering<'a> {
                 let ty = x.place().and_then(|p| self.place_ty(p));
                 let is_bool = ty == Some(Ty::Bool) || matches!(x, ir::Operand::Constant(Const::Bool(_)));
                 if !is_bool {
-                    fail!("! is supported on bool, i16 and u8, not here: {src}")
+                    fail!(not_type(src))
                 }
                 self.emit_c(Op::Cla, Operand::CELL_00, src);
                 let x = self.arith(&a)?;
@@ -353,7 +350,7 @@ impl<'a> Lowering<'a> {
                 let base = self.place(dest)?;
                 let n = *n as usize;
                 if self.array_at(&base).map(|a| a.len) != Some(n) {
-                    fail!("array repeat size mismatch: {src}")
+                    fail!(internal(format!("array repeat size mismatch: {src}")))
                 }
                 let v = self.operand(o)?;
                 let v = self.mat(v);
@@ -368,7 +365,7 @@ impl<'a> Lowering<'a> {
                 // array literal
                 let base = self.place(dest)?;
                 if self.array_at(&base).map(|a| a.len) != Some(items.len()) {
-                    fail!("array literal size mismatch: {src}")
+                    fail!(internal(format!("array literal size mismatch: {src}")))
                 }
                 for (k, it) in items.iter().enumerate() {
                     let v = self.operand(it)?;
@@ -401,7 +398,7 @@ impl<'a> Lowering<'a> {
             // a constant's cast, `WORDS as i16`: the value, known now, as the type has it
             Rvalue::Cast(c @ ir::Operand::Constant(_), Ty::Int(to), kind) if converts(kind) => {
                 let Some(v) = self.operand(c)?.k() else {
-                    fail!("unsupported place {c}")
+                    fail!(unsupported_place(c))
                 };
                 let fits = match to {
                     IntTy::U8 => (0..=255).contains(&v),
@@ -410,7 +407,7 @@ impl<'a> Lowering<'a> {
                     _ => (-999..=999).contains(&v),
                 };
                 if !fits {
-                    fail!("constant out of range: {v} as {to} is past what a card holds, in {src}")
+                    fail!(cast_past_card(v, to, src))
                 }
                 let dst = self.place_any(dest)?;
                 let k = self.konst(v);
@@ -429,7 +426,7 @@ impl<'a> Lowering<'a> {
                             .strip_prefix("copy ")
                             .or_else(|| text.strip_prefix("move "))
                             .unwrap_or(&text);
-                        fail!("unsupported place {text}")
+                        fail!(unsupported_place(text))
                     }
                 };
                 let carried = matches!(&v, Value::At(c) if self.carried.as_ref() == Some(c));
@@ -572,7 +569,7 @@ impl<'a> Lowering<'a> {
                 self.past_a_card("as usize: a usize past a card");
             }
         } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I8 | IntTy::I16)) {
-            fail!("unsupported cast: {src}")
+            fail!(unsupported_cast(src))
         }
         self.store(&dst, src)
     }
