@@ -652,6 +652,10 @@ fn compile(
         return Err("no fn main in MIR".into());
     }
     let names: Vec<String> = fns.keys().cloned().collect();
+    // black_box and mem::swap, which rustc leaves as calls to intrinsics: a copy, and a read and two writes
+    for n in &names {
+        methods::inline_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
+    }
     // rustc's u8 + - and * wrap, before the passes write plain ops of their own
     for n in &names {
         let f = fns.get_mut(n).unwrap();

@@ -90,6 +90,13 @@ fn method(name: &str, ty: IntTy) -> Option<Method> {
     })
 }
 
+/// Whether the method `name` of the integer type `ty` is one this file writes where rustc calls it. At opt-level 1
+/// and s the driver keeps rustc's inliner off these (`driver/src/inline.rs`), so they are calls written here as
+/// before, and not what rustc would inline (for `signum` and a u8's `abs_diff`, something refused).
+pub fn written_here(name: &str, ty: IntTy) -> bool {
+    method(name, ty).is_some()
+}
+
 /// The method a call is to, and the integer type it is on, from the callee's path: `core::num::<impl i16>::abs`,
 /// `<u8 as Ord>::min`, `core::cmp::max::<usize>`, or `std::intrinsics::saturating_sub::<usize>`, which is what
 /// `saturating_sub` is at opt-level 2 (and `saturating_add` likewise).
@@ -608,6 +615,113 @@ fn inline(f: &mut Function, pairs: bool) {
         }
     }
     f.body.blocks.extend(gains.blocks);
+}
+
+/// `core::hint::black_box(x)` and `core::mem::swap(a, b)` on a scalar, as rustc leaves them, the intrinsics
+/// `black_box::<T>(x)` and `typed_swap_nonoverlapping::<T>(p, q)`: the first is `x` (it only hides the value
+/// from the optimizer), the second a read and two writes through the two pointers, or of the places themselves
+/// where a pointer is a `&raw mut x` of a local (or its field) made once and read only by the call (as for
+/// `swap(&mut a, &mut b)`), and that borrow goes. rustc prints the swap's path bare where the name is unique, so a function of the program's
+/// own of that name (`defined`) stays its own.
+pub fn inline_intrinsics(f: &mut Function, defined: impl Fn(&str) -> bool) {
+    let mut next_local = f
+        .params
+        .iter()
+        .map(|(l, _)| l.0)
+        .chain(f.body.decls.iter().map(|d| d.local.0))
+        .filter(|l| *l != Local::UNIT.0)
+        .max()
+        .map_or(0, |l| l + 1);
+    let all_blocks = f.body.blocks.clone();
+    let all_statements: Vec<Statement> = all_blocks.iter().flat_map(|b| b.statements.clone()).collect();
+    // what a pointer points to: the place it borrows, where that is all it is used for, else the pointer read through
+    let behind = |o: &Operand| -> Option<(Place, Option<Local>)> {
+        let (Operand::Copy(p) | Operand::Move(p)) = o else {
+            return None;
+        };
+        if let Some(l) = p.as_local() {
+            let mut defs = all_statements.iter().filter_map(|s| match s {
+                Statement::Assign(d, Rvalue::Ref(BorrowKind::RawMut, x)) if d.as_local() == Some(l) => Some(x),
+                _ => None,
+            });
+            if let (Some(x), None) = (defs.next(), defs.next()) {
+                // a local or its fields: no index or pointer in it that could change between the borrow and the call
+                let fixed = x.projection.iter().all(|p| matches!(p, Projection::Field(..)));
+                if fixed && super::ir::occurrences(&all_blocks, l) == 2 {
+                    return Some((x.clone(), Some(l)));
+                }
+            }
+        }
+        let mut at = p.clone();
+        at.projection.push(Projection::Deref);
+        Some((at, None))
+    };
+    let mut dropped: Vec<Local> = vec![];
+    for b in f.body.blocks.iter_mut() {
+        let Terminator::Call {
+            dest,
+            func,
+            args,
+            target: Some(back),
+            unwind: Unwind::Continue | Unwind::Unreachable,
+        } = &b.terminator
+        else {
+            continue;
+        };
+        let ty = match func.segments.last() {
+            Some(Segment::Name { args: Some(a), .. }) => match a.args.as_slice() {
+                [GenericArg::Ty(t @ (Ty::Int(_) | Ty::Bool))] => t.clone(),
+                _ => continue,
+            },
+            _ => continue,
+        };
+        // the path's names, the type argument aside
+        let names: Option<Vec<&str>> = func
+            .segments
+            .iter()
+            .map(|s| match s {
+                Segment::Name { name, .. } if func.qself.is_none() => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        let core = |module: &str, name: &str| match names.as_deref() {
+            Some([c, m, n]) => (*c == "core" || *c == "std") && *m == module && *n == name,
+            _ => false,
+        };
+        let swap = "typed_swap_nonoverlapping";
+        let back = *back;
+        if core("intrinsics", "black_box") || core("hint", "black_box") {
+            let [x] = args.as_slice() else { continue };
+            b.statements
+                .push(Statement::Assign(dest.clone(), Rvalue::Use(x.clone())));
+        } else if core("intrinsics", swap) || (names.as_deref() == Some(&[swap][..]) && !defined(swap)) {
+            let [p, q] = args.as_slice() else { continue };
+            let (Some((p, pl)), Some((q, ql))) = (behind(p), behind(q)) else {
+                continue;
+            };
+            dropped.extend(pl.into_iter().chain(ql));
+            let t = Local(next_local);
+            next_local += 1;
+            f.body.decls.push(Decl {
+                local: t,
+                mutable: true,
+                ty,
+            });
+            b.statements.extend([
+                Statement::Assign(Place::local(t), Rvalue::Use(Operand::Copy(p.clone()))),
+                Statement::Assign(p, Rvalue::Use(Operand::Copy(q.clone()))),
+                Statement::Assign(q, Rvalue::Use(Operand::Move(Place::local(t)))),
+            ]);
+        } else {
+            continue;
+        }
+        b.terminator = Terminator::Goto(back);
+    }
+    for b in f.body.blocks.iter_mut() {
+        b.statements.retain(
+            |s| !matches!(s, Statement::Assign(d, Rvalue::Ref(..)) if d.as_local().is_some_and(|l| dropped.contains(&l))),
+        );
+    }
 }
 
 /// Every `(a..b).contains(&x)` and `(a..=b).contains(&x)` in `f` becomes `a <= x`, then `x < b` (`x <= b`):

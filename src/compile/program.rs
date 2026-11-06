@@ -13,8 +13,9 @@
 //! as cargo resolves it (`cargo::build`): its opt-level, its overflow checks (bounds checks are always on), and the
 //! rest, as a native build of the same profile would. A single file has no Cargo.toml, so it takes rustc's own
 //! flags instead (`Rustc`). The opt-level also sets how hard the compiler's own passes work (`OptLevel::passes`).
-//! At opt-level 2 small helper functions are inlined in the MIR and cost nothing on CARDIAC (mark one
-//! #[inline(never)] to keep a single shared copy).
+//! Small helper functions are inlined in the MIR, by rustc's inliner, which the driver runs at opt-level 1 and s
+//! too (`driver/src/inline.rs`), and cost nothing on CARDIAC (mark one #[inline(never)] to keep a single shared
+//! copy).
 //!
 //! A program can use other crates. Each is compiled by rustc too, its MIR in its metadata
 //! (`-Zalways-encode-mir`), from which the driver converts it when it compiles a program that uses it
