@@ -434,21 +434,24 @@ let y = x.wrapping_mul(3); // a constant factor: adds
 "#
 
     RCE0013 Error "Recursion" {
-        recursion(path: impl Display) "recursion ({path}) needs a stack; this backend has none yet";
+        recursion(path: impl Display) "recursion ({path}) needs a stack, which only a function calling itself gets here";
     }
-    r#"A function that calls itself, directly or through others.
+    r#"Recursion the compiler can't give a stack: through more than one function, or of a function whose locals it can't push.
 
 Each function on CARDIAC has cells of its own for its locals, laid out once: there is no stack. A second call of a function before the first returns would write over the first's cells.
 
-A function that calls itself as the last thing it does compiles: the call becomes a loop. Any other recursion has to be written as a loop.
+A function that calls itself as the last thing it does compiles: the call becomes a loop. So do functions that call one another as the last thing each does (`is_even` and `is_odd`): they become one function. A function that calls itself anywhere else gets a stack of its own, in the memory the program leaves over: the locals it still reads after the call are pushed before it and popped after, and a call past the stack's end panics with `stack overflow`. That takes about 30 cells, and only where its locals and its result are numbers or bools with no reference among them. Recursion through two or more functions, other than at their ends, and recursion of a function that returns a struct or holds a reference, are refused: write them as a loop.
 
 ```rust
-// refused: the call isn't the last thing sum does (the + comes after it)
+// compiles, with a stack (deep inputs panic: stack overflow)
 fn sum(n: i16) -> i16 {
     if n == 0 { 0 } else { n + sum(n - 1) }
 }
-// compiles
-fn sum(mut n: i16) -> i16 {
+// refused: f calls g, and g calls f, other than at the end
+fn f(n: i16) -> i16 { if n == 0 { 0 } else { 1 + g(n - 1) } }
+fn g(n: i16) -> i16 { f(n) * 2 }
+// compiles, and needs no stack at all
+fn sum_loop(mut n: i16) -> i16 {
     let mut s = 0;
     while n > 0 {
         s += n;

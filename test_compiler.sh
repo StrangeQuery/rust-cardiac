@@ -125,7 +125,7 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
     *) echo "DIFFER xgeneric: $out"; exit 1;; esac
   # programs that must not compile: recursion (no stack), and one the borrow checker rejects
   out=$(./target/release/cargo-cardiac test $checked tests/programs/recursive.rs 2>&1)
-  case "$out" in *"recursion (main -> down -> down) needs a stack"*) echo "MATCH  recursive: rejected";;
+  case "$out" in *"recursion (main -> down -> up -> down) needs a stack"*) echo "MATCH  recursive: rejected";;
     *) echo "DIFFER recursive: $out"; exit 1;; esac
   out=$(./target/release/cargo-cardiac test $checked tests/programs/borrow_error.rs 2>&1)
   case "$out" in *E0499*) echo "MATCH  borrow_error: rejected by rustc (E0499)";;

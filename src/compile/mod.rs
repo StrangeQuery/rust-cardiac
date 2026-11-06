@@ -21,8 +21,10 @@ pub mod adaptors;
 pub mod arith;
 pub mod bits;
 pub mod blocks;
+pub mod call_stack;
 pub mod closures;
 pub mod copies;
+pub mod cycles;
 pub mod crates;
 pub mod enum_methods;
 pub mod enums;
@@ -86,6 +88,8 @@ pub struct Compiled {
     pub cut_points: Vec<phases::Cut>,
     /// the source's names for the locals, for the listing (`names`)
     pub names: names::Names,
+    /// the cells each call deeper takes on the stacks of the functions that call themselves (`call_stack`)
+    pub stack_cells: usize,
 }
 
 impl Compiled {
@@ -184,7 +188,9 @@ fn largest_phase(listing: &[Line]) -> Option<usize> {
     r.code.iter().map(|c| cells(&r.data) + cells(c)).max()
 }
 
-/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off.
+/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. A function
+/// that calls itself has a stack as deep as the memory left over holds: compiled with room for one call, then
+/// again with the rest of memory its stack's.
 fn compile_cut(
     mir: &ir::File,
     optimize: bool,
@@ -193,12 +199,39 @@ fn compile_cut(
     structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
 ) -> Result<Compiled, Fail> {
+    let shallow = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, 1)?;
+    let per_call = shallow.stack_cells as u64;
+    let Some(largest) = largest_phase(&shallow.listing).filter(|n| per_call > 0 && *n < MEMORY) else {
+        return Ok(shallow);
+    };
+    // (a deeper stack's bound is another constant, which may take a cell of its own)
+    let mut depth = 1 + (MEMORY - largest) as u64 / per_call;
+    while depth > 1 {
+        let deep = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, depth)?;
+        if largest_phase(&deep.listing).is_some_and(|n| n <= MEMORY) {
+            return Ok(deep);
+        }
+        depth -= 1;
+    }
+    Ok(shallow)
+}
+
+/// The compile, with stacks `depth` calls deep.
+fn compile_deep(
+    mir: &ir::File,
+    optimize: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    cuts: Option<&[phases::Cut]>,
+    depth: u64,
+) -> Result<Compiled, Fail> {
     // parameters passed straight on share the argument's cell (copies::forwarded), kept only when that is no bigger
-    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, structs, cuts)?;
+    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, structs, cuts, depth)?;
     if !forwards {
         return Ok(shared);
     }
-    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, structs, cuts)?.0;
+    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, structs, cuts, depth)?.0;
     Ok(if cells(&shared.listing) <= cells(&plain.listing) {
         shared
     } else {
@@ -644,6 +677,7 @@ fn compile_niched(
     enums: &[enums::EnumDef],
     structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
+    depth: u64,
 ) -> Result<(Compiled, bool), Fail> {
     let mut no_niche = HashSet::new();
     loop {
@@ -656,6 +690,7 @@ fn compile_niched(
             structs,
             &no_niche,
             cuts,
+            depth,
         ) {
             Ok(c) => c,
             // (with its guards, say, the program may not fit where it fits without them): again with no niche
@@ -683,6 +718,7 @@ fn compile(
     structs: &[structs::StructDef],
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
+    depth: u64,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
     let (file, mut fns, named, statics, objects, capturing) = front::front_end(file.clone(), debug_assertions, enums)?;
     let enums: &[enums::EnumDef] = &[enums, &objects].concat();
@@ -799,6 +835,8 @@ fn compile(
     for f in ["out", "inp", "overlay"] {
         fns.remove(f);
     }
+    // a function that calls itself, other than at its end, with a stack of its own
+    let stack_cells = call_stack::software_stacks(&mut fns, depth);
     let mut sigs: Ordered<String, Sig> = Ordered::new();
     let mut calls: Ordered<String, Vec<String>> = Ordered::new();
     let builtin: Vec<&str> = BUILTINS.iter().copied().chain(["assert_unchecked"]).collect();
@@ -1123,6 +1161,7 @@ fn compile(
             phase_starts: starts,
             cut_points,
             names: source_names,
+            stack_cells,
         },
         !alias.is_empty(),
         unproved,

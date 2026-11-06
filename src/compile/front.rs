@@ -152,6 +152,9 @@ pub fn front_end(mut file: File, debug_assertions: bool, enums: &[super::enums::
     cold_paths(&mut file);
     // `Cmp` and `Ordering`'s methods, written with its variants, which the C-like pass numbers
     super::ordering::three_way_compares(&mut file);
+    // a cycle of functions that call one another at their ends, one function; then a function's call of itself
+    // there, a loop
+    super::cycles::mutual_tail_calls(&mut file);
     tail_calls(&mut file);
     super::enums::c_like_enums(&mut file, enums)?;
     file.visit(&mut TupleStructConsts(enums, &super::enums::normalized(enums)));
@@ -613,27 +616,6 @@ fn tail_calls(file: &mut File) {
             .cloned()
             .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
             .collect();
-        // a block that only goes on, its way ending in the return
-        let returns = |start: super::ir::BasicBlock, blocks: &[Block]| {
-            let mut at = start;
-            for _ in 0..blocks.len() {
-                let Some(b) = blocks.iter().find(|b| b.name == at) else {
-                    return false;
-                };
-                let idle = b.statements.iter().all(|s| {
-                    matches!(
-                        s,
-                        Statement::StorageLive(_) | Statement::StorageDead(_) | Statement::Nop
-                    )
-                });
-                match (&b.terminator, idle) {
-                    (Terminator::Return, true) => return true,
-                    (Terminator::Goto(next), true) => at = *next,
-                    _ => return false,
-                }
-            }
-            false
-        };
         let mut next = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
         let mut decls = vec![];
         let blocks = f.body.blocks.clone();
@@ -656,7 +638,7 @@ fn tail_calls(file: &mut File) {
                 _ => Some(Ty::Other(String::new())),
             };
             let self_call = func.is_plain() && func.to_string() == name && args.len() == f.params.len();
-            if !self_call || dest.as_local() != Some(Local(0)) || !returns(*target, &blocks) {
+            if !self_call || dest.as_local() != Some(Local(0)) || !super::cycles::goes_to_return(*target, &blocks) {
                 continue;
             }
             if args.iter().any(|a| arg_ty(a).is_some_and(|t| pointer(&t))) {
