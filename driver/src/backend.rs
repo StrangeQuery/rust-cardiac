@@ -14,7 +14,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_span::def_id::DefId;
 
-use crate::{check, convert, facts};
+use crate::{check, convert, facts, instances};
 
 /// Compile `program`, the crate rustc has analysed, as `settings` ask; with `oracle`, check each crate's IR too.
 pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) {
@@ -39,14 +39,28 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         .into_iter()
         .map(|item| rustc_public::rustc_internal::internal(tcx, item.def_id()))
         .collect();
-    let Some((own, renamed)) = quietly(|| convert::items(tcx, &local, None)) else {
+    let Some(instances) = quietly(|| instances::find(tcx, &local)) else {
+        return Outcome::Failed(at(
+            "the CARDIAC driver couldn't find the program's generic functions' instances".into(),
+        ));
+    };
+    let Some((mut own, renamed)) = quietly(|| convert::items_reached(tcx, &local, None, &instances.called)) else {
         return Outcome::Failed(at("the CARDIAC driver couldn't build the IR from rustc's MIR".into()));
     };
     if let Some(to) = oracle {
         check::write_report(to, &check::report(tcx, &own, &renamed, &check::label(tcx)));
     }
-    let enums = facts::enums(tcx, &local);
-    let structs = facts::structs(tcx, &local);
+    // the instances after the program's items, which the oracle has checked against rustc's text
+    let Some(made) = quietly(|| convert::bodies(tcx, &instances.bodies)) else {
+        return Outcome::Failed(at(
+            "the CARDIAC driver couldn't build the IR of a generic function's instance".into(),
+        ));
+    };
+    own.items.extend(made.items);
+    instances.rename_calls(&mut own);
+    let bodies: Vec<&rustc_middle::mir::Body<'_>> = instances.bodies.iter().map(|(_, b)| *b).collect();
+    let enums = facts::enums(tcx, &local, &bodies);
+    let structs = facts::structs(tcx, &local, &bodies);
     if settings.mode == Mode::Test {
         // beside the program before anything else, so it is there when linking fails
         if let Err(e) = program::keep_mir(&program.source, &own) {
@@ -96,8 +110,8 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         }
         crates.push(Crate {
             name: dep.name.clone(),
-            enums: facts::enums(tcx, &defs),
-            structs: facts::structs(tcx, &defs),
+            enums: facts::enums(tcx, &defs, &[]),
+            structs: facts::structs(tcx, &defs, &[]),
             file,
         });
     }

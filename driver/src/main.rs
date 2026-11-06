@@ -40,6 +40,7 @@ mod check;
 mod convert;
 mod facts;
 mod inline;
+mod instances;
 mod trimmed;
 
 use cargo_cardiac::compile::program::CFG;

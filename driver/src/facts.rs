@@ -4,6 +4,7 @@
 use cargo_cardiac::compile::enums::{EnumDef, Variant};
 use cargo_cardiac::compile::ir;
 use cargo_cardiac::compile::structs::StructDef;
+use rustc_middle::mir as mmir;
 use rustc_middle::ty::print::NoTrimmedGuard;
 use rustc_middle::ty::{self as mty, TyCtxt, TypeVisitableExt};
 use rustc_public::rustc_internal::{internal, stable};
@@ -16,8 +17,8 @@ use rustc_span::def_id::DefId;
 /// with its type arguments (`Option<i16>`): one of that crate by its path within the crate (`["paint", "Colour"]`),
 /// another crate's by its whole path (`["core", "option", "Option"]`). nightly-2026-05-22's rustc_public lists no
 /// crate's types.
-pub fn enums(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<EnumDef> {
-    let adts = adts(tcx, defs);
+pub fn enums<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'tcx>]) -> Vec<EnumDef> {
+    let adts = adts(tcx, defs, instances);
     let Some(&krate) = defs.first().map(|d| &d.krate) else {
         return vec![];
     };
@@ -78,9 +79,9 @@ pub fn enums(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<EnumDef> {
 
 /// The structs that the bodies' locals of `defs` have, each by its name and whether it has no fields: a unit struct
 /// (`struct Flag;`) needs no cells, which the MIR doesn't show where nothing builds one.
-pub fn structs(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<StructDef> {
+pub fn structs<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'tcx>]) -> Vec<StructDef> {
     let mut structs: Vec<StructDef> = vec![];
-    for (adt, _) in adts(tcx, defs).iter().filter(|(a, _)| a.kind().is_struct()) {
+    for (adt, _) in adts(tcx, defs, instances).iter().filter(|(a, _)| a.kind().is_struct()) {
         let s = StructDef {
             name: adt.name().rsplit("::").next().unwrap_or_default().to_string(),
             unit: adt.variants_iter().all(|v| v.fields().is_empty()),
@@ -92,14 +93,16 @@ pub fn structs(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<StructDef> {
     structs
 }
 
-/// The ADTs the bodies' locals of `defs` have, each with its type arguments.
-fn adts(tcx: TyCtxt<'_>, defs: &[DefId]) -> Vec<(AdtDef, GenericArgs)> {
+/// The ADTs the bodies' locals of `defs`, and of a generic function's `instances`, have, each with its type
+/// arguments.
+fn adts<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'tcx>]) -> Vec<(AdtDef, GenericArgs)> {
     let mut adts: Vec<(AdtDef, GenericArgs)> = vec![];
-    for &def in defs {
-        if tcx.trivial_const(def).is_some() {
-            continue;
-        }
-        let body: rustc_public::mir::Body = stable(tcx.instance_mir(mty::InstanceKind::Item(def)));
+    let items = defs
+        .iter()
+        .filter(|&&def| tcx.trivial_const(def).is_none())
+        .map(|&def| tcx.instance_mir(mty::InstanceKind::Item(def)));
+    for body in items.chain(instances.iter().copied()) {
+        let body: rustc_public::mir::Body = stable(body);
         for l in body.locals() {
             adts_in(l.ty, &mut adts);
         }
