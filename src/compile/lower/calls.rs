@@ -177,10 +177,10 @@ impl<'a> Lowering<'a> {
             unwind,
         } = t
         else {
-            fail!("unsupported terminator: {line}")
+            fail!(unsupported_terminator(line))
         };
         if !plain_unwind(unwind) || !is_lowerable(func) {
-            fail!("unsupported terminator: {line}")
+            fail!(unsupported_terminator(line))
         }
         let callee = func.to_string();
         let back = self.label(*ret);
@@ -191,7 +191,10 @@ impl<'a> Lowering<'a> {
                 let o = self.operand(x)?;
                 ops.push(self.mat(o));
             }
-            let n = ops.get(1).cloned().ok_or_else(|| format!("unsupported call: {line}"))?;
+            let n = ops
+                .get(1)
+                .cloned()
+                .ok_or_else(|| crate::codes::unsupported_call(line))?;
             self.load(&ops[0])?;
             let x = self.arith(&n)?;
             self.emit_c(Op::Add, x, &format!("ptr.{}(...)", func.name()));
@@ -232,7 +235,7 @@ impl<'a> Lowering<'a> {
             // digit k of v: SFT (k+1)3, built for k and run; the shift first, so v (a table read, say) can come
             // straight into the accumulator after it
             let Some(ks) = args.get(1) else {
-                fail!("unsupported place undefined")
+                fail!(unsupported_place("undefined"))
             };
             let k = self.operand(ks)?;
             if let Some(kc @ 0..=2) = k.k() {
@@ -264,11 +267,11 @@ impl<'a> Lowering<'a> {
         if func.is_path(&["skip_cards"]) {
             // n cards read and dropped: a few in place, else the shared row of INP 00, entered by a TAC it builds
             let [n] = args.as_slice() else {
-                fail!("skip_cards() takes the number of cards: skip_cards(n)")
+                fail!(skip_cards_arguments())
             };
             let n = self.operand(n)?;
             match n.k() {
-                Some(k) if !(0..=999).contains(&k) => fail!("skip_cards({k}): n is 0 to 999"),
+                Some(k) if !(0..=999).contains(&k) => fail!(skip_cards_range(k)),
                 Some(k @ 0..=3) => {
                     for i in 0..k {
                         let note = if i == 0 {
@@ -293,11 +296,11 @@ impl<'a> Lowering<'a> {
         if func.is_path(&["add_times"]) {
             // n c by n additions: for a constant n, c * n in place (adds and a shift); else the shared row of ADD c
             let [c, n] = args.as_slice() else {
-                fail!("add_times() takes the value and how many times: add_times(c, n)")
+                fail!(add_times_arguments())
             };
             let (c, n) = (self.operand(c)?, self.operand(n)?);
             match n.k() {
-                Some(k) if !(0..=99).contains(&k) => fail!("add_times(c, {k}): n is 0 to 99"),
+                Some(k) if !(0..=99).contains(&k) => fail!(add_times_range(k)),
                 Some(_) => {
                     let c = self.mat(c);
                     self.arith_acc(ir::BinOp::Mul, c, n, None, "add_times(c, n)")?;
@@ -319,26 +322,24 @@ impl<'a> Lowering<'a> {
         if is_load_resource(func) {
             // a resource: cells the loader fills, so no code
             let [ir::Operand::Constant(ir::Const::Str(name))] = args.as_slice() else {
-                fail!("load_resource() takes the resource's name as a string literal: load_resource(\"key\")")
+                fail!(resource_not_literal())
             };
             if !is_word(name) {
-                fail!("resource {name:?}: a resource's name is letters, digits and _, the name of a file in resources/")
+                fail!(resource_bad_name(format!("{name:?}")))
             }
             if self.sh.resources.contains(name) {
-                fail!("resource {name} is loaded twice: load it once and pass the array on")
+                fail!(resource_twice(name))
             }
             // the loader fills a slot once, and natively each call reads the file afresh: they agree only when the
             // call runs once, so it is in main and on no loop (the program may write to the array after)
             if self.func != "main" {
-                fail!("load_resource(\"{name}\") is only allowed in main, where it runs once: load it there and pass the array on")
+                fail!(resource_outside_main(name))
             }
             if self.in_loop {
-                fail!("load_resource(\"{name}\") is in a loop: the loader fills it once, so load it before the loop")
+                fail!(resource_in_loop(name))
             }
             let Some(l) = dest.as_local() else {
-                fail!(
-                    "load_resource(\"{name}\") must be bound with let: `let t: [i16; N] = load_resource(\"{name}\");`"
-                )
+                fail!(resource_unbound(name))
             };
             let c = self.cell(l, None);
             self.sh.resources.push(name.clone());
@@ -355,11 +356,11 @@ impl<'a> Lowering<'a> {
             // convention (the bug on 00 is done); the operator loads it and starts the loader at 00, which reads
             // the next phase's code over this one
             if self.func != "main" {
-                fail!("overlay() is only allowed in main")
+                fail!(overlay_outside_main())
             }
             let tape = self.sh.phase_starts.len() + 2;
             if tape > 98 {
-                fail!("more phases than the bug can name (tapes 1 to 98)")
+                fail!(too_many_phases())
             }
             self.emit_c(
                 Op::Hrs,
@@ -372,10 +373,9 @@ impl<'a> Lowering<'a> {
         }
         if func.is_path(&["out"]) {
             if args.len() != 1 {
-                fail!(
-                    "unsupported place {}",
+                fail!(unsupported_place(
                     args.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ")
-                )
+                ))
             }
             let o = self.operand(&args[0])?;
             if let Value::Computed(d) = &o {
@@ -393,10 +393,10 @@ impl<'a> Lowering<'a> {
             return Ok(());
         }
         if !is_word(&callee) {
-            fail!("unsupported call to {callee}")
+            fail!(unsupported_call(callee))
         }
         let Some(sig) = self.callees.sigs.get(&callee) else {
-            fail!("call to unknown function {callee}")
+            fail!(unknown_function(callee))
         };
         let returns = sig.ret != Ty::Unit;
         self.pass_args(&callee, args, &line)?;
@@ -432,16 +432,16 @@ impl<'a> Lowering<'a> {
     /// A call's arguments, each into its parameter's cell (`line` is the call, for the first one's comment).
     fn pass_args(&mut self, callee: &str, args: &[ir::Operand], line: &str) -> Result<(), Fail> {
         let Some(sig) = self.callees.sigs.get(callee) else {
-            fail!("call to unknown function {callee}")
+            fail!(unknown_function(callee))
         };
         let params = sig.params.clone();
         let widths = sig.widths.clone();
         if args.len() != params.len() {
-            fail!(
+            fail!(internal(format!(
                 "call to {callee} with {} arguments, expected {}",
                 args.len(),
                 params.len()
-            )
+            )))
         }
         for (i, a) in args.iter().enumerate() {
             let o = self.operand(a)?;
@@ -458,7 +458,7 @@ impl<'a> Lowering<'a> {
                     offset: None,
                 }) = o
                 else {
-                    fail!("call to {callee}: an array passed by value must be a local array; pass it by reference, `&[T; N]`")
+                    fail!(array_by_value(callee))
                 };
                 for k in 0..widths[i] as u32 {
                     self.emit_c(Op::Cla, Cell::element(&from, k), if k == 0 { &c } else { "" });

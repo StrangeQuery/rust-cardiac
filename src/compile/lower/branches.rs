@@ -101,7 +101,7 @@ impl<'a> Lowering<'a> {
                 }
                 self.unsigned_switch = false;
                 let Some(other) = otherwise else {
-                    fail!("switchInt without otherwise: {t}")
+                    fail!(internal(format!("switchInt without otherwise: {t}")))
                 };
                 let l = self.label(*other);
                 self.emit(Op::Jmp, l);
@@ -144,7 +144,7 @@ impl<'a> Lowering<'a> {
                 }
                 let cond = match cond_place {
                     Some(p) => self.place(p)?,
-                    None => fail!("unsupported place {cond_text}"),
+                    None => fail!(unsupported_place(cond_text)),
                 };
                 let fail = self.use_panic();
                 // success when cond is false (if negated) or true; anything else panics

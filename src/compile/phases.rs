@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use super::ir;
 use super::machine::{Arg, Kind, Line, Op};
 use super::Fail;
+use crate::codes;
 
 /// Does the block end a phase, with a call to overlay()?
 fn is_overlay(b: &ir::Block) -> bool {
@@ -177,7 +178,7 @@ pub fn order_phases(blocks: &mut Vec<ir::Block>) -> Result<(), Fail> {
         let mut seen: HashSet<usize> = HashSet::new();
         let mut todo = vec![*at
             .get(&entry)
-            .ok_or_else(|| format!("phase {phase} starts at {entry}, which is not a block"))?];
+            .ok_or_else(|| codes::internal(format!("phase {phase} starts at {entry}, which is not a block")))?];
         while let Some(i) = todo.pop() {
             if !seen.insert(i) || is_overlay(&blocks[i]) {
                 continue;
@@ -195,7 +196,7 @@ pub fn order_phases(blocks: &mut Vec<ir::Block>) -> Result<(), Fail> {
         mine.sort_by_key(|&i| (i != start, i));
         let ends: Vec<usize> = mine.iter().copied().filter(|&i| is_overlay(&blocks[i])).collect();
         if ends.len() > 1 {
-            return Err(format!("phase {phase} ends at more than one overlay()"));
+            return Err(codes::phase_two_overlays(phase));
         }
         // this phase's name for each block: its own, or a fresh one if an earlier phase has it already
         let mut name: HashMap<ir::BasicBlock, ir::BasicBlock> = HashMap::new();
@@ -231,9 +232,7 @@ pub fn order_phases(blocks: &mut Vec<ir::Block>) -> Result<(), Fail> {
         }
         let Some(&e) = ends.first() else { break };
         if !done.insert(e) {
-            return Err(format!(
-                "phase {phase} ends at an overlay() that an earlier phase ended at: overlay() in a loop"
-            ));
+            return Err(codes::overlay_in_loop(phase));
         }
         ended = Some(first + mine.len() - 1);
         entry = blocks[e]
@@ -241,7 +240,7 @@ pub fn order_phases(blocks: &mut Vec<ir::Block>) -> Result<(), Fail> {
             .successors()
             .into_iter()
             .next()
-            .ok_or_else(|| format!("phase {phase}'s overlay() goes nowhere"))?;
+            .ok_or_else(|| codes::internal(format!("phase {phase}'s overlay() goes nowhere")))?;
     }
     *blocks = out;
     Ok(())
@@ -403,11 +402,7 @@ pub fn split_phases(listing: &[Line]) -> Result<Phases, Fail> {
                 continue;
             }
             if !need.is_empty() {
-                return Err(format!(
-                    "phase {} jumps to {}, in another phase",
-                    i + 1,
-                    need.join(", ")
-                ));
+                return Err(codes::phase_jumps(i + 1, need.join(", ")));
             }
             break;
         }

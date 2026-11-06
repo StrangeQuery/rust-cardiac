@@ -27,6 +27,7 @@ use super::ir::{
 use super::structs::{Field, Function};
 use super::util::Ordered;
 use super::Fail;
+use crate::codes;
 
 /// An enum as the driver wrote it down: its module path and name (`["paint", "Colour"]`, or another crate's,
 /// `["core", "option", "Option"]`), its type arguments (`i16` for `Option<i16>`), and its variants.
@@ -173,10 +174,7 @@ pub fn c_like_enums(file: &mut File, defs: &[EnumDef]) -> Result<(), Fail> {
         let mut each = HashMap::new();
         for v in &def.variants {
             if !(-999..=999).contains(&v.value) {
-                return Err(format!(
-                    "enum {shown}: {} is {}, past what a card holds (-999 to 999)",
-                    v.name, v.value
-                ));
+                return Err(codes::enum_past_card(&shown, &v.name, v.value));
             }
             each.insert(v.name.clone(), v.value);
         }
@@ -566,22 +564,14 @@ impl Enums<'_> {
         let mut variants = HashMap::new();
         for v in &def.variants {
             if !(-999..=999).contains(&v.value) {
-                return Err(format!(
-                    "enum {shown}: {} is {}, past what a card holds (-999 to 999)",
-                    v.name, v.value
-                ));
+                return Err(codes::enum_past_card(&shown, &v.name, v.value));
             }
             let mut taken: Vec<u32> = vec![];
             let mut at = vec![];
             for (k, t) in v.fields.iter().enumerate() {
-                let kind = self.kind(t).map_err(|e| {
-                    e.unwrap_or_else(|| {
-                        format!(
-                            "enum {shown}: field {k} of {} is {t}: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now",
-                            v.name
-                        )
-                    })
-                })?;
+                let kind = self
+                    .kind(t)
+                    .map_err(|e| e.unwrap_or_else(|| codes::enum_field_type(&shown, k, &v.name, t)))?;
                 let cells: Vec<Field> = match &kind {
                     Kind::Cell(t) => vec![Field {
                         name: format!("{}_{k}", v.name),
@@ -1032,21 +1022,15 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
                     {
                         Ok(set_tag(to, at, l, *value))
                     }
-                    _ => Err(format!(
-                        "{fname}: {line}: a constant of an enum with data is not supported yet"
-                    )),
+                    _ => Err(codes::enum_constant(fname, line)),
                 },
                 Operand::Copy(p) | Operand::Move(p) => match resolve(p)? {
                     Resolved::Whole(from, from_at, fl) if fl == l => {
                         Ok(copy_all((to, at), (&from, from_at), l, matches!(o, Operand::Move(_))))
                     }
-                    _ => Err(format!(
-                        "{fname}: {line}: an enum with data used this way is not supported yet"
-                    )),
+                    _ => Err(codes::enum_use(fname, line)),
                 },
-                _ => Err(format!(
-                    "{fname}: {line}: a constant of an enum with data is not supported yet"
-                )),
+                _ => Err(codes::enum_constant(fname, line)),
             }
         };
     // a value written into a whole enum: a variant built, a constant variant, or another enum's cells
@@ -1056,7 +1040,7 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
             match rv {
                 Rvalue::Variant(p, ops) => {
                     let Some((vl, (value, at_k))) = enums.variant(p).filter(|(vl, _)| *vl == l) else {
-                        return Err(format!("{fname}: {line}: a variant of another enum"));
+                        return Err(codes::enum_other_variant(fname, line));
                     };
                     out.extend(set_tag(to, at, vl, *value));
                     for (o, (start, kind)) in ops.iter().zip(at_k) {
@@ -1075,11 +1059,7 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
                     }
                 }
                 Rvalue::Use(o) => out.extend(write_op(to, at, l, o, line)?),
-                _ => {
-                    return Err(format!(
-                        "{fname}: {line}: an enum with data used this way is not supported yet"
-                    ))
-                }
+                _ => return Err(codes::enum_use(fname, line)),
             }
             Ok(out)
         };
@@ -1153,10 +1133,7 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
             }
             if let Resolved::Whole(w, at, _) = resolve(dest)? {
                 if at != 0 || !w.projection.is_empty() {
-                    return Err(format!(
-                        "{fname}: {}: an enum with data returned into this place is not supported yet",
-                        b.terminator
-                    ));
+                    return Err(codes::enum_returned(fname, &b.terminator));
                 }
             }
         }
@@ -1170,7 +1147,7 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
         Ok(Resolved::Whole(w, at, _))
             if at != 0 || w.projection.iter().any(|x| matches!(x, Projection::Downcast(_))) =>
         {
-            bad.get_or_insert_with(|| p.to_string());
+            bad.get_or_insert_with(|| codes::enum_use(fname, &*p));
         }
         Err(e) => {
             bad.get_or_insert(e);
@@ -1183,10 +1160,8 @@ fn rewrite(fname: &str, f: &mut Function, enums: &Enums) -> Result<(), Fail> {
         }
         b.terminator.places_mut(&mut cells);
     }
-    if let Some(p) = bad {
-        return Err(format!(
-            "{fname}: {p}: an enum with data used this way is not supported yet"
-        ));
+    if let Some(e) = bad {
+        return Err(e);
     }
     // each guard's mark cuts its block: the assert, and the rest of the block after it
     let mut nb = 700000;
@@ -1600,9 +1575,7 @@ fn resolve(p: &Place, types: &HashMap<Local, Ty>, enums: &Enums) -> Result<Resol
                 return Ok(Resolved::Plain);
             }
             let (Projection::Downcast(v), Some(Projection::Field(k, ft))) = (x, p.projection.get(i + 1)) else {
-                return Err(format!(
-                    "{p}: a projection of an enum with data that isn't a variant's field"
-                ));
+                return Err(codes::enum_projection(p));
             };
             let Some((start, kind)) = enums
                 .layout(*l)
@@ -1610,7 +1583,7 @@ fn resolve(p: &Place, types: &HashMap<Local, Ty>, enums: &Enums) -> Result<Resol
                 .get(v)
                 .and_then(|(_, at_k)| at_k.get(*k as usize))
             else {
-                return Err(format!("{p}: no such variant or field"));
+                return Err(codes::enum_no_variant(p));
             };
             match kind {
                 Kind::Cell(kt) => {
@@ -1626,9 +1599,9 @@ fn resolve(p: &Place, types: &HashMap<Local, Ty>, enums: &Enums) -> Result<Resol
                     return Ok(Resolved::Cell(c));
                 }
                 Kind::Enum(j) => within = Some((w.clone(), at + start, *j)),
-                Kind::Never => return Err(format!("{p}: a field of a type with no values")),
+                Kind::Never => return Err(codes::field_never(p)),
                 // (rustc writes `const ()` where a `()` is used, so the MIR has no reason to read one)
-                Kind::Unit => return Err(format!("{p}: a field of type ()")),
+                Kind::Unit => return Err(codes::field_unit(p)),
             }
             i += 2;
             continue;

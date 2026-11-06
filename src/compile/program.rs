@@ -29,6 +29,7 @@ use super::ir::visit_mut::{walk_body, walk_path, walk_rvalue, walk_statement, wa
 use super::structs::StructDef;
 use super::{cells, compile_mir, split_phases};
 use super::{ir, machine};
+use crate::codes::{self, Diag};
 
 /// The cfg rustc is given when it compiles for CARDIAC (`#[cfg(cardiac)]` in a crate's source).
 pub const CFG: &str = "cardiac";
@@ -84,14 +85,11 @@ impl OptLevel {
 
 /// A compile error, with a note when the opt-level is 0: there rustc's MIR is unoptimized and the compiler's
 /// passes are off, which few programs survive (an iterator's `next` is a call, and a program rarely fits).
-pub fn hint(e: String, opt_level: OptLevel) -> String {
+pub fn hint(e: Diag, opt_level: OptLevel) -> Diag {
     if opt_level != OptLevel::No {
         return e;
     }
-    format!(
-        "{e}\nnote: this is opt-level 0, where rustc's MIR is unoptimized and cargo-cardiac's passes are off; most \
-         programs need opt-level 1 or more (`opt-level` in the Cargo profile, or -C opt-level=N for a single file)"
-    )
+    e.with_note(codes::opt_level_zero())
 }
 
 /// rustc's flags for a single file, which has no Cargo profile: `-C opt-level`, `-C overflow-checks` and `-C
@@ -179,8 +177,8 @@ impl Mir {
         debug_assertions: bool,
         enums: Vec<EnumDef>,
         structs: Vec<StructDef>,
-    ) -> Result<Mir, String> {
-        let linked = link(&program, crates).map_err(|e| format!("{file}: {e}"))?;
+    ) -> Result<Mir, Diag> {
+        let linked = link(&program, crates).map_err(|e| e.at(file))?;
         // a crate's enums are named in the program's MIR with the crate's name first (`kit::Colour`); another
         // crate's enum it uses has its whole path already, and is written down once
         let mut enums = enums;
@@ -219,7 +217,7 @@ const ADAPTERS: [&str; 8] = ["Map", "Filter", "Zip", "Enumerate", "StepBy", "Cha
 
 /// A compile error, said in Rust's terms when the MIR shows a construct CARDIAC has no room for: the compiler's own
 /// message names a MIR line or type, which means little to someone who wrote `println!`.
-fn explain(mir: &ir::File, e: String) -> String {
+fn explain(mir: &ir::File, e: Diag) -> Diag {
     let uses = Uses::of(mir);
     let print = uses.path(&["io", "_print"]) || uses.path(&["io", "_eprint"]);
     let format =
@@ -231,44 +229,30 @@ fn explain(mir: &ir::File, e: String) -> String {
     // an array reference made a slice reference
     let slice = uses.unsize;
     let object = uses.object;
-    let plain = [
-        (
-            print,
-            "println! and print! aren't supported on CARDIAC, which prints only numbers: use out()",
-        ),
-        (
-            format,
-            "format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out()",
-        ),
-        (
-            uses.path(&["string", "String"]),
-            "String isn't supported on CARDIAC, which has no text and no heap",
-        ),
-        (
-            uses.path(&["vec", "Vec"]),
-            "Vec isn't supported on CARDIAC, which has no heap: use a fixed-size array",
-        ),
-        (
-            iterator,
-            "iterators other than ranges aren't supported: index the array in a `for i in 0..N` loop",
-        ),
-        (
-            object,
-            "this use of a trait object isn't supported: a `&dyn Trait` works where it is made of a reference to one of \
-             the program's structs, and a method called through it is one each struct's impl defines",
-        ),
-        (
-            slice,
-            "slices aren't supported: pass an array by reference, `&[i16; N]`",
-        ),
+    let plain: [(bool, fn(String) -> Diag); 7] = [
+        (print, codes::println),
+        (format, codes::format),
+        (uses.path(&["string", "String"]), codes::string),
+        (uses.path(&["vec", "Vec"]), codes::vec),
+        (iterator, codes::iterator),
+        (object, codes::trait_object),
+        (slice, codes::slice),
     ];
     // only for what the compiler does not model: an error with a cause of its own (a constant past what a card
     // holds) is said as it is, whatever else the program uses
-    let unmodelled = ["unsupported", "unknown", "non-array", "internal"]
-        .iter()
-        .any(|w| e.contains(w));
+    let unmodelled = [
+        &codes::RCE0001,
+        &codes::RCE0002,
+        &codes::RCE0003,
+        &codes::RCE0004,
+        &codes::RCE0005,
+        &codes::RCE0006,
+        &codes::RCE0007,
+    ]
+    .iter()
+    .any(|c| e.is(c));
     match plain.iter().find(|(found, _)| *found).filter(|_| unmodelled) {
-        Some((_, m)) => format!("{m} ({e})"),
+        Some((_, said)) => said(e.message),
         None => e,
     }
 }
@@ -490,8 +474,8 @@ pub struct Built {
     /// its panic map, where its checks are, for saying why a run panicked (beside the deck, NAME.map)
     pub map_file: String,
     pub empty: Vec<String>,
-    /// what the programmer might change, as notes (`Compiled::advice`)
-    pub advice: Vec<String>,
+    /// what the programmer might change, as notes and warnings (`Compiled::advice`)
+    pub advice: Vec<Diag>,
 }
 
 impl Built {
@@ -523,7 +507,8 @@ impl Built {
             .collect();
         serde_json::json!({"file": self.file, "data": self.data, "code": self.code, "functions": code,
             "variables": self.sections.variables, "constants": self.sections.constants, "deck": self.deck_file,
-            "map": self.map_file, "empty": self.empty, "advice": self.advice})
+            "map": self.map_file, "empty": self.empty,
+            "advice": self.advice.iter().map(Diag::json).collect::<Vec<_>>()})
     }
 
     pub fn from_json(v: &serde_json::Value) -> Option<Built> {
@@ -552,7 +537,7 @@ impl Built {
             advice: v["advice"]
                 .as_array()?
                 .iter()
-                .map(|e| e.as_str().map(str::to_string))
+                .map(Diag::from_json)
                 .collect::<Option<_>>()?,
         })
     }
@@ -592,9 +577,9 @@ fn dir_of(path: &Path) -> &Path {
 /// `file` is the source as it is shown (relative to where `cargo cardiac` runs); `source` is where it is from
 /// here. The deck's resource slots are filled from the files in `resources` that are there; `Built::empty` names
 /// the others.
-pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path, emit: &Emit) -> Result<Built, String> {
+pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path, emit: &Emit) -> Result<Built, Diag> {
     let linked = &mir.linked;
-    let compile = || -> Result<_, String> {
+    let compile = || -> Result<_, Diag> {
         let compiled = compile_mir(
             linked,
             mir.opt_level.passes(),
@@ -603,8 +588,8 @@ pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path,
             &mir.structs,
             mir.auto_overlay,
         )
-        .map_err(|e| hint(format!("{file}: {}", explain(linked, e)), mir.opt_level))?;
-        let r = split_phases(&compiled.listing).map_err(|e| format!("{file}: {e}"))?;
+        .map_err(|e| hint(explain(linked, e).at(file), mir.opt_level))?;
+        let r = split_phases(&compiled.listing).map_err(|e| e.at(file))?;
         Ok((compiled, r))
     };
     let (mut compiled, mut r) = compile()?;
@@ -633,7 +618,7 @@ pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path,
     let base = dir.join(name).display().to_string();
     let shown = dir_of(Path::new(file)).join(name).display().to_string();
     let shown = shown.strip_prefix("./").unwrap_or(&shown).to_string();
-    let write = |p: &str, t: String| std::fs::write(p, t).map_err(|e| format!("{p}: {e}"));
+    let write = |p: &str, t: String| std::fs::write(p, t).map_err(|e| Diag::tool(format!("{p}: {e}")));
     if !emit.asm {
     } else if r.code.len() == 1 {
         write(
@@ -647,23 +632,29 @@ pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path,
         }
     }
     if let Some(n) = r.code.iter().map(|c| dcells + cells(c)).find(|&n| n > 96) {
-        let e = format!("{file}: {n} cells, more than CARDIAC's memory holds (96, cells 03 to 98)");
+        // what makes it big, when the build has a warning of that
+        let mut e = codes::too_big(n).at(file);
+        for w in compiled.advice.iter().filter(|d| d.kind() == codes::Kind::Warning) {
+            e = e.with_note(w.clone().at(file));
+        }
         return Err(hint(e, mir.opt_level));
     }
-    let mut tape = crate::tape::of(&r).map_err(|e| format!("{file}: {e}"))?;
-    let empty = tape.bind_dir(resources).map_err(|e| format!("{file}: {e}"))?;
+    let mut tape = crate::tape::of(&r).map_err(|e| e.at(file))?;
+    let empty = tape
+        .bind_dir(resources)
+        .map_err(|e| Diag::tool(format!("{file}: {e}")))?;
     if emit.deck {
         // a deck for each phase, NAME.cqb, NAME.2.cqb, ..., and the slots in NAME.cqb.meta
-        tape.save(Path::new(&format!("{base}.cqb")))?;
+        tape.save(Path::new(&format!("{base}.cqb"))).map_err(Diag::tool)?;
     }
     if emit.listing {
-        let listings = crate::tape::listings(&r).map_err(|e| format!("{file}: {e}"))?;
+        let listings = crate::tape::listings(&r).map_err(|e| e.at(file))?;
         for (i, l) in listings.into_iter().enumerate() {
             let p = crate::tape::Tape::phase_path(Path::new(&format!("{base}.cq")), i + 1);
             write(&p.display().to_string(), l)?;
         }
     }
-    let map = crate::panics::map_of(&r).map_err(|e| format!("{file}: {e}"))?;
+    let map = crate::panics::map_of(&r).map_err(|e| e.at(file))?;
     if emit.map {
         write(
             &format!("{base}.map"),
@@ -742,7 +733,7 @@ pub fn keep_mir(source: &Path, file: &ir::File) -> Result<(), String> {
 
 /// Compile a test program as the compiler's tests do: one program, started at main_bb0. Writes FILE.asm next to
 /// it (`source`; `file` as it is shown) and returns the assembly.
-pub fn compile_test(file: &str, source: &Path, mir: &Mir) -> Result<String, String> {
+pub fn compile_test(file: &str, source: &Path, mir: &Mir) -> Result<String, Diag> {
     let asm = compile_mir(
         &mir.linked,
         mir.opt_level.passes(),
@@ -751,21 +742,22 @@ pub fn compile_test(file: &str, source: &Path, mir: &Mir) -> Result<String, Stri
         &mir.structs,
         mir.auto_overlay,
     )
-    .map_err(|e| hint(format!("{file}: {}", explain(&mir.linked, e)), mir.opt_level))?
+    .map_err(|e| hint(explain(&mir.linked, e).at(file), mir.opt_level))?
     .text();
     let out = source.with_extension("asm");
-    std::fs::write(&out, &asm).map_err(|e| format!("{}: {e}", out.display()))?;
+    std::fs::write(&out, &asm).map_err(|e| Diag::tool(format!("{}: {e}", out.display())))?;
     Ok(asm)
 }
 
 /// Run a test program's assembly from main_bb0 and return the cards it punched, as `cargo cardiac test` prints
 /// them. A program with overlay() calls runs as its tape would: split into phases, one tape each, the first carrying
 /// the data.
-pub fn run_test(file: &str, asm_text: &str, input: &[i32]) -> Result<String, String> {
-    let at = |e: String| format!("{file}: {e}");
+pub fn run_test(file: &str, asm_text: &str, input: &[i32]) -> Result<String, Diag> {
+    let at = |e: Diag| e.at(file);
     let mut tapes = vec![];
     if asm_text.contains(";@@PHASE") {
-        let r = split_phases(&machine::parse(asm_text).map_err(at)?).map_err(at)?;
+        let lines = machine::parse(asm_text).map_err(|e| codes::internal(e).at(file))?;
+        let r = split_phases(&lines).map_err(at)?;
         let data = r.data_text();
         let data_end = crate::asm::assemble(3, &data).map_err(at)?.end;
         for i in 0..r.code.len() {

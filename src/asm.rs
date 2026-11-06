@@ -7,6 +7,8 @@
 //! then Brian Stuart's start pair, 002 8xx, which puts a jump to the start in the loader's cell 02.
 use std::collections::HashMap;
 
+use crate::codes::{self, Diag};
+
 pub struct Program {
     pub cells: Vec<(i32, i32)>,
     pub labels: HashMap<String, i32>,
@@ -46,7 +48,7 @@ fn number(t: &str) -> Option<i32> {
         .or_else(|| t.strip_prefix('+').and_then(|u| u.parse().ok()))
 }
 
-pub fn assemble(origin: i32, src: &str) -> Result<Program, String> {
+pub fn assemble(origin: i32, src: &str) -> Result<Program, Diag> {
     let mut labels = HashMap::new();
     let mut items: Vec<(i32, String)> = vec![];
     let mut at = origin;
@@ -71,20 +73,20 @@ pub fn assemble(origin: i32, src: &str) -> Result<Program, String> {
             at += 1;
         }
     }
-    let arg = |t: &str| -> Result<i32, String> {
+    let arg = |t: &str| -> Result<i32, Diag> {
         if let Some(p) = t.find('+') {
             let (l, n) = (&t[..p], &t[p + 1..]);
             if is_word(l) && !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) {
                 return labels
                     .get(l)
                     .map(|v| v + n.parse::<i32>().unwrap())
-                    .ok_or(format!("unknown label {t}"));
+                    .ok_or_else(|| codes::internal(format!("unknown label {t}")));
             }
         }
         if let Some(v) = labels.get(t) {
             return Ok(*v);
         }
-        number(t).ok_or(format!("unknown label {t}"))
+        number(t).ok_or_else(|| codes::internal(format!("unknown label {t}")))
     };
     let mut cells = vec![];
     for (a, body) in &items {
@@ -95,16 +97,16 @@ pub fn assemble(origin: i32, src: &str) -> Result<Program, String> {
             // a cell holds -999..999: a constant past that is refused before here, and this says so if one isn't
             "DAT" => match arg(x)? {
                 v @ -999..=999 => v,
-                _ => return Err(format!("constant out of range: DAT {x} is past what a card holds")),
+                _ => return Err(codes::dat_past_card(x)),
             },
             "CUT" => -(600 + arg(x)?),
             "LDC" => -(100 + arg(x)?),
-            _ => op(mn).ok_or(format!("unknown instruction {mn}"))? * 100 + arg(x)?,
+            _ => op(mn).ok_or_else(|| codes::internal(format!("unknown instruction {mn}")))? * 100 + arg(x)?,
         };
         cells.push((*a, v));
     }
     if at > 99 {
-        return Err("program runs past cell 98".into());
+        return Err(codes::runs_past_98());
     }
     Ok(Program {
         cells,

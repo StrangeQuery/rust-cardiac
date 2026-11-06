@@ -326,6 +326,15 @@ pub enum Bitwise {
 }
 
 impl Bitwise {
+    /// Its operator, as Rust writes it.
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Bitwise::And => "&",
+            Bitwise::Or => "|",
+            Bitwise::Xor => "^",
+        }
+    }
+
     /// The bit it makes of two bits.
     fn bit(self, a: bool, b: bool) -> bool {
         match self {

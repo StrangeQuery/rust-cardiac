@@ -20,6 +20,7 @@ use super::ir::{
 };
 use super::util::Ordered;
 use super::Fail;
+use crate::codes;
 
 /// A function as the passes after the for loops work on it: its name, parameters (each local and its type), return
 /// type, body, and, when it returns a struct, the locals that hold the struct's fields.
@@ -288,10 +289,7 @@ pub fn scalarize_structs(
                 // a `&mut` struct is a `&mut` of each leaf
                 let by_ref = matches!(ty, Ty::Ref { mutable: true, to, .. } if shapes.strukt(to).is_some());
                 if !by_ref || *l == Local(0) || has_array(&s) {
-                    return Err(format!(
-                        "{}: {l}: {ty}: a struct behind a reference is not supported yet",
-                        f.name
-                    ));
+                    return Err(codes::struct_behind_ref(&f.name, l, ty));
                 }
                 let cells = fresh(&s);
                 fields.set(
@@ -317,10 +315,7 @@ pub fn scalarize_structs(
             } else if let Ty::Array(e, ArrayLen::Known(n)) = ty {
                 if let Some(s) = shapes.strukt(e) {
                     if has_array(&s) {
-                        return Err(format!(
-                            "{}: {l}: {ty}: an array of structs with arrays in them is not supported yet",
-                            f.name
-                        ));
+                        return Err(codes::struct_array_with_arrays(&f.name, l, ty));
                     }
                     let cells = fresh(&s);
                     fields.set(
@@ -360,11 +355,7 @@ pub fn scalarize_structs(
         let mut params = vec![];
         for (l, t) in &f.params {
             match fields.get(l) {
-                Some(x) if x.n > 0 => {
-                    return Err(format!(
-                        "{fname}: an array of structs as a parameter is not supported yet"
-                    ))
-                }
+                Some(x) if x.n > 0 => return Err(codes::struct_array_param(fname)),
                 Some(x) => params.extend(x.cells.iter().enumerate().map(|(k, c)| (*c, ty(x, k)))),
                 None => params.push((*l, t.clone())),
             }
@@ -889,13 +880,11 @@ impl Shapes {
             return Ok(());
         }
         if !fine {
-            return Err(format!(
-                "{fname}: field {k} of {s} is {t}: fields must be scalars, structs or arrays of scalars"
-            ));
+            return Err(codes::field_type(fname, k, s, t));
         }
         let layout = self.layouts.get_mut(s).unwrap();
         if k as usize >= layout.len() {
-            return Err(format!("{fname}: field {k} of {s} is past its last field"));
+            return Err(codes::struct_field_past_end(fname, k, s));
         }
         layout[k as usize].ty = t.clone();
         Ok(())
@@ -1144,8 +1133,7 @@ fn split_statement(
         if let Some(a) = d.as_local().and_then(|l| fields.get(&l)).filter(|x| x.n > 0) {
             match rv {
                 Rvalue::Repeat(o, n) => {
-                    let ops = ops_of(o, fields, shapes)
-                        .ok_or_else(|| format!("{fname}: {}: unsupported array of structs", text(s)))?;
+                    let ops = ops_of(o, fields, shapes).ok_or_else(|| codes::struct_array_use(fname, text(s)))?;
                     return Ok(Some(
                         ops.into_iter()
                             .enumerate()
@@ -1155,7 +1143,7 @@ fn split_statement(
                 }
                 Rvalue::Array(items) => {
                     let els: Option<Vec<Vec<Operand>>> = items.iter().map(|e| ops_of(e, fields, shapes)).collect();
-                    let els = els.ok_or_else(|| format!("{fname}: {}: unsupported array of structs", text(s)))?;
+                    let els = els.ok_or_else(|| codes::struct_array_use(fname, text(s)))?;
                     let column = |k: usize| Rvalue::Array(els.iter().filter_map(|e| e.get(k).cloned()).collect());
                     return Ok(Some(
                         a.cells
@@ -1189,10 +1177,7 @@ fn split_statement(
                 }
                 _ => {}
             }
-            return Err(format!(
-                "{fname}: {}: an array of structs used this way is not supported yet",
-                text(s)
-            ));
+            return Err(codes::struct_array_use(fname, text(s)));
         }
         // a whole struct written: _x = S { f: a, ... }, _x = copy _y, A[i] = copy _y, (_x.k: S) = .., *_r = ..,
         // _r = &mut _x
@@ -1201,9 +1186,9 @@ fn split_statement(
                 .filter(|rvs| rvs.len() == to.len())
                 .ok_or_else(|| {
                     if d.projection.len() == 1 && indexing(&d.projection[0]) {
-                        format!("{fname}: {}: unsupported element assignment", text(s))
+                        codes::struct_element_assignment(fname, text(s))
                     } else {
-                        format!("{fname}: {}: unsupported struct copy", text(s))
+                        codes::struct_copy(fname, text(s))
                     }
                 })?;
             return Ok(Some(
@@ -1219,10 +1204,7 @@ fn split_statement(
         _ => None,
     };
     if reads_whole(&s.operands(), borrowed, fields, shapes) {
-        return Err(format!(
-            "{fname}: {}: a whole struct used this way is not supported yet",
-            text(s)
-        ));
+        return Err(codes::struct_whole_use(fname, text(s)));
     }
     Ok(None)
 }
@@ -1243,17 +1225,15 @@ fn split_call(
     // a call can't return an array of structs, or a struct straight into an element of one
     if let Terminator::Call { dest, target, .. } = t {
         if dest.as_local().and_then(|l| fields.get(&l)).is_some_and(|x| x.n > 0) {
-            return Err(format!(
-                "{fname}: {line}: an array of structs used this way is not supported yet"
-            ));
+            return Err(codes::struct_array_use(fname, line));
         }
         if let (Some(x), [i]) = (dest.base_local(), dest.projection.as_slice()) {
             if indexing(i) && fields.get(&x).is_some_and(|x| x.n > 0) {
-                return Err(format!("{fname}: {line}: unsupported element assignment"));
+                return Err(codes::struct_element_assignment(fname, line));
             }
         }
         if target.is_none() && matches!(resolve(dest, fields, shapes), Some(At::Whole(_))) {
-            return Err(format!("{fname}: {line}: unsupported struct copy"));
+            return Err(codes::struct_copy(fname, line));
         }
     }
     if let Terminator::Call {
@@ -1275,9 +1255,7 @@ fn split_call(
                     .get(&callee)
                     .and_then(|s| s.get(&Local(0)))
                     .filter(|r| r.cells.len() == to.len())
-                    .ok_or_else(|| {
-                        format!("{fname}: {line}: a struct result from a function that is not compiled here")
-                    })?;
+                    .ok_or_else(|| codes::struct_result_elsewhere(fname, line))?;
                 let after = BasicBlock(*nb);
                 *nb += 1;
                 let result = |l: Local| Place {
@@ -1315,9 +1293,7 @@ fn split_call(
         }
     }
     if reads_whole(&t.operands(), None, fields, shapes) {
-        return Err(format!(
-            "{fname}: {line}: a whole struct used this way is not supported yet"
-        ));
+        return Err(codes::struct_whole_use(fname, line));
     }
     Ok(t.clone())
 }
