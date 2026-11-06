@@ -700,7 +700,7 @@ impl Parser<'_> {
                     let n = self.operand()?;
                     self.punct(")")?;
                     return Rvalue::slice_from_parts(p, *to, mutable, &n)
-                        .ok_or_else(|| self.error("a slice's pointer of a constant length"));
+                        .ok_or_else(|| self.error("a pointer to a slice, made of its parts"));
                 }
             }
             self.pos = back;

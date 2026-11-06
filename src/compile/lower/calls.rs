@@ -65,7 +65,7 @@ fn is_load_resource(func: &ir::Path) -> bool {
 
 /// What panic!, assert! and unreachable! call, and `unwrap()` and `expect()` on the failing variant:
 /// functions that never come back.
-const NEVER_RETURN: [&[&str]; 9] = [
+const NEVER_RETURN: [&[&str]; 10] = [
     &["core", "panicking", "panic"],
     &["core", "panicking", "panic_fmt"],
     &["core", "panicking", "panic_bounds_check"],
@@ -75,6 +75,7 @@ const NEVER_RETURN: [&[&str]; 9] = [
     &["core", "option", "unwrap_failed"],
     &["core", "option", "expect_failed"],
     &["core", "result", "unwrap_failed"],
+    &["core", "slice", "index", "slice_index_fail"],
 ];
 
 /// What Rust says when one of NEVER_RETURN is called. `panic`'s message is its argument, a string: a bare
@@ -92,6 +93,18 @@ fn called_panic(func: &ir::Path, args: &[ir::Operand]) -> String {
         if let Some(ir::Operand::Constant(ir::Const::Str(s))) = args.first() {
             return s.clone();
         }
+    }
+    // a range out of a slice's bounds, `slice_index_fail(start, end, len)`: Rust's message names the bound that
+    // failed, which a start of 0, or an end that is the length, tells
+    if func.is_path(&["core", "slice", "index", "slice_index_fail"])
+        || func.is_path(&["slice", "index", "slice_index_fail"])
+    {
+        return match args {
+            [s, ..] if s.int().is_some_and(|(v, _)| v == 0) => "range end index out of range for slice",
+            [_, e, n] if e == n => "range start index out of range for slice",
+            _ => "slice index out of range",
+        }
+        .into();
     }
     if calls_panicking("panic_bounds_check") {
         "index out of bounds"

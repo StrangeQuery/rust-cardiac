@@ -337,17 +337,18 @@ impl<'a> Lowering<'a> {
             // One cell holds a u8, an i16 (a card value, panicking past +-999), a bool, a usize (an index, panicking
             // above 999), or a reference or raw pointer, which is a cell address 00-99. An array's element is one of
             // them too, but a usize past a card: only a local holds one (`ranges::huge_usizes`), and storing one
-            // anywhere else panics.
+            // anywhere else panics. A slice's pointer is its address too: its length is a local of its own
+            // (`slices::run_time_lengths`).
             let card = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16));
             let element = |t: &Ty| matches!(t, Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool);
+            let pointee = |t: &Ty| {
+                card(t)
+                    || matches!(t, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
+                    || matches!(t, Ty::Slice(e) if element(e))
+            };
             let one_cell = match ty {
                 Ty::Int(IntTy::U8 | IntTy::I8 | IntTy::I16 | IntTy::Usize) | Ty::Bool => true,
-                Ty::Ref { lifetime: None, to, .. } => {
-                    card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
-                }
-                Ty::Ptr { to, .. } => {
-                    card(to) || matches!(&**to, Ty::Array(e, ir::ArrayLen::Known(_)) if element(e))
-                }
+                Ty::Ref { lifetime: None, to, .. } | Ty::Ptr { to, .. } => pointee(to),
                 _ => false,
             };
             if one_cell {

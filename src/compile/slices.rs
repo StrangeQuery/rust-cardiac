@@ -10,7 +10,8 @@
 //!   `slice::Iter<'_, T>` and `slice::IterMut<'_, T>` are a plain struct of their two pointers, `ptr` and
 //!     `end_or_len` (its `PhantomData` field goes), which the struct pass takes apart
 //!   `copy t[1..4]`, the elements a rest pattern binds (`[x, rest @ ..]`), is the array `[t[1], t[2], t[3]]`
-//! A slice whose length isn't known here (a parameter, say) is left as it is, and refused.
+//! A slice whose length isn't known here (a parameter, say) is its address and a usize local for its length, as
+//! Rust's own `&[T]` is two words (`run_time_lengths`).
 use std::collections::{HashMap, HashSet};
 
 use super::ir::visit_mut::{walk_rvalue, walk_ty, VisitMut};
@@ -19,6 +20,8 @@ use super::ir::{
     Place, PlaceBase, Projection, Rvalue, Segment, Statement, Terminator, Ty,
 };
 use super::structs::Function;
+use super::util::Ordered;
+use super::Fail;
 
 /// `core::ptr::NonNull<T>`'s T.
 fn non_null(p: &Path) -> Option<&Ty> {
@@ -318,6 +321,177 @@ pub fn known_lengths(f: &mut Function) {
             }
         }
     }
+}
+
+/// A slice pointer's length where it is defined: from another slice pointer's (a copy, a cast, a reborrow `&(*q)`),
+/// from an array pointer's type, or the n of `SliceFromParts(p, n)`. None for any other definition.
+fn length_from(r: &Rvalue, types: &HashMap<Local, Ty>, lengths: &HashMap<Local, Operand>) -> Option<Operand> {
+    let from = match r {
+        Rvalue::Use(o) | Rvalue::Cast(o, _, CastKind::Unsize(_) | CastKind::PtrToPtr | CastKind::Transmute) => {
+            o.local()?
+        }
+        Rvalue::Ref(_, p) => deref_of(p)?,
+        Rvalue::Variant(p, args) if p.is_path(&["SliceFromParts"]) => return args.get(1).cloned(),
+        _ => return None,
+    };
+    if let Some(n) = types.get(&from).and_then(array_length) {
+        return Some(usize_const(n));
+    }
+    lengths.get(&from).cloned()
+}
+
+fn usize_const(n: u64) -> Operand {
+    Operand::Constant(Const::Int {
+        value: n as i128,
+        ty: IntTy::Usize,
+    })
+}
+
+/// The program's slices whose length isn't known where they are used (`known_lengths` made every other one an array
+/// pointer): each is two cells, its address and its length, as Rust's own `&[T]` is. The pointer stays, one cell;
+/// beside each a usize local holds the length:
+///   a parameter `s: &[T]` is s and its length after it, and each call of the function passes both, the length of
+///     an array pointer passed as a slice the constant in its type
+///   each definition of a slice local sets its length too: a copy's, a cast's or a reborrow's from the slice it
+///     comes from, `SliceFromParts(p, n)`'s n (the pointer p itself)
+///   `PtrMetadata(s)`, the length, is that local
+/// A slice that comes from anywhere else (a call's result, a field) keeps no length, and its `PtrMetadata` stays,
+/// which is refused; so is a call of one of these functions that can't pass a length.
+pub fn run_time_lengths(fns: &mut Ordered<String, Function>) -> Result<(), Fail> {
+    let is_slice = |t: &Ty| slice_pointee(t).is_some();
+    // each function's slice parameters, by position
+    let sliced: HashMap<String, Vec<usize>> = fns
+        .iter()
+        .map(|(n, f)| {
+            let at: Vec<usize> = (0..f.params.len()).filter(|&k| is_slice(&f.params[k].1)).collect();
+            (n.clone(), at)
+        })
+        .filter(|(_, at)| !at.is_empty())
+        .collect();
+    let names: Vec<String> = fns.keys().cloned().collect();
+    for name in &names {
+        let f = fns.get_mut(name).unwrap();
+        let mut types: HashMap<Local, Ty> = f.params.iter().cloned().collect();
+        types.extend(f.body.decls.iter().map(|d| (d.local, d.ty.clone())));
+        let mut next = types.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+        let mut decls = vec![];
+        let mut lengths: HashMap<Local, Operand> = HashMap::new();
+        let mut params = vec![];
+        for (l, t) in &f.params {
+            params.push((*l, t.clone()));
+            if is_slice(t) {
+                let n = Local(next);
+                next += 1;
+                params.push((n, Ty::Int(IntTy::Usize)));
+                lengths.insert(*l, Operand::Copy(Place::local(n)));
+            }
+        }
+        let mut fresh = |decls: &mut Vec<ir::Decl>| {
+            let l = Local(next);
+            next += 1;
+            decls.push(ir::Decl {
+                local: l,
+                mutable: true,
+                ty: Ty::Int(IntTy::Usize),
+            });
+            l
+        };
+        // each slice local defined only by whole assignments (a write through it, `(*s)[i] = x`, is none), each of
+        // which tells its length, has a length local, set at each of them
+        let through = |d: &Place| d.projection.first() == Some(&Projection::Deref);
+        let mut defs: HashMap<Local, Vec<Option<&Rvalue>>> = HashMap::new();
+        for b in &f.body.blocks {
+            for s in &b.statements {
+                if let Statement::Assign(d, r) = s {
+                    if let Some(l) = d.base_local().filter(|_| !through(d)) {
+                        defs.entry(l).or_default().push(d.projection.is_empty().then_some(r));
+                    }
+                }
+            }
+            if let Terminator::Call { dest, .. } = &b.terminator {
+                if let Some(l) = dest.base_local().filter(|_| !through(dest)) {
+                    defs.entry(l).or_default().push(None);
+                }
+            }
+        }
+        for d in &f.body.decls {
+            if is_slice(&d.ty) && defs.contains_key(&d.local) {
+                let n = fresh(&mut decls);
+                lengths.insert(d.local, Operand::Copy(Place::local(n)));
+            }
+        }
+        loop {
+            let told = |l: &Local| {
+                defs.get(l)
+                    .into_iter()
+                    .flatten()
+                    .all(|r| r.is_some_and(|r| length_from(r, &types, &lengths).is_some()))
+            };
+            let untold: Vec<Local> = lengths.keys().filter(|l| !told(l)).copied().collect();
+            if untold.is_empty() {
+                break;
+            }
+            for l in untold {
+                lengths.remove(&l);
+            }
+        }
+        for b in f.body.blocks.iter_mut() {
+            let mut statements = vec![];
+            for mut s in std::mem::take(&mut b.statements) {
+                let mut set = None;
+                if let Statement::Assign(d, r) = &mut s {
+                    if let Some(Operand::Copy(n)) = d.as_local().and_then(|l| lengths.get(&l)) {
+                        let v = length_from(r, &types, &lengths).expect("a length told");
+                        set = Some(Statement::Assign(n.clone(), Rvalue::Use(v)));
+                        if let Rvalue::Variant(p, args) = &*r {
+                            if p.is_path(&["SliceFromParts"]) {
+                                *r = Rvalue::Use(args[0].clone());
+                            }
+                        }
+                    }
+                }
+                statements.push(s);
+                statements.extend(set);
+            }
+            b.statements = statements;
+        }
+        // the length read, and passed
+        for b in f.body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                if let Statement::Assign(_, r @ Rvalue::Variant(..)) = s {
+                    let Rvalue::Variant(p, args) = &*r else { unreachable!() };
+                    let of = match args.as_slice() {
+                        [a] => a.local(),
+                        _ => None,
+                    };
+                    if let (true, Some(n)) = (p.is_path(&["PtrMetadata"]), of.and_then(|a| lengths.get(&a))) {
+                        *r = Rvalue::Use(n.clone());
+                    }
+                }
+            }
+            let Terminator::Call { func, args, .. } = &mut b.terminator else {
+                continue;
+            };
+            let callee = func.to_string();
+            let Some(at) = sliced.get(&callee) else { continue };
+            for &k in at.iter().rev() {
+                let given = args.get(k).and_then(Operand::local);
+                let n = given.and_then(|a| match types.get(&a).and_then(array_length) {
+                    Some(n) => Some(usize_const(n)),
+                    None => lengths.get(&a).cloned(),
+                });
+                let Some(n) = n else {
+                    return Err(format!(
+                        "{name}: a call of {callee}: the length of the slice it is passed isn't known here"
+                    ));
+                };
+                args.insert(k + 1, n);
+            }
+        }
+        f.params = params;
+        f.body.decls.extend(decls);
+    }
+    Ok(())
 }
 
 /// The locals that are copies of a slice iterator's own two pointers, `ptr` and `end_or_len` (or casts of them),

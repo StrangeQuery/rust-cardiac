@@ -663,7 +663,9 @@ impl TupleStructConsts<'_> {
 impl VisitMut for TupleStructConsts<'_> {
     fn visit_rvalue(&mut self, r: &mut Rvalue) {
         if let Rvalue::Variant(p, ops) = r {
-            if !ops.is_empty() && !self.names_a_variant(p) {
+            // a slice's length and a slice made of its parts are operations the IR writes as variants
+            let operation = p.is_path(&["PtrMetadata"]) || p.is_path(&["SliceFromParts"]);
+            if !ops.is_empty() && !self.names_a_variant(p) && !operation {
                 let fields = ops.drain(..).enumerate().map(|(i, o)| (i.to_string(), o)).collect();
                 *r = Rvalue::Struct(p.clone(), fields);
             }

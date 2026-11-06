@@ -39,11 +39,23 @@ pub fn predecessors(blocks: &[Block]) -> HashMap<BasicBlock, Vec<BasicBlock>> {
 }
 
 impl Rvalue {
-    /// `*mut [T] from (p, n)`, a slice's pointer made of its first element's and its length, for a constant n: the
-    /// pointer, cast to a pointer to the array of n it points into (the length kept in the type).
+    /// `*mut [T] from (p, n)`, a slice's pointer made of its first element's and its length. For a constant n, the
+    /// pointer cast to a pointer to the array of n it points into (the length kept in the type); for any other,
+    /// `SliceFromParts(p, n)`, a variant built as `PtrMetadata(s)` is, which `slices::run_time_lengths` takes apart.
     pub fn slice_from_parts(p: Operand, to: Ty, mutable: bool, n: &Operand) -> Option<Rvalue> {
-        let (Ty::Slice(e), Some((n, _))) = (to, n.int()) else {
-            return None;
+        let Ty::Slice(e) = to else { return None };
+        let Some((n, _)) = n.int() else {
+            let name = Segment::Name {
+                name: "SliceFromParts".into(),
+                args: None,
+            };
+            return Some(Rvalue::Variant(
+                Path {
+                    qself: None,
+                    segments: vec![name],
+                },
+                vec![p, n.clone()],
+            ));
         };
         let array = Ty::Array(e, ArrayLen::Known(u64::try_from(n).ok()?));
         Some(Rvalue::Cast(

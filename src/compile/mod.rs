@@ -682,9 +682,13 @@ fn compile(
             .collect();
         ranges::mark_wrapping(&mut f.body.blocks, &types);
     }
+    // slices of arrays as arrays, and the pointers of their iterators as raw pointers, for the passes below; any
+    // other slice as its address and its length
     for n in &names {
-        // slices of arrays as arrays, and the pointers of their iterators as raw pointers, for the passes below
         slices::known_lengths(fns.get_mut(n).unwrap());
+    }
+    slices::run_time_lengths(&mut fns)?;
+    for n in &names {
         slices::slice_iterator_calls(fns.get_mut(n).unwrap());
         // `for x in t` over an array by value: a range over its indexes
         iterators::array_into_iter(fns.get_mut(n).unwrap());
