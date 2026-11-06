@@ -26,6 +26,7 @@ pub mod enums;
 pub mod forloops;
 pub mod front;
 pub mod io;
+pub mod iterators;
 pub mod ir;
 pub mod lower;
 pub mod machine;
@@ -552,6 +553,9 @@ fn compile(
     for n in &names {
         // slices of arrays as arrays, and the pointers of their iterators as raw pointers, for the passes below
         slices::known_lengths(fns.get_mut(n).unwrap());
+        // `for x in t` over an array by value: a range over its indexes
+        iterators::array_into_iter(fns.get_mut(n).unwrap());
+        iterators::enumerate_slices(fns.get_mut(n).unwrap());
         forloops::lower_for_loops(fns.get_mut(n).unwrap());
         // a range's contains(): its tests, while the range is a struct the struct pass will take apart
         methods::inline_range_contains(fns.get_mut(n).unwrap());

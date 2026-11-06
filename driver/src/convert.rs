@@ -645,6 +645,11 @@ impl<'tcx> Convert<'tcx> {
                     unwind: self.unwind(unwind, internal)?,
                 }
             }
+            T::Drop { place, target, unwind } => ir::Terminator::Drop {
+                place: self.place(place, locals)?,
+                target: bb(*target),
+                unwind: self.unwind(unwind, internal)?,
+            },
             _ => return None,
         })
     }

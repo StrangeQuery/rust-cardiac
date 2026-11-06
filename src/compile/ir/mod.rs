@@ -629,6 +629,13 @@ pub enum Terminator {
         target: BasicBlock,
         unwind: Unwind,
     },
+    /// `drop(_4) -> [return: bb7, unwind ...]`: the value's drop glue run, then on to the target. Only a drop the
+    /// passes know does nothing gets past them (`slices`, an array's `IntoIter`); any other is refused.
+    Drop {
+        place: Place,
+        target: BasicBlock,
+        unwind: Unwind,
+    },
     Unsupported(Unsupported),
 }
 
@@ -1003,6 +1010,7 @@ impl fmt::Display for Terminator {
                 }
                 write!(f, ") -> [success: {target}, {unwind}];")
             }
+            Terminator::Drop { place, target, unwind } => write!(f, "drop({place}) -> [return: {target}, {unwind}];"),
             Terminator::Unsupported(u) => f.write_str(&u.text),
         }
     }

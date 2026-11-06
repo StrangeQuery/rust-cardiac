@@ -20,3 +20,21 @@
   an index (45 and 37 cells at opt-level 2 without overflow checks), the test programs and examples unchanged. A
   slice whose length isn't known in the function (a `&[T]` parameter) is still refused, and opt-level 1, where
   rustc calls `next()`, still refuses these loops.
+
+## 2026-11-05 · `for x in t` and `.enumerate()` over a slice are ranges over the indexes; `drop` is in the IR
+
+- **Decision.** `iterators::array_into_iter`: an `array::IntoIter<T, N>` made from a whole array (rustc's
+  `into_iter()` call at opt-level 1, the structs it inlines at 2) is a `Range<usize>` over its `alive` range,
+  each `next()` the range's, which the for-loop pass lowers, and the item `t[i]`: t itself where nothing writes t
+  again, else a copy taken where the iterator was made, as `IntoIter` takes one. `iterators::enumerate_slices`:
+  an `Enumerate` of a slice iterator into one array is the same range over the slice's indexes, the item `(i -
+  start, &t[i])`. `drop` is a terminator of the IR (`Terminator::Drop`), read from the driver and from the text;
+  the iterator's own drop, which does nothing for elements a cell holds, becomes a `goto`, and any other drop is
+  refused, as before. The cleanup unwinds of the calls in such a function are plain ones: CARDIAC never
+  unwinds, and any other value whose drop did something has a `drop` of its own, which is refused.
+- **Why.** Both are the loop `for i in 0..N` with `t[i]`; written as a range they take its cells (`for x in t`
+  29, as the index loop; `for (i, x) in t.iter().enumerate()` 32, as the index loop), at both opt-levels for
+  `for x in t`.
+- **Cost.** A copy of the array (its cells, and two instructions an element) where the loop's array is written
+  again after the iterator is made. `enumerate` of anything but a slice iterator, and at opt-level 1, is still
+  refused.

@@ -95,6 +95,7 @@ impl Locals for Terminator {
                 cond.visit_locals(f);
                 msg_args.iter().for_each(|a| a.visit_locals(f));
             }
+            Terminator::Drop { place, .. } => place.visit_locals(f),
             Terminator::Unsupported(u) => u.locals.iter().for_each(|l| f(*l)),
             Terminator::Goto(_) | Terminator::Return | Terminator::Unreachable => {}
         }
@@ -112,7 +113,9 @@ impl Terminator {
             Terminator::Goto(b) => vec![*b],
             Terminator::SwitchInt { arms, otherwise, .. } => arms.iter().map(|(_, b)| *b).chain(*otherwise).collect(),
             Terminator::Call { target, unwind, .. } => target.iter().copied().chain(cleanup(unwind)).collect(),
-            Terminator::Assert { target, unwind, .. } => std::iter::once(*target).chain(cleanup(unwind)).collect(),
+            Terminator::Assert { target, unwind, .. } | Terminator::Drop { target, unwind, .. } => {
+                std::iter::once(*target).chain(cleanup(unwind)).collect()
+            }
             Terminator::Return | Terminator::Unreachable | Terminator::Unsupported(_) => vec![],
         }
     }
@@ -273,6 +276,7 @@ impl Terminator {
     pub fn places(&self) -> Vec<&Place> {
         let dest = match self {
             Terminator::Call { dest, .. } => Some(dest),
+            Terminator::Drop { place, .. } => Some(place),
             _ => None,
         };
         dest.into_iter()
@@ -287,6 +291,7 @@ impl Terminator {
                 args.iter_mut().filter_map(Operand::place_mut).for_each(f);
             }
             Terminator::SwitchInt { discr, .. } => discr.place_mut().into_iter().for_each(f),
+            Terminator::Drop { place, .. } => f(place),
             Terminator::Assert { cond, msg_args, .. } => {
                 cond.place_mut().into_iter().for_each(&mut *f);
                 msg_args.iter_mut().filter_map(Operand::place_mut).for_each(f);
@@ -347,7 +352,9 @@ impl Terminator {
                 arms.iter_mut().map(|(_, b)| b).chain(otherwise.as_mut()).collect()
             }
             Terminator::Call { target, unwind, .. } => target.as_mut().into_iter().chain(cleanup(unwind)).collect(),
-            Terminator::Assert { target, unwind, .. } => std::iter::once(target).chain(cleanup(unwind)).collect(),
+            Terminator::Assert { target, unwind, .. } | Terminator::Drop { target, unwind, .. } => {
+                std::iter::once(target).chain(cleanup(unwind)).collect()
+            }
             Terminator::Return | Terminator::Unreachable | Terminator::Unsupported(_) => vec![],
         }
     }

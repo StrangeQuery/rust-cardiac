@@ -271,6 +271,9 @@ impl Parser<'_> {
         if self.is_ident("assert") && self.peek_at(1) == Some(&Tok::Punct("(")) {
             return self.assert().map(Line::Terminator);
         }
+        if self.is_ident("drop") && self.peek_at(1) == Some(&Tok::Punct("(")) {
+            return self.drop_line().map(Line::Terminator);
+        }
         if self.is_ident("assume") && self.peek_at(1) == Some(&Tok::Punct("(")) {
             self.pos += 2;
             let o = self.operand()?;
@@ -360,6 +363,23 @@ impl Parser<'_> {
             target,
             unwind,
         })
+    }
+
+    fn drop_line(&mut self) -> Parsed<Terminator> {
+        self.keyword("drop")?;
+        self.punct("(")?;
+        let place = self.place()?;
+        self.punct(")")?;
+        self.punct("->")?;
+        self.punct("[")?;
+        self.keyword("return")?;
+        self.punct(":")?;
+        let target = self.block()?;
+        self.punct(",")?;
+        let unwind = self.unwind()?;
+        self.punct("]")?;
+        self.punct(";")?;
+        Ok(Terminator::Drop { place, target, unwind })
     }
 
     fn unwind(&mut self) -> Parsed<Unwind> {
