@@ -4,6 +4,20 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-06 · A generic struct's instance is a struct of its own
+
+- **Decision.** Before the struct pass, each instance of one of the program's generic structs (`Pair<i16>`, built
+  as `Pair::<i16> { .. }`) is renamed a plain struct of its own, `Pair__i16`, as a tuple of scalars is
+  `tuple__i16_i16` (`structs::instances_as_structs`). A generic type of core's (`core::slice::Iter<'_, i16>`) is
+  left to the passes that know it.
+- **Why.** The struct pass knows a struct by its name alone, so it left every path with type arguments alone, and
+  a `Pair<i16>` local was refused wherever rustc didn't take it apart first: where its method stays a call
+  (`#[inline(never)]`, or an instance of the entry below). By name, `Pair<i16>` and `Pair<bool>` would have shared
+  one layout; as `Pair__i16` and `Pair__bool` each has its own cells.
+- **Cost.** None found: a name per instance, which only the listing shows.
+- **Evidence.** The support matrix's two new rows, impl_generic_call and impl_generic_two, match at every setting;
+  the rest of the matrix, the compiler's tests and the examples are unchanged.
+
 ## 2026-11-06 · A generic function's instance is a function of its own
 
 - **Decision.** Where rustc leaves a call to an instance of one of the program's generic functions
@@ -30,9 +44,8 @@ rust-cardiac, and cargo-cardiac is what you install.)
   after clean up as they can: fn_generic_not_inlined (`bigger::<i16>` and `bigger::<bool>`) is 63 cells, as the same
   program with an `i16` helper and a `bool` helper written out is. Each instance is a copy, as Rust's are. Left
   refused: a generic function of another crate (the linker says so), an instance with a promoted constant, a closure
-  as an argument, a const argument the IR doesn't read (`f::<-3>`), a struct that is generic (`Pair<i16>`) as a
-  local or a parameter where its method stays a call (the struct pass knows a struct by its name alone, so
-  `Pair<i16>` and `Pair<bool>` would be one), and `max` on a struct, which passes it whole.
+  as an argument, a const argument the IR doesn't read (`f::<-3>`), and `max` on a struct, which passes it whole. (A
+  generic struct whose method stays a call was refused too, until the entry above.)
 - **Evidence.** Support matrix against tonight's merged results: 10 rows better, 0 worse; no listing or example
   changes.
 

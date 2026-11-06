@@ -77,6 +77,47 @@ fn plain_path(p: &Path) -> bool {
     p.qself.is_none() && p.segments.iter().all(|s| matches!(s, Segment::Name { args: None, .. }))
 }
 
+/// Each instance of a generic struct of the crate's (`Pair<i16>`, built as `Pair::<i16> { .. }`) as a struct of its
+/// own, `Pair__i16`, as a tuple is `tuple__i16_i16`: the pass knows a struct by its name, and `Pair<i16>` and
+/// `Pair<bool>` have cells of different types. A type of core's, `core::slice::Iter<'_, i16>`, is left to the passes
+/// that know it.
+fn instances_as_structs(fns: &mut Ordered<String, Function>, structs: &[StructDef]) {
+    use super::ir::visit_mut::{walk_path, VisitMut};
+    use super::ir::GenericArg;
+    struct Instances<'a>(&'a [StructDef]);
+    impl VisitMut for Instances<'_> {
+        fn visit_path(&mut self, p: &mut Path) {
+            walk_path(self, p);
+            let [Segment::Name { name, args: Some(g) }] = p.segments.as_slice() else {
+                return;
+            };
+            if p.qself.is_some() || !self.0.iter().any(|s| s.name == *name) {
+                return;
+            }
+            let mut tys = vec![];
+            for a in &g.args {
+                let GenericArg::Ty(t) = a else { return };
+                tys.push(t.to_string());
+            }
+            let name = format!("{name}__{}", tys.join("_"))
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+                .collect();
+            p.segments = vec![Segment::Name { name, args: None }];
+        }
+    }
+    let mut v = Instances(structs);
+    let names: Vec<String> = fns.keys().cloned().collect();
+    for n in &names {
+        let f = fns.get_mut(n).unwrap();
+        for (_, t) in f.params.iter_mut() {
+            v.visit_ty(t);
+        }
+        v.visit_ty(&mut f.ret);
+        v.visit_body(&mut f.body);
+    }
+}
+
 /// An index of some kind: `[_3]`, `[_3+1]` or `[2 of 3]`.
 fn indexing(p: &Projection) -> bool {
     matches!(
@@ -95,6 +136,7 @@ pub fn scalarize_structs(
     structs: &[StructDef],
 ) -> Result<(), Fail> {
     // the structs: their fields in declaration order, from the aggregates that build them
+    instances_as_structs(fns, structs);
     shared_scalar_refs_by_value(fns);
     let mut layouts: HashMap<String, Vec<Field>> = known.into_iter().collect();
     // a unit struct is no cells, and its value (`const Flag`) none: unless a struct or a const of the same name
