@@ -82,15 +82,27 @@ pub fn enums<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'
 pub fn structs<'tcx>(tcx: TyCtxt<'tcx>, defs: &[DefId], instances: &[&mmir::Body<'tcx>]) -> Vec<StructDef> {
     let mut structs: Vec<StructDef> = vec![];
     let krate = defs.first().map(|d| d.krate);
-    for (adt, _) in adts(tcx, defs, instances).iter().filter(|(a, _)| a.kind().is_struct()) {
+    for (adt, args) in adts(tcx, defs, instances).iter().filter(|(a, _)| a.kind().is_struct()) {
         let def: DefId = internal(tcx, adt.def_id());
         let s = StructDef {
             name: adt.name().rsplit("::").next().unwrap_or_default().to_string(),
             unit: adt.variants_iter().all(|v| v.fields().is_empty()),
             in_crate: Some(def.krate) == krate,
+            fields: adt
+                .variants_iter()
+                .flat_map(|v| v.fields())
+                .map(|f| {
+                    let ty = ir_ty(tcx, f.ty_with_args(args)).unwrap_or(ir::Ty::Other(String::new()));
+                    (f.name.clone(), ty)
+                })
+                .collect(),
         };
-        if !structs.contains(&s) {
-            structs.push(s);
+        // one by name, as the passes know a struct: a generic one's instances (`Pair<i16>`, `Pair<bool>`) have no
+        // fields in common
+        match structs.iter_mut().find(|t| (&t.name, t.unit, t.in_crate) == (&s.name, s.unit, s.in_crate)) {
+            Some(t) if t.fields != s.fields => t.fields.clear(),
+            Some(_) => {}
+            None => structs.push(s),
         }
     }
     structs

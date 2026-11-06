@@ -19,8 +19,9 @@ use super::front::{closure_name, place_ty};
 use super::ir::visit_mut::{walk_ty, VisitMut};
 use super::ir::{
     occurrences, parse_path, BasicBlock, Block, BorrowKind, CastKind, Const, Decl, File, FnItem, IntTy, Item, Local,
-    Operand, Path, Place, Projection, Rvalue, Segment, Statement, Terminator, Ty, Unsupported,
+    Locals, Operand, Path, Place, Projection, Rvalue, Segment, Statement, Terminator, Ty, Unsupported,
 };
+use super::structs::StructDef;
 
 /// The type a function pointer is held as: a number from 0, below the count of functions of its type.
 const NUMBER: Ty = Ty::Int(IntTy::U8);
@@ -317,20 +318,24 @@ struct Object {
 /// Only a shared reference to a struct of the program's, of a trait without generic arguments, whose methods are
 /// the impl's own: anything else done with a trait object stays as rustc wrote it, and is refused where it is
 /// compiled.
-pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
+pub fn trait_objects(file: &mut File, structs: &[StructDef]) -> Vec<EnumDef> {
     let mut objects: Vec<Object> = vec![];
     // the types each trait's objects are made of, in the order the program first makes them
     for f in functions(file) {
         let types = local_types(f);
         for s in f.body.blocks.iter().flat_map(|b| &b.statements) {
             let Some((of, ty)) = coerced(s, &types) else { continue };
-            let Ty::Path(p) = &ty else { continue };
-            let variant = p.name().to_string();
+            let made = objects.iter().map(|o| o.types.len()).sum::<usize>();
+            // a closure's variant is numbered, its type being where it is written
+            let variant = match &ty {
+                Ty::Path(p) => p.name().to_string(),
+                _ => format!("closure{made}"),
+            };
             match objects.iter_mut().find(|o| o.of == of) {
                 Some(o) if o.types.iter().any(|(_, t)| *t == ty) => {}
                 Some(o) => o.types.push((variant, ty)),
                 None => objects.push(Object {
-                    name: format!("dyn_{}", of.to_string().replace("::", "__")),
+                    name: format!("dyn_{}", identifier(&of.to_string())),
                     of,
                     types: vec![(variant, ty)],
                 }),
@@ -348,7 +353,7 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
         let types = local_types(f);
         let object_of = |p: &Place| match place_ty(&types, p) {
             Some(Ty::Ref { mutable: false, to, .. }) => match &*to {
-                Ty::Dyn(of) => objects.iter().find(|o| o.of == *of),
+                Ty::Dyn(of) => objects.iter().find(|o| o.of == object_trait(of)),
                 _ => None,
             },
             _ => None,
@@ -367,6 +372,10 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
             .max()
             .map_or(0, |l| l + 1);
         let mut next_block = f.body.blocks.iter().map(|b| b.name.0).max().map_or(0, |n| n + 1);
+        let mut named_times: HashMap<Local, usize> = HashMap::new();
+        for l in f.body.blocks.iter().flat_map(|b| b.lines()).flat_map(|x| x.locals()) {
+            *named_times.entry(l).or_default() += 1;
+        }
         let (mut decls, mut extra) = (vec![], vec![]);
         for b in f.body.blocks.iter_mut() {
             for s in b.statements.iter_mut() {
@@ -383,10 +392,19 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
                     let Statement::Assign(dest, _) = &*s else { continue };
                     let mut value = src.clone();
                     value.projection.push(Projection::Deref);
-                    *s = Statement::Assign(
-                        dest.clone(),
-                        Rvalue::Variant(words(&[&o.name, v]), vec![Operand::Copy(value)]),
-                    );
+                    // a struct of scalars, its fields: the variants' cells are shared by type
+                    let fields = match scalar_fields(structs, &ty) {
+                        Some(fs) => (0..)
+                            .zip(fs)
+                            .map(|(k, (_, t))| {
+                                let mut field = value.clone();
+                                field.projection.push(Projection::Field(k, t.clone()));
+                                Operand::Copy(field)
+                            })
+                            .collect(),
+                        None => vec![Operand::Copy(value)],
+                    };
+                    *s = Statement::Assign(dest.clone(), Rvalue::Variant(words(&[&o.name, v]), fields));
                     continue;
                 }
                 let Statement::Assign(dest, r) = &mut *s else { continue };
@@ -420,7 +438,19 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
                         receiver.and_then(object_of).zip(named).and_then(|(o, named)| {
                             o.types
                                 .iter()
-                                .map(|(v, ty)| Some((v.clone(), ty.clone(), method(&paths, ty, named, func.name())?)))
+                                .map(|(v, ty)| {
+                                    let callee = match ty {
+                                        // a closure's call through its trait, `<{closure@..} as Fn<(i16,)>>::call`,
+                                        // which the closure pass makes a call of its function
+                                        Ty::Other(_) => {
+                                            let mut callee = func.clone();
+                                            callee.qself.as_mut()?.ty = ty.clone();
+                                            callee
+                                        }
+                                        _ => method(&paths, ty, named, func.name())?,
+                                    };
+                                    Some((v.clone(), ty.clone(), callee))
+                                })
                                 .collect()
                         });
                     match (receiver, callees) {
@@ -439,14 +469,45 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
                                         to: Box::new(ty.clone()),
                                     },
                                 });
-                                let mut field = receiver.clone();
-                                field
-                                    .projection
-                                    .extend([Projection::Downcast(v), Projection::Field(0, ty)]);
                                 let mut args = args.clone();
                                 args[0] = Operand::Move(Place::local(value));
+                                let mut of = receiver.clone();
+                                of.projection.push(Projection::Downcast(v));
+                                let field = |k: u32, t: &Ty| {
+                                    let mut field = of.clone();
+                                    field.projection.push(Projection::Field(k, t.clone()));
+                                    field
+                                };
+                                let mut made = vec![];
+                                let borrowed = match scalar_fields(structs, &ty) {
+                                    // the struct built again of the variant's fields
+                                    Some(fs) => {
+                                        let built = Local(next_local);
+                                        next_local += 1;
+                                        decls.push(Decl {
+                                            local: built,
+                                            mutable: false,
+                                            ty: ty.clone(),
+                                        });
+                                        let Ty::Path(p) = &ty else { unreachable!() };
+                                        let fields = (0..)
+                                            .zip(fs)
+                                            .map(|(k, (n, t))| (n.clone(), Operand::Copy(field(k, t))))
+                                            .collect();
+                                        made.push(Statement::Assign(
+                                            Place::local(built),
+                                            Rvalue::Struct(p.clone(), fields),
+                                        ));
+                                        Place::local(built)
+                                    }
+                                    None => field(0, &ty),
+                                };
+                                made.push(Statement::Assign(
+                                    Place::local(value),
+                                    Rvalue::Ref(BorrowKind::Shared, borrowed),
+                                ));
                                 arms.push((
-                                    Statement::Assign(Place::local(value), Rvalue::Ref(BorrowKind::Shared, field)),
+                                    made,
                                     Terminator::Call {
                                         dest: dest.clone(),
                                         func: callee,
@@ -474,7 +535,7 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
             let Some((receiver, mut arms)) = dispatch else { continue };
             if arms.len() == 1 {
                 let (s, t) = arms.pop().unwrap();
-                b.statements.push(s);
+                b.statements.extend(s);
                 b.terminator = t;
                 continue;
             }
@@ -486,15 +547,33 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
                 mutable: true,
                 ty: Ty::Int(IntTy::Isize),
             });
+            // the tuple of arguments a closure is called with, built just for the call, built again in each arm
+            // instead, beside the call that the closure pass takes it apart for
+            let tupled = tupled_for_call(&b.statements, &b.terminator, &named_times, &types);
+            if let Some((at, _, _)) = tupled {
+                b.statements.remove(at);
+            }
             b.statements
                 .push(Statement::Assign(Place::local(d), Rvalue::Discriminant(receiver)));
             let mut switch = vec![];
-            for (k, (s, t)) in arms.into_iter().enumerate() {
+            for (k, (s, mut t)) in arms.into_iter().enumerate() {
                 let name = BasicBlock(next_block);
                 next_block += 1;
+                let mut statements = s;
+                if let (Some((_, built, ty)), Terminator::Call { args, .. }) = (&tupled, &mut t) {
+                    let own = Local(next_local);
+                    next_local += 1;
+                    decls.push(Decl {
+                        local: own,
+                        mutable: false,
+                        ty: ty.clone(),
+                    });
+                    statements.insert(0, Statement::Assign(Place::local(own), built.clone()));
+                    args[1] = Operand::Move(Place::local(own));
+                }
                 extra.push(Block {
                     name,
-                    statements: vec![s],
+                    statements,
                     terminator: t,
                 });
                 switch.push((k as i128, name));
@@ -529,11 +608,46 @@ pub fn trait_objects(file: &mut File) -> Vec<EnumDef> {
                 .map(|(k, (v, ty))| Variant {
                     name: v.clone(),
                     value: k as i128,
-                    fields: vec![ty.clone()],
+                    fields: match scalar_fields(structs, ty) {
+                        Some(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+                        None => vec![ty.clone()],
+                    },
                 })
                 .collect(),
         })
         .collect()
+}
+
+/// The tuple a call's second argument is (`_5 = (copy _2,)`, what rustc calls a closure with through its trait),
+/// where the block builds it for the call alone and nothing after it in the block writes what it reads: where it is
+/// built, the tuple, and its type.
+fn tupled_for_call(
+    statements: &[Statement],
+    call: &Terminator,
+    named_times: &HashMap<Local, usize>,
+    types: &HashMap<Local, Ty>,
+) -> Option<(usize, Rvalue, Ty)> {
+    let Terminator::Call { args, .. } = call else {
+        return None;
+    };
+    let t = args.get(1)?.place()?.as_local()?;
+    if named_times.get(&t) != Some(&2) {
+        return None;
+    }
+    let at = statements
+        .iter()
+        .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(t)))?;
+    let Statement::Assign(_, built @ Rvalue::Tuple(os)) = &statements[at] else {
+        return None;
+    };
+    let read: Vec<Local> = os.iter().flat_map(|o| o.locals()).collect();
+    let changed = statements[at + 1..].iter().any(|s| match s {
+        Statement::Assign(d, _) => d.base_local().is_some_and(|l| read.contains(&l)),
+        Statement::StorageLive(_) | Statement::StorageDead(_) | Statement::Assume(_) | Statement::Nop => false,
+        Statement::Unsupported(_) => true,
+    });
+    let ty = types.get(&t)?.clone();
+    (!changed).then(|| (at, built.clone(), ty))
 }
 
 /// A `&dyn Trait` of a trait the program makes objects of: the enum's type.
@@ -543,7 +657,7 @@ impl VisitMut for Objects<'_> {
     fn visit_ty(&mut self, t: &mut Ty) {
         if let Ty::Ref { mutable: false, to, .. } = t {
             if let Ty::Dyn(of) = &**to {
-                if let Some(o) = self.0.iter().find(|o| o.of == *of) {
+                if let Some(o) = self.0.iter().find(|o| o.of == object_trait(of)) {
                     *t = Ty::Path(words(&[&o.name]));
                     return;
                 }
@@ -572,8 +686,44 @@ fn coerced(s: &Statement, types: &HashMap<Local, Ty>) -> Option<(Path, Ty)> {
     };
     match *ty {
         Ty::Path(p) if p.is_plain() && of.is_plain() => Some((of.clone(), Ty::Path(p))),
+        Ty::Other(c) if c.starts_with("{closure@") => closure_trait(of).map(|of| (of, Ty::Other(c))),
         _ => None,
     }
+}
+
+/// The fields of a type that is one of the program's structs, known by its name alone, when each is a scalar: an
+/// object of it holds them as its variant's fields, which the enum pass gives cells shared with the other variants'
+/// (a `Sq(i16)`'s and a `Rect(i16, i16)`'s first field one cell).
+fn scalar_fields<'a>(structs: &'a [StructDef], ty: &Ty) -> Option<&'a [(String, Ty)]> {
+    let Ty::Path(p) = ty else { return None };
+    let mut named = structs.iter().filter(|s| s.in_crate && s.name == p.name());
+    let (Some(s), None) = (named.next(), named.next()) else {
+        return None;
+    };
+    let scalar = |t: &Ty| {
+        matches!(
+            t,
+            Ty::Int(IntTy::I16 | IntTy::I32 | IntTy::U8 | IntTy::Usize) | Ty::Bool
+        )
+    };
+    (!s.fields.is_empty() && s.fields.iter().all(|(_, t)| scalar(t))).then_some(s.fields.as_slice())
+}
+
+/// A closure trait with its arguments, `core::ops::Fn(i16) -> i16`, as the one segment it is known by wherever rustc
+/// writes it (`Fn(i16) -> i16`, trimmed or not).
+fn closure_trait(of: &Path) -> Option<Path> {
+    let last @ Segment::Name { args: Some(a), .. } = of.segments.last()? else {
+        return None;
+    };
+    (of.qself.is_none() && a.fn_sugar().is_some()).then(|| Path {
+        qself: None,
+        segments: vec![last.clone()],
+    })
+}
+
+/// The trait of a `dyn`, as an object's is kept: a closure trait by its segment alone.
+fn object_trait(of: &Path) -> Path {
+    closure_trait(of).unwrap_or_else(|| of.clone())
 }
 
 /// The program's function that is `ty`'s method `name` of the trait `of`, as the driver names an impl's
@@ -596,6 +746,25 @@ fn method(paths: &[String], ty: &Ty, of: &Path, name: &str) -> Option<Path> {
         [one] => Some(one.clone()),
         _ => None,
     }
+}
+
+/// A name made of a path's text: each run of what isn't a letter, a digit or `_` one `_`, or `__` where it is `::`
+/// (`geo::Shape` is `geo__Shape`, `Fn(i16) -> i16` is `Fn_i16_i16`).
+fn identifier(text: &str) -> String {
+    let mut out = String::new();
+    let mut gap = String::new();
+    for c in text.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            if !out.is_empty() && !gap.is_empty() {
+                out.push_str(if gap == "::" { "__" } else { "_" });
+            }
+            gap.clear();
+            out.push(c);
+        } else {
+            gap.push(c);
+        }
+    }
+    out
 }
 
 /// A path of plain names.
@@ -783,7 +952,7 @@ fn main() -> () {
     #[test]
     fn a_trait_object_is_an_enum_of_its_types_and_a_call_through_it_a_switch() {
         let mut file = parse_file(PROGRAM);
-        let enums = trait_objects(&mut file);
+        let enums = trait_objects(&mut file, &[]);
         assert_eq!(enums.len(), 1);
         assert_eq!(enums[0].path, ["dyn_Shape"]);
         let variants: Vec<&str> = enums[0].variants.iter().map(|v| v.name.as_str()).collect();
@@ -808,6 +977,25 @@ fn main() -> () {
                 "_3 = &((_1 as Two).0: Two);",
                 "_0 = <Two as Shape>::area(move _3) -> [return: bb1, unwind continue];",
             ]
+        );
+    }
+
+    #[test]
+    fn an_object_of_a_struct_of_scalars_holds_its_fields() {
+        let mut file = parse_file(PROGRAM);
+        let sq = StructDef {
+            name: "Sq".into(),
+            unit: false,
+            in_crate: true,
+            fields: vec![("0".into(), Ty::Int(IntTy::I16))],
+        };
+        let enums = trait_objects(&mut file, &[sq]);
+        let fields: Vec<&[Ty]> = enums[0].variants.iter().map(|v| v.fields.as_slice()).collect();
+        assert_eq!(fields[0], [Ty::Int(IntTy::I16)]);
+        assert_eq!(lines(&file, "main")[1], "_3 = dyn_Shape::Sq(copy ((*_2).0: i16));");
+        assert_eq!(
+            lines(&file, "show")[3..5],
+            ["_3 = Sq { 0: copy ((_1 as Sq).0: i16) };", "_2 = &_3;"]
         );
     }
 }

@@ -242,7 +242,7 @@ pub fn walk_path<V: VisitMut + ?Sized>(v: &mut V, p: &mut Path) {
         match s {
             Segment::Name { args: Some(args), .. } => {
                 for a in &mut args.args {
-                    if let GenericArg::Ty(t) = a {
+                    if let GenericArg::Ty(t) | GenericArg::Binding(_, t) = a {
                         v.visit_ty(t);
                     }
                 }

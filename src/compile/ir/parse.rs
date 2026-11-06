@@ -1037,6 +1037,22 @@ impl Parser<'_> {
                         turbofish: false,
                         args: self.generic_args()?,
                     });
+                } else if !expr && ["Fn", "FnMut", "FnOnce"].contains(&name.as_str()) && self.eat_punct("(") {
+                    // a closure trait's arguments, `Fn(i16) -> i16`: `Fn<(i16,), Output = i16>`
+                    let mut params = vec![];
+                    while !self.eat_punct(")") {
+                        params.push(self.ty()?);
+                        if !self.eat_punct(",") {
+                            self.punct(")")?;
+                            break;
+                        }
+                    }
+                    let ret = if self.eat_punct("->") { self.ty()? } else { Ty::Unit };
+                    let params = if params.is_empty() { Ty::Unit } else { Ty::Tuple(params) };
+                    args = Some(GenericArgs {
+                        turbofish: false,
+                        args: vec![GenericArg::Ty(params), GenericArg::Binding("Output".into(), ret)],
+                    });
                 }
                 segments.push(Segment::Name { name, args });
             }
@@ -1365,6 +1381,30 @@ mod tests {
             assert_eq!(cast_kind(line), kind);
             assert_eq!(parse_line(line).unwrap().to_string(), line);
         }
+    }
+
+    #[test]
+    fn a_closure_trait_reads_as_its_arguments_and_output_and_prints_back() {
+        let ty = |t: &str| parse_ty(t).unwrap();
+        let Ty::Ref { to, .. } = ty("&dyn core::ops::Fn(i16, bool) -> i16") else {
+            panic!("not a reference")
+        };
+        let Ty::Dyn(of) = *to else { panic!("not a dyn") };
+        let Some(Segment::Name { args: Some(a), .. }) = of.segments.last() else {
+            panic!("no arguments")
+        };
+        assert_eq!(
+            a.args,
+            [
+                GenericArg::Ty(Ty::Tuple(vec![Ty::Int(IntTy::I16), Ty::Bool])),
+                GenericArg::Binding("Output".into(), Ty::Int(IntTy::I16))
+            ]
+        );
+        for t in ["&dyn core::ops::Fn(i16, bool) -> i16", "&dyn FnMut(i16)", "&dyn Fn() -> u8"] {
+            assert_eq!(ty(t).to_string(), t);
+        }
+        let call = "_0 = <dyn Fn(i16) -> i16 as Fn<(i16,)>>::call(move _1, move _3) -> [return: bb2, unwind continue];";
+        assert_eq!(parse_line(call).unwrap().to_string(), call);
     }
 
     #[test]

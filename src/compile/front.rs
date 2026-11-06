@@ -155,9 +155,22 @@ pub fn front_end(
     // function pointers as numbers, and trait objects as enums, with calls through them as calls of what they can
     // be (after the promoteds, which may make them)
     super::indirect::function_pointers(&mut file);
-    let mut objects = super::indirect::trait_objects(&mut file);
+    let mut objects = super::indirect::trait_objects(&mut file, structs);
     // a closure that captures, a struct; one called through its trait, a call of its function
     let capturing = super::closures::closures_as_structs(&mut file);
+    // a trait object's closure holds its struct (one that captures nothing is left, for the enum pass to refuse)
+    for t in objects
+        .iter_mut()
+        .flat_map(|o| &mut o.variants)
+        .flat_map(|v| &mut v.fields)
+    {
+        if let Some(function) = match t {
+            Ty::Other(closure) => capturing.get(closure),
+            _ => None,
+        } {
+            *t = super::closures::env_struct(function);
+        }
+    }
     super::panic_messages::literal_panics(&mut file);
     strings_as_bytes(&mut file);
     byte_strings(&mut file);

@@ -247,6 +247,27 @@ pub enum GenericArg {
     Ty(Ty),
     Lifetime(String),
     Const(u64),
+    /// An associated type given, `Output = i16`: what `Fn(i16) -> i16` says after its arrow, as
+    /// `Fn<(i16,), Output = i16>`.
+    Binding(String, Ty),
+}
+
+impl GenericArgs {
+    /// A closure trait's arguments, `<(i16,), Output = i16>` (which rustc writes `(i16) -> i16`): the parameters' types
+    /// and the result's.
+    pub fn fn_sugar(&self) -> Option<(&[Ty], &Ty)> {
+        match self.args.as_slice() {
+            [GenericArg::Ty(Ty::Tuple(params)), GenericArg::Binding(output, ret)]
+                if !self.turbofish && output == "Output" =>
+            {
+                Some((params, ret))
+            }
+            [GenericArg::Ty(Ty::Unit), GenericArg::Binding(output, ret)] if !self.turbofish && output == "Output" => {
+                Some((&[], ret))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Path {
@@ -867,8 +888,21 @@ impl fmt::Display for Segment {
         match self {
             Segment::Name { name, args } => {
                 f.write_str(name)?;
-                if let Some(a) = args {
-                    write!(f, "{a}")?;
+                match args.as_ref().and_then(|a| a.fn_sugar()) {
+                    // as rustc writes a closure trait's arguments: `Fn(i16) -> i16`, `FnMut(i16)`
+                    Some((params, ret)) => {
+                        f.write_str("(")?;
+                        comma_list(f, params)?;
+                        f.write_str(")")?;
+                        if *ret != Ty::Unit {
+                            write!(f, " -> {ret}")?;
+                        }
+                    }
+                    None => {
+                        if let Some(a) = args {
+                            write!(f, "{a}")?;
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -891,6 +925,7 @@ impl fmt::Display for GenericArg {
             GenericArg::Ty(t) => write!(f, "{t}"),
             GenericArg::Lifetime(l) => f.write_str(l),
             GenericArg::Const(n) => write!(f, "{n}"),
+            GenericArg::Binding(name, t) => write!(f, "{name} = {t}"),
         }
     }
 }

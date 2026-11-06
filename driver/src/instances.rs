@@ -126,12 +126,40 @@ fn wanted<'tcx>(tcx: TyCtxt<'tcx>, instance: mty::Instance<'tcx>) -> bool {
 }
 
 /// Whether an instance is core's `Ord::max` or `Ord::min` (the trait's own, `if other < self { self } else { other
-/// }`) on a C-like enum: its `<` is the enum's, which `operator` reads when it is derived.
+/// }`) on a C-like enum or a struct of plain fields: its `<` is the type's, which `operator` reads when it is derived.
 fn ord_of_c_like<'tcx>(tcx: TyCtxt<'tcx>, instance: mty::Instance<'tcx>) -> bool {
     let def = instance.def_id();
     (tcx.is_diagnostic_item(rustc_span::sym::cmp_ord_max, def)
         || tcx.is_diagnostic_item(rustc_span::sym::cmp_ord_min, def))
-        && c_like(instance.args.type_at(0))
+        && (c_like(instance.args.type_at(0)) || derived_fields(tcx, instance.args.type_at(0)).is_some())
+}
+
+/// The fields' types of a type that is one of the program's structs whose `PartialOrd` is derived, each an integer,
+/// a bool or a char: the derived `partial_cmp` compares the fields in turn, as those compare, and stops at the first
+/// that differ. None for any other type.
+fn derived_fields<'tcx>(tcx: TyCtxt<'tcx>, ty: mty::Ty<'tcx>) -> Option<Vec<mty::Ty<'tcx>>> {
+    let mty::Adt(adt, args) = ty.kind() else { return None };
+    if !adt.is_struct() || !adt.did().is_local() || !args.is_empty() {
+        return None;
+    }
+    let tr = tcx.lang_items().partial_ord_trait()?;
+    let &partial_cmp = tcx
+        .associated_item_def_ids(tr)
+        .iter()
+        .find(|&&d| tcx.item_name(d).as_str() == "partial_cmp")?;
+    let env = mty::TypingEnv::fully_monomorphized();
+    let used = mty::Instance::try_resolve(tcx, env, partial_cmp, tcx.mk_args(&[ty.into(), ty.into()])).ok()??;
+    if !tcx.impl_of_assoc(used.def_id()).is_some_and(|i| tcx.is_automatically_derived(i)) {
+        return None;
+    }
+    let fields: Vec<mty::Ty<'tcx>> = adt
+        .non_enum_variant()
+        .fields
+        .iter()
+        .map(|f| f.ty(tcx, args).skip_normalization())
+        .collect();
+    let plain = |t: &mty::Ty<'_>| t.is_integral() || t.is_bool() || t.is_char();
+    (!fields.is_empty() && fields.iter().all(plain)).then_some(fields)
 }
 
 /// Whether a type is an enum of variants without fields (and at least one), which is its discriminant.
@@ -246,6 +274,9 @@ enum Operator {
     /// A comparison of two references to a C-like enum whose `PartialOrd` (or `PartialEq`) is derived: its
     /// discriminants compared, as the derived `partial_cmp` (or `eq`) compares them.
     Discriminants(mmir::BinOp),
+    /// `PartialOrd::lt` and the rest on two references to a struct whose `PartialOrd` is derived (`derived_fields`):
+    /// its fields compared in turn.
+    Fields(mmir::BinOp),
 }
 
 /// The operation a call is, if it calls one of core's operator traits' methods on integers (comparisons on bools
@@ -274,12 +305,24 @@ fn operator<'tcx>(tcx: TyCtxt<'tcx>, func: &mmir::Operand<'tcx>) -> Option<Opera
     Some(match name.as_str() {
         _ if op != B::Cmp && compare => Operator::Compare(op),
         _ if op != B::Cmp && derived_compare(tcx, callee, args) => Operator::Discriminants(op),
+        _ if ordered && op != B::Cmp && own_method(tcx, callee, args) && derived_fields(tcx, this).is_some() => {
+            Operator::Fields(op)
+        }
         "clone" if Some(tr) == lang.clone_trait() && compare => Operator::Clone,
         "add" if Some(tr) == lang.add_trait() && this.is_integral() && same() => Operator::Arith(B::Add),
         "sub" if Some(tr) == lang.sub_trait() && this.is_integral() && same() => Operator::Arith(B::Sub),
         "mul" if Some(tr) == lang.mul_trait() && this.is_integral() && same() => Operator::Arith(B::Mul),
         _ => return None,
     })
+}
+
+/// Whether a call of one of a trait's methods runs the trait's own (its default), not an impl's.
+fn own_method<'tcx>(tcx: TyCtxt<'tcx>, callee: DefId, args: mty::GenericArgsRef<'tcx>) -> bool {
+    let env = mty::TypingEnv::fully_monomorphized();
+    mty::Instance::try_resolve(tcx, env, callee, args)
+        .ok()
+        .flatten()
+        .is_some_and(|i| i.def_id() == callee)
 }
 
 /// Whether a call of a comparison of `PartialOrd` or `PartialEq` (`callee`, one of the trait's own) on a C-like enum
@@ -370,6 +413,60 @@ fn operation<'tcx>(
                 Rvalue::BinaryOp(bin, Box::new((Operand::Move(x), Operand::Move(y)))),
             ));
             block.terminator_mut().kind = goto;
+        }
+        (Operator::Fields(bin), [a, b]) => {
+            // field by field, as the derived `partial_cmp` stops at the first that differ: `a.k < b.k` is true (for
+            // `lt` and `le`), `b.k < a.k` false, and only the last field is compared with `bin` itself. Each answer
+            // is a constant, which the compiler takes straight to the test it goes to.
+            let (Some(a), Some(b)) = (a.place(), b.place()) else {
+                return false;
+            };
+            let Some(fields) = a
+                .ty(&body.local_decls, tcx)
+                .ty
+                .builtin_deref(true)
+                .and_then(|t| derived_fields(tcx, t))
+            else {
+                return false;
+            };
+            let field = |p: mmir::Place<'tcx>, k: usize| {
+                Operand::Copy(tcx.mk_place_field(tcx.mk_place_deref(p), rustc_abi::FieldIdx::from_usize(k), fields[k]))
+            };
+            let strict = match bin {
+                mmir::BinOp::Lt | mmir::BinOp::Le => mmir::BinOp::Lt,
+                _ => mmir::BinOp::Gt,
+            };
+            let block = |stmts, kind| {
+                mmir::BasicBlockData::new_stmts(stmts, Some(mmir::Terminator { source_info, kind }), false)
+            };
+            let answer = |v: bool| {
+                let c = Operand::Constant(Box::new(mmir::ConstOperand {
+                    span: source_info.span,
+                    user_ty: None,
+                    const_: mmir::Const::from_bool(tcx, v),
+                }));
+                block(vec![assign(dest, Rvalue::Use(c, mmir::WithRetag::Yes))], goto.clone())
+            };
+            let yes = body.basic_blocks_mut().push(answer(true));
+            let no = body.basic_blocks_mut().push(answer(false));
+            // a block of `_t = op(x, y); switchInt(move _t) -> [0: otherwise, else: then]`
+            let test = |body: &mut mmir::Body<'tcx>, op, x, y, then, otherwise| {
+                let t = mmir::LocalDecl::new(tcx.types.bool, source_info.span);
+                let t = mmir::Place::from(body.local_decls.push(t));
+                let switch = mmir::TerminatorKind::SwitchInt {
+                    discr: Operand::Move(t),
+                    targets: mmir::SwitchTargets::new(std::iter::once((0, otherwise)), then),
+                };
+                let stmt = assign(t, Rvalue::BinaryOp(op, Box::new((x, y))));
+                body.basic_blocks_mut().push(block(vec![stmt], switch))
+            };
+            let last = fields.len() - 1;
+            let mut next = test(body, bin, field(a, last), field(b, last), yes, no);
+            for k in (0..last).rev() {
+                let loses = test(body, strict, field(b, k), field(a, k), no, next);
+                next = test(body, strict, field(a, k), field(b, k), yes, loses);
+            }
+            body.basic_blocks_mut()[bb].terminator_mut().kind = mmir::TerminatorKind::Goto { target: next };
         }
         (Operator::Clone, [a]) => {
             let Some(a) = deref(a) else { return false };
