@@ -64,7 +64,7 @@ debug-assertions = true
 [dependencies]
 serde_json = "1"
 # CARDIAC itself: the emulator, decks and listings; and with `tools`, burn, ekg and carc, which run, debug and asm are
-heartburn = { version = "0.1.2", path = "../heartburn-pkg", features = ["tools"] }
+heartburn = { version = "0.1.2", features = ["tools"] }
 
 [workspace]
 members = ["cardiac", "examples", "examples/collatz"]
