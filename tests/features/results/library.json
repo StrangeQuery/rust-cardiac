@@ -1,0 +1,3282 @@
+[
+  {
+    "test": "library/array_binary_search.rs",
+    "chapter": "library",
+    "feature": "`array.binary_search(&x)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "input": "2 5 9 4 9 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5,-3",
+        "cells": 70
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5,-3",
+        "cells": 70
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5,-3",
+        "cells": 70
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5,-3",
+        "cells": 70
+      }
+    }
+  },
+  {
+    "test": "library/array_chunks.rs",
+    "chapter": "library",
+    "feature": "`array.chunks(2)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "Each chunk is a slice in an `Option`, which the compiler doesn't have."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,5",
+        "cells": 74
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,5",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,5",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,5",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "library/array_contains.rs",
+    "chapter": "library",
+    "feature": "`array.contains(&x)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "On an array of known length it is a short loop the compiler already writes for `for i in 0..N`."
+    ],
+    "input": "3 -1 4 1 4 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "library/array_copy_from_slice.rs",
+    "chapter": "library",
+    "feature": "`slice.copy_from_slice(...)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "Subslices with run-time bounds need slices, which the compiler doesn't have."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,4,1,0",
+        "cells": 68
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,4,1,0",
+        "cells": 68
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,4,1,0",
+        "cells": 68
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,4,1,0",
+        "cells": 68
+      }
+    }
+  },
+  {
+    "test": "library/array_eq.rs",
+    "chapter": "library",
+    "feature": "`==` between two arrays",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "Element by element, as `a[0] == b[0] && ...`; at opt-level 2 rustc compares the bytes as a `u64`, which the compiler would have to recognise."
+    ],
+    "input": "3 -1 4 1 3 -1 4 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 50
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "library/array_fill.rs",
+    "chapter": "library",
+    "feature": "`array.fill(x)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "On an array of known length it is a short loop the compiler already writes for `for i in 0..N`."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,7,7",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,7,7",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,7,7",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,7,7",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "library/array_first_last.rs",
+    "chapter": "library",
+    "feature": "`array.first()` and `last()`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "They return an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "library/array_from_fn.rs",
+    "chapter": "library",
+    "feature": "`core::array::from_fn`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,6,7,8",
+        "cells": 74
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,6,7,8",
+        "cells": 85
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,6,7,8",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,6,7,8",
+        "cells": 85
+      }
+    }
+  },
+  {
+    "test": "library/array_get.rs",
+    "chapter": "library",
+    "feature": "`array.get(i)`, which returns an `Option`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "It returns an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "3 -1 4 1 2 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-50",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-50",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-50",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-50",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_all.rs",
+    "chapter": "library",
+    "feature": "`array.iter().all(...)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "The same loop as `for i in 0..N` with an early return."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 89
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 89
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 89
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 89
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_any.rs",
+    "chapter": "library",
+    "feature": "`array.iter().any(...)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "The same loop as `for i in 0..N` with an early return."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 88
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 88
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 88
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 88
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_count.rs",
+    "chapter": "library",
+    "feature": "`array.iter().filter(...).count()`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "A `filter` adaptor over a slice iterator."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_find.rs",
+    "chapter": "library",
+    "feature": "`array.iter().find(...)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "It returns an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 62
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_fold.rs",
+    "chapter": "library",
+    "feature": "`array.iter().fold(...)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "The same loop as `for i in 0..N` with the closure's body inside it."
+    ],
+    "input": "0 3 -1 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "294",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "294",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "294",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "294",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_max.rs",
+    "chapter": "library",
+    "feature": "`array.iter().max()`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "It returns an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 54
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_min.rs",
+    "chapter": "library",
+    "feature": "`array.iter().min()`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "It returns an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_position.rs",
+    "chapter": "library",
+    "feature": "`array.iter().position(...)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "The same loop as `for i in 0..N` with an early return of `i`."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1"
+      }
+    }
+  },
+  {
+    "test": "library/array_iter_sum.rs",
+    "chapter": "library",
+    "feature": "`array.iter().sum()`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "The same loop as `for i in 0..N` adding `t[i]`."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "library/array_map.rs",
+    "chapter": "library",
+    "feature": "`[T; N]::map`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-2,8,2",
+        "cells": 60
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-2,8,2",
+        "cells": 71
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-2,8,2",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-2,8,2",
+        "cells": 71
+      }
+    }
+  },
+  {
+    "test": "library/array_reverse.rs",
+    "chapter": "library",
+    "feature": "`array.reverse()`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "On an array of known length it is a short loop of swaps."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,4,-1,3",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,4,-1,3",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,4,-1,3",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,4,-1,3",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "library/array_rotate_left.rs",
+    "chapter": "library",
+    "feature": "`array.rotate_left(k)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "input": "3 -1 4 1 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,4,1,3",
+        "cells": 88
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,4,1,3",
+        "cells": 88
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,4,1,3",
+        "cells": 88
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,4,1,3",
+        "cells": 88
+      }
+    }
+  },
+  {
+    "test": "library/array_sort_unstable.rs",
+    "chapter": "library",
+    "feature": "`array.sort_unstable()` on four elements",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "core's sort is far bigger than 96 cells would allow; a small insertion sort written out fits."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,1,3,4",
+        "cells": 80
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,1,3,4",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,1,3,4",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,1,3,4",
+        "cells": 80
+      }
+    }
+  },
+  {
+    "test": "library/array_split_at.rs",
+    "chapter": "library",
+    "feature": "`slice.split_at(k)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "It returns two slices, which the compiler doesn't have."
+    ],
+    "input": "3 -1 4 1 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 47
+      }
+    }
+  },
+  {
+    "test": "library/array_swap.rs",
+    "chapter": "library",
+    "feature": "`array.swap(i, j)`",
+    "section": "Arrays and slices",
+    "disposition": "easy",
+    "notes": [
+      "On an array it is two indexed reads and two writes, with bounds checks."
+    ],
+    "input": "3 -1 4 1 0 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1,3,1",
+        "cells": 74
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1,3,1",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1,3,1",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1,3,1",
+        "cells": 74
+      }
+    }
+  },
+  {
+    "test": "library/array_windows.rs",
+    "chapter": "library",
+    "feature": "`array.windows(2)`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "Each window is a slice in an `Option`, which the compiler doesn't have."
+    ],
+    "input": "3 -1 4 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-4,5,-3",
+        "cells": 62
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-4,5,-3",
+        "cells": 73
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-4,5,-3",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-4,5,-3",
+        "cells": 73
+      }
+    }
+  },
+  {
+    "test": "library/bool_then.rs",
+    "chapter": "library",
+    "feature": "`bool::then`",
+    "section": "bool and char",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it with a closure; it is `if b { Some(f()) } else { None }`."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,0",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,0",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "library/bool_then_some.rs",
+    "chapter": "library",
+    "feature": "`bool::then_some`",
+    "section": "bool and char",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it; it is `if b { Some(x) } else { None }`."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "library/char_compare.rs",
+    "chapter": "library",
+    "feature": "`==` and `<` on `char`",
+    "section": "bool and char",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no `char` type yet; a code point is 32 bits, but ASCII fits on a card."
+    ],
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 52
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "library/char_from_digit.rs",
+    "chapter": "library",
+    "feature": "`char::from_digit`",
+    "section": "bool and char",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no `char` type yet, and `from_digit` takes a `u32`."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "55",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "55",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "55",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "55",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "library/char_is_ascii_digit.rs",
+    "chapter": "library",
+    "feature": "`char::is_ascii_digit`",
+    "section": "bool and char",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no `char` type yet; a code point is 32 bits, but ASCII fits on a card."
+    ],
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "library/char_to_digit.rs",
+    "chapter": "library",
+    "feature": "`char::to_digit(10)`",
+    "section": "bool and char",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no `char` type yet, and `to_digit` returns an `Option<u32>`."
+    ],
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "library/cmp_bool_clamp.rs",
+    "chapter": "library",
+    "feature": "`Ord::clamp` on `bool`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls `Ord::clamp` on `bool`, as it calls `max` and `min`."
+    ],
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "library/cmp_bool_max_min.rs",
+    "chapter": "library",
+    "feature": "`Ord::max` and `min` on `bool`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls `Ord::max` on `bool`; it is `a || b` and `a && b`."
+    ],
+    "input": "1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "library/cmp_match.rs",
+    "chapter": "library",
+    "feature": "`match a.cmp(&b)` on `Ordering`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "An `Ordering` is -1, 0 or 1 (an `i8`), and rustc's three-way compare is two tests, as `x == k` already is."
+    ],
+    "input": "1 2 2 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "library/cmp_ordering_as_i16.rs",
+    "chapter": "library",
+    "feature": "`a.cmp(&b) as i16`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "An `Ordering` is -1, 0 or 1 (an `i8`), and rustc's three-way compare is two tests, as `x == k` already is."
+    ],
+    "input": "1 2 2 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "library/cmp_ordering_is_lt.rs",
+    "chapter": "library",
+    "feature": "`Ordering::is_lt` and `is_ge`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "An `Ordering` is -1, 0 or 1 (an `i8`), and rustc's three-way compare is two tests, as `x == k` already is."
+    ],
+    "input": "1 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "library/cmp_ordering_then.rs",
+    "chapter": "library",
+    "feature": "`Ordering::then` (compare by two keys)",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "An `Ordering` is -1, 0 or 1 (an `i8`); `then` is a test of the first for zero."
+    ],
+    "input": "1 5 1 3 1 5 2 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 52
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "library/cmp_partial_cmp.rs",
+    "chapter": "library",
+    "feature": "`PartialOrd::partial_cmp`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "easy",
+    "notes": [
+      "An `Option<Ordering>`: once `Ordering` is supported it is a small enum like any other."
+    ],
+    "input": "1 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "library/cmp_reverse.rs",
+    "chapter": "library",
+    "feature": "`core::cmp::Reverse`",
+    "section": "Comparison (cmp, Ordering)",
+    "disposition": "demand",
+    "notes": [
+      "`Reverse` is a one-field struct from core whose comparisons swap their operands."
+    ],
+    "input": "1 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,2",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,2",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,2",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,2",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "library/hint_assert_unchecked.rs",
+    "chapter": "library",
+    "feature": "`core::hint::assert_unchecked`",
+    "section": "Hints (core::hint)",
+    "input": "2 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,9",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,9",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,9",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,9",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "library/hint_black_box.rs",
+    "chapter": "library",
+    "feature": "`core::hint::black_box`",
+    "section": "Hints (core::hint)",
+    "disposition": "easy",
+    "notes": [
+      "On CARDIAC it can simply be the value itself."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "library/hint_unreachable_unchecked.rs",
+    "chapter": "library",
+    "feature": "`core::hint::unreachable_unchecked`",
+    "section": "Hints (core::hint)",
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "library/iter_chain.rs",
+    "chapter": "library",
+    "feature": "`(a..b).chain(c..d)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "1 3 10 12",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 49
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 49
+      }
+    }
+  },
+  {
+    "test": "library/iter_enumerate_fold.rs",
+    "chapter": "library",
+    "feature": "`t.iter().enumerate()` in an adaptor chain",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "5 7 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "library/iter_filter.rs",
+    "chapter": "library",
+    "feature": "`(a..b).filter(...).sum()`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "library/iter_map_max.rs",
+    "chapter": "library",
+    "feature": "`.map(...).max()` and `.min()`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "3 -1 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,6"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,6"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,6"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,6"
+      }
+    }
+  },
+  {
+    "test": "library/iter_once.rs",
+    "chapter": "library",
+    "feature": "`core::iter::once(x)` chained",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "100 1 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "106",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "106",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "106",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "106",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "library/iter_range_count.rs",
+    "chapter": "library",
+    "feature": "`(a..b).count()`",
+    "section": "Iterators",
+    "disposition": "easy",
+    "notes": [
+      "On a range it is `b - a` (or 0)."
+    ],
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 17
+      }
+    }
+  },
+  {
+    "test": "library/iter_range_fold.rs",
+    "chapter": "library",
+    "feature": "`(a..b).fold(...)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "29",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "29",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "29",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "29",
+        "cells": 47
+      }
+    }
+  },
+  {
+    "test": "library/iter_range_last.rs",
+    "chapter": "library",
+    "feature": "`(a..b).last()`",
+    "section": "Iterators",
+    "disposition": "easy",
+    "notes": [
+      "On a range it is `b - 1`, or `None` when the range is empty."
+    ],
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "library/iter_range_map_sum.rs",
+    "chapter": "library",
+    "feature": "`(a..b).map(...).sum()`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "library/iter_range_nth.rs",
+    "chapter": "library",
+    "feature": "`(a..b).nth(n)`",
+    "section": "Iterators",
+    "disposition": "easy",
+    "notes": [
+      "On a range it is `a + n`, or `None` past the end."
+    ],
+    "input": "2 6 1 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "library/iter_repeat.rs",
+    "chapter": "library",
+    "feature": "`core::iter::repeat(x).take(n)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "21",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "21",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "21",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "21",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "library/iter_rev_fold.rs",
+    "chapter": "library",
+    "feature": "`t.iter().rev().fold(...)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "321",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "321",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "321",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "321",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "library/iter_skip.rs",
+    "chapter": "library",
+    "feature": "`(a..b).skip(n)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "2 6 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 40
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "library/iter_step_by_sum.rs",
+    "chapter": "library",
+    "feature": "`(a..b).step_by(k).sum()`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "0 10 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "library/iter_successors.rs",
+    "chapter": "library",
+    "feature": "`core::iter::successors`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "library/iter_take.rs",
+    "chapter": "library",
+    "feature": "`(a..b).take(n)`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "2 9 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "library/iter_zip.rs",
+    "chapter": "library",
+    "feature": "`t.iter().zip(u.iter())`",
+    "section": "Iterators",
+    "disposition": "demand",
+    "input": "1 2 3 10 20 30",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "66",
+        "cells": 59
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "66",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "66",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "66",
+        "cells": 60
+      }
+    }
+  },
+  {
+    "test": "library/mem_replace.rs",
+    "chapter": "library",
+    "feature": "`core::mem::replace`",
+    "section": "Memory (core::mem)",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it; on a scalar it is a read and a write."
+    ],
+    "input": "3 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 12
+      }
+    }
+  },
+  {
+    "test": "library/mem_swap.rs",
+    "chapter": "library",
+    "feature": "`core::mem::swap`",
+    "section": "Memory (core::mem)",
+    "disposition": "easy",
+    "notes": [
+      "On scalars it is two reads and two writes; rustc calls it at opt-level 1 and uses an intrinsic at opt-level 2."
+    ],
+    "input": "3 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "library/mem_take.rs",
+    "chapter": "library",
+    "feature": "`core::mem::take`",
+    "section": "Memory (core::mem)",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it; on a scalar it is a read and a write of 0."
+    ],
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 11
+      }
+    }
+  },
+  {
+    "test": "library/option_and.rs",
+    "chapter": "library",
+    "feature": "`Option::and`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it rather than inlining it, and the compiler doesn't yet write out that call."
+    ],
+    "input": "1 2 1 -2 -1 2 -1 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,0,0,0",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,0,0,0",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,0,0,0",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,0,0,0",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "library/option_and_then.rs",
+    "chapter": "library",
+    "feature": "`Option::and_then`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 50 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-1,-1",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-1,-1",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-1,-1",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-1,-1",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "library/option_as_mut.rs",
+    "chapter": "library",
+    "feature": "`Option::as_mut`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "It makes an `Option<&mut i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "library/option_as_ref.rs",
+    "chapter": "library",
+    "feature": "`Option::as_ref`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "It makes an `Option<&i16>`, and an enum's fields must be scalars for now."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "library/option_cloned.rs",
+    "chapter": "library",
+    "feature": "`Option<&i16>::cloned`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "An `Option<&i16>` holds a reference, and an enum's fields must be scalars for now."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "library/option_copied.rs",
+    "chapter": "library",
+    "feature": "`Option<&i16>::copied`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "An `Option<&i16>` holds a reference, and an enum's fields must be scalars for now."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "library/option_eq.rs",
+    "chapter": "library",
+    "feature": "`==` between two `Option<i16>`",
+    "section": "Option",
+    "input": "1 1 1 2 1 -2 -1 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 60
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 60
+      }
+    }
+  },
+  {
+    "test": "library/option_expect.rs",
+    "chapter": "library",
+    "feature": "`Option::expect`",
+    "section": "Option",
+    "input": "5 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "library/option_filter.rs",
+    "chapter": "library",
+    "feature": "`Option::filter`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls it at both opt-levels; the predicate takes a reference to the payload, which is a scalar."
+    ],
+    "input": "5 2 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,0",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,0",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,0",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,0",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "library/option_get_or_insert.rs",
+    "chapter": "library",
+    "feature": "`Option::get_or_insert`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "It returns a `&mut` into the `Option`, and at opt-level 2 it goes through a closure inside core."
+    ],
+    "input": "8 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "library/option_insert.rs",
+    "chapter": "library",
+    "feature": "`Option::insert`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it on a `&mut Option`, which the compiler doesn't yet write out."
+    ],
+    "input": "-1 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "library/option_is_some.rs",
+    "chapter": "library",
+    "feature": "`Option::is_some` and `is_none`",
+    "section": "Option",
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "library/option_is_some_and.rs",
+    "chapter": "library",
+    "feature": "`Option::is_some_and`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "library/option_lt.rs",
+    "chapter": "library",
+    "feature": "`<` between two `Option<i16>` (`None` is least)",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "It goes through `Ordering` (an `i8`) at opt-level 2 and a `PartialOrd::lt` call at opt-level 1."
+    ],
+    "input": "1 2 2 1 1 -2 -1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "library/option_map.rs",
+    "chapter": "library",
+    "feature": "`Option::map` with a closure that captures nothing",
+    "section": "Option",
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "library/option_map_capture.rs",
+    "chapter": "library",
+    "feature": "`Option::map` with a closure that captures a variable",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "The closure captures a variable, which the compiler can't yet pass where rustc calls `map` (opt-level 1)."
+    ],
+    "input": "10 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,0",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "library/option_map_or.rs",
+    "chapter": "library",
+    "feature": "`Option::map_or`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls it at both opt-levels; it is `map` and then `unwrap_or`, both of which work."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 49
+      }
+    }
+  },
+  {
+    "test": "library/option_map_or_else.rs",
+    "chapter": "library",
+    "feature": "`Option::map_or_else`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls it at both opt-levels; it is `map` and then `unwrap_or_else`."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-9",
+        "cells": 55
+      }
+    }
+  },
+  {
+    "test": "library/option_ok_or.rs",
+    "chapter": "library",
+    "feature": "`Option::ok_or`",
+    "section": "Option",
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "library/option_ok_or_else.rs",
+    "chapter": "library",
+    "feature": "`Option::ok_or_else`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-6",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "library/option_or.rs",
+    "chapter": "library",
+    "feature": "`Option::or`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it rather than inlining it, and the compiler doesn't yet write out that call."
+    ],
+    "input": "1 2 1 -2 -1 2 -1 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,2,0",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,2,0",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,2,0",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,2,0",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "library/option_or_else.rs",
+    "chapter": "library",
+    "feature": "`Option::or_else`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls it at both opt-levels, and the compiler doesn't yet write out that call."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 40
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "library/option_replace.rs",
+    "chapter": "library",
+    "feature": "`Option::replace`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it on a `&mut Option`, which the compiler doesn't yet write out."
+    ],
+    "input": "8 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,8,0,8",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,8,0,8",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,8,0,8",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,8,0,8",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "library/option_take.rs",
+    "chapter": "library",
+    "feature": "`Option::take`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it on a `&mut Option`, which the compiler doesn't yet write out."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,1,0,1",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,1,0,1",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,1,0,1",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,1,0,1",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "library/option_unwrap.rs",
+    "chapter": "library",
+    "feature": "`Option::unwrap`",
+    "section": "Option",
+    "input": "5 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "library/option_unwrap_or.rs",
+    "chapter": "library",
+    "feature": "`Option::unwrap_or`",
+    "section": "Option",
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "library/option_unwrap_or_default.rs",
+    "chapter": "library",
+    "feature": "`Option::unwrap_or_default`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it; it is `unwrap_or(0)`."
+    ],
+    "input": "5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "library/option_unwrap_or_else.rs",
+    "chapter": "library",
+    "feature": "`Option::unwrap_or_else` with a capturing closure",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "The closure captures a variable, which the compiler can't yet pass where rustc calls the method (opt-level 1)."
+    ],
+    "input": "9 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "library/option_xor.rs",
+    "chapter": "library",
+    "feature": "`Option::xor`",
+    "section": "Option",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it rather than inlining it, and the compiler doesn't yet write out that call."
+    ],
+    "input": "1 2 1 -2 -1 2 -1 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,0",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,0",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "library/option_zip.rs",
+    "chapter": "library",
+    "feature": "`Option::zip`",
+    "section": "Option",
+    "disposition": "demand",
+    "notes": [
+      "The payload of the result is a tuple, and an enum's fields must be scalars for now."
+    ],
+    "input": "1 2 1 -2 -1 2 -1 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1,-1,-1",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1,-1,-1",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1,-1,-1",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1,-1,-1",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "library/result_and_then.rs",
+    "chapter": "library",
+    "feature": "`Result::and_then`",
+    "section": "Result",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 50 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-99,-3",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-99,-3",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-99,-3",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-99,-3",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "library/result_expect.rs",
+    "chapter": "library",
+    "feature": "`Result::expect`",
+    "section": "Result",
+    "input": "5 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "library/result_is_ok.rs",
+    "chapter": "library",
+    "feature": "`Result::is_ok` and `is_err`",
+    "section": "Result",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,1",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "library/result_map.rs",
+    "chapter": "library",
+    "feature": "`Result::map`",
+    "section": "Result",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0",
+        "cells": 49
+      }
+    }
+  },
+  {
+    "test": "library/result_map_err.rs",
+    "chapter": "library",
+    "feature": "`Result::map_err`",
+    "section": "Result",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,30",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,30",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,30",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,30",
+        "cells": 56
+      }
+    }
+  },
+  {
+    "test": "library/result_ok_err.rs",
+    "chapter": "library",
+    "feature": "`Result::ok` and `err`",
+    "section": "Result",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,0,3",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,0,3",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,0,3",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,0,3",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "library/result_question_from.rs",
+    "chapter": "library",
+    "feature": "`?` converting the error with `From`",
+    "section": "Result",
+    "notes": [
+      "A wrong answer at opt-level 1: the error comes out unconverted, as if `From::from` weren't called (-3 where Rust prints -30)."
+    ],
+    "input": "-3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-30",
+        "cells": 58
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-30",
+        "cells": 90
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-30",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-30",
+        "cells": 90
+      }
+    }
+  },
+  {
+    "test": "library/result_unwrap_or.rs",
+    "chapter": "library",
+    "feature": "`Result::unwrap_or`",
+    "section": "Result",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-7",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "library/result_unwrap_or_else.rs",
+    "chapter": "library",
+    "feature": "`Result::unwrap_or_else`",
+    "section": "Result",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out."
+    ],
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,300",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,300",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,300",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,300",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "library/slice_is_empty.rs",
+    "chapter": "library",
+    "feature": "`slice.is_empty()`",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "A slice is an address and a length; the compiler has arrays of known length only."
+    ],
+    "input": "0 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "library/slice_len.rs",
+    "chapter": "library",
+    "feature": "`slice.len()` on a slice of run-time length",
+    "section": "Arrays and slices",
+    "disposition": "demand",
+    "notes": [
+      "A slice is an address and a length; the compiler has arrays of known length only."
+    ],
+    "input": "3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 21
+      }
+    }
+  }
+]

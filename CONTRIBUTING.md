@@ -46,9 +46,20 @@ Run these before you send a change. All of them must pass.
     cargo test              # the unit tests
     sh test_compiler.sh     # every program in tests/programs, at opt-level 1 and 2: each line MATCH or DIFFER
     sh test_examples.sh     # the example programs, with their inputs: each line SAME or DIFFER
+    sh test_features.sh     # the feature tests in tests/features: one program per piece of Rust, in four settings
 
 `test_compiler.sh` also checks the programs the compiler must refuse, and that each one is refused with the right
 message. It stops at the first DIFFER.
+
+`test_features.sh` runs one small program for each piece of Rust, in the order of the Rust Reference, at opt-level
+1 and 2 with overflow checks on and off. It rewrites `tests/features/SUPPORT.md`, the table of what compiles, from
+what happened, and the results beside it. Your diff then shows which rows changed. To check a change without
+touching the committed results, write them somewhere else and compare:
+
+    SUPPORT_OUT=/tmp/after sh test_features.sh
+    sh test_features.sh --compare tests/features /tmp/after    # each row that changed, better or WORSE
+
+No row may get worse. `sh test_features.sh NAME` runs only the rows whose path contains NAME.
 
 The listings in `tests/programs/*.asm` and the decks beside the examples are checked in, so a change to the
 compiler shows up as a change to them in your diff. That diff isn't a failure. We judge a change by the output and
@@ -76,6 +87,9 @@ Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR
   --json` prints (`explain --json`, its old name, still works).
 - `driver/src/` turns rustc's MIR into the compiler's IR, and holds the oracle that `ir_check.sh` runs.
 - `cardiac/` is the crate programs depend on: `inp()`, `out()` and the rest of the built-ins.
+- `tests/features/` is the feature tests and their harness. `tests/features/SUPPORT.md` is the table they make,
+  and `NEVER.md` beside it explains the rows CARDIAC can never support. The top of `tests/features/src/main.rs`
+  says how a row is written.
 - `docs/RUST.md` lists the Rust that compiles for CARDIAC, the Rust that compiles but costs more than it looks, and
   the Rust that's refused.
 - `docs/DECISIONS.md` is the decision log: what we chose, why, and what it cost, newest first.
@@ -87,7 +101,8 @@ Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR
    CARDIAC is the most important kind of bug, and we fix those before we work on making programs smaller.
 2. **Fork the repository and make a branch.** Format with `cargo fmt`. `rustfmt.toml` sets lines of 120 characters.
 3. **Add a test.** For a bug, put a program in `tests/programs` that fails before your change and passes after it.
-   For a new piece of Rust that now compiles, do the same, and add it to `docs/RUST.md`.
+   For a new piece of Rust that now compiles, do the same, add it to `docs/RUST.md`, and add a row for it in
+   `tests/features` if it doesn't have one.
 4. **Run the tests above.** All of them must pass. Run `fuzz.sh` too if you changed code generation or a pass.
 5. **Write the decision down.** If your change decides something, such as how a type is laid out or what a pass
    may assume, add an entry to the top of `docs/DECISIONS.md`. Copy the shape of the entries already there: the
@@ -103,5 +118,6 @@ rest of the repository.
 
 ## Talking to us
 
-Questions, ideas and half-finished thoughts are welcome on [Discord](https://discord.gg/VsqKEdBYzJ). Bugs and
-proposals go in [the issues](https://github.com/StrangeQuery/rust-cardiac/issues).
+Questions, ideas and half-finished thoughts are welcome on [Discord](https://discord.gg/VsqKEdBYzJ). Email bug
+reports to [bug@strangequery.com](mailto:bug@strangequery.com). Proposals go in
+[the issues](https://github.com/StrangeQuery/rust-cardiac/issues).

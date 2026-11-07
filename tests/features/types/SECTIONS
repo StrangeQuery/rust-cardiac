@@ -1,0 +1,21 @@
+Boolean type
+Integer types
+Machine-dependent integer types
+Integer literals
+Floating-point types
+Textual types
+Never type
+Tuple types
+Array types
+Slice types
+Struct types
+Enumerated types
+Union types
+Function item types
+Closure types
+Pointer types
+Function pointer types
+Trait object types
+Impl trait type
+Type aliases
+Type layout

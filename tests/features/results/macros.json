@@ -1,0 +1,1189 @@
+[
+  {
+    "test": "macros/assert_eq_message.rs",
+    "chapter": "macros",
+    "feature": "`assert_eq!(a, b, \"message\")`",
+    "section": "Assertions",
+    "disposition": "easy",
+    "notes": [
+      "The message is a literal, which could go in the panic map as `unwrap()`'s and `expect()`'s messages do."
+    ],
+    "input": "7 7 7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "macros/assert_eq_rows.rs",
+    "chapter": "macros",
+    "feature": "`assert_eq!(a, b)`: passing, then failing",
+    "section": "Assertions",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls `core::panicking::assert_failed` with both values; the compiler could treat it as the panic of `assert!(a == b)`."
+    ],
+    "input": "7 7 7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "macros/assert_format.rs",
+    "chapter": "macros",
+    "feature": "`assert!(cond, \"{}\", x)` with a formatted message",
+    "section": "Assertions",
+    "disposition": "demand",
+    "notes": [
+      "The check could keep the message's literal text and leave out the values; formatting the values themselves is never."
+    ],
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/assert_message.rs",
+    "chapter": "macros",
+    "feature": "`assert!(cond, \"message\")`",
+    "section": "Assertions",
+    "disposition": "easy",
+    "notes": [
+      "The message is a literal, which could go in the panic map as `unwrap()`'s and `expect()`'s messages do."
+    ],
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/assert_ne_rows.rs",
+    "chapter": "macros",
+    "feature": "`assert_ne!(a, b)`: passing, then failing",
+    "section": "Assertions",
+    "disposition": "easy",
+    "notes": [
+      "rustc calls `core::panicking::assert_failed` with both values; the compiler could treat it as the panic of `assert!(a == b)`."
+    ],
+    "input": "7 3 7 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "macros/assert_pass_fail.rs",
+    "chapter": "macros",
+    "feature": "`assert!(cond)`: passing, then failing",
+    "section": "Assertions",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/cfg_macro.rs",
+    "chapter": "macros",
+    "feature": "`cfg!(...)` as a condition",
+    "section": "Other core macros",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,8",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,8",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,8",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "macros/compile_error_macro.rs",
+    "chapter": "macros",
+    "feature": "`compile_error!` stops the build (natively too)",
+    "section": "Other core macros",
+    "disposition": "never",
+    "notes": [
+      "This row can't build anywhere: it shows rustc rejecting the program before the compiler sees it."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "error: this row is meant not to build"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "error: this row is meant not to build"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "error: this row is meant not to build"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "error: this row is meant not to build"
+      }
+    }
+  },
+  {
+    "test": "macros/concat_stringify.rs",
+    "chapter": "macros",
+    "feature": "`concat!` and `stringify!`, measured with `.len()`",
+    "section": "Other core macros",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no string data yet; the length of a literal is a constant it could fold."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,5",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,5",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,5",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,5",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "macros/debug_assert.rs",
+    "chapter": "macros",
+    "feature": "`debug_assert!(cond)`",
+    "section": "Assertions",
+    "input": "7 -3",
+    "debug_assertions": "on",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/debug_assert_eq.rs",
+    "chapter": "macros",
+    "feature": "`debug_assert_eq!` and `debug_assert_ne!`",
+    "section": "Assertions",
+    "input": "7 7 7 3",
+    "debug_assertions": "on",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "macros/env_option.rs",
+    "chapter": "macros",
+    "feature": "`option_env!` of an unset variable",
+    "section": "Other core macros",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 4
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 4
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 4
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 4
+      }
+    }
+  },
+  {
+    "test": "macros/file_macro.rs",
+    "chapter": "macros",
+    "feature": "`file!()` and `module_path!()`, measured with `.len()`",
+    "section": "Other core macros",
+    "disposition": "demand",
+    "notes": [
+      "The compiler has no string data yet; the length of a literal is a constant it could fold."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "17,1",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "17,1",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "17,1",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "17,1",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "macros/format_args_write.rs",
+    "chapter": "macros",
+    "feature": "`core::write!` and `format_args!` into a `core::fmt::Write`",
+    "section": "Formatting macros",
+    "disposition": "never",
+    "notes": [
+      "String formatting: the `fmt` machinery is dynamic dispatch over trait objects and digit loops in `u32`."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      }
+    }
+  },
+  {
+    "test": "macros/include_macro.rs",
+    "chapter": "macros",
+    "feature": "`include!` of a Rust expression",
+    "section": "Other core macros",
+    "input": "7",
+    "files": [
+      "include_value.txt"
+    ],
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "macros/line_column.rs",
+    "chapter": "macros",
+    "feature": "`line!()` and `column!()`",
+    "section": "Other core macros",
+    "notes": [
+      "The row prints the distance between two `line!()`s, since the harness's native copy has a longer prelude."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 23
+      }
+    }
+  },
+  {
+    "test": "macros/matches_guard.rs",
+    "chapter": "macros",
+    "feature": "`matches!(x, pattern if guard)` on an `Option`",
+    "section": "Other core macros",
+    "input": "7 -3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "macros/matches_macro.rs",
+    "chapter": "macros",
+    "feature": "`matches!(x, pattern)`",
+    "section": "Other core macros",
+    "input": "3 12 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_block_tt.rs",
+    "chapter": "macros",
+    "feature": "a macro taking a `$b:block` and repeating it",
+    "section": "Macros by example",
+    "input": "1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_hygiene.rs",
+    "chapter": "macros",
+    "feature": "hygiene: a macro's own `let` doesn't capture the caller's name",
+    "section": "Macros by example",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "24,10",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "24,10",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "24,10",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "24,10",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_ident_item.rs",
+    "chapter": "macros",
+    "feature": "a macro that defines a function from an `$name:ident`",
+    "section": "Macros by example",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,107",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,107",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,107",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,107",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_recursive.rs",
+    "chapter": "macros",
+    "feature": "a recursive macro (counting its arguments)",
+    "section": "Macros by example",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_recursive_max.rs",
+    "chapter": "macros",
+    "feature": "a recursive macro (the largest of its arguments)",
+    "section": "Macros by example",
+    "input": "7 30 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "30",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "30",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "30",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "30",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_repeat.rs",
+    "chapter": "macros",
+    "feature": "`macro_rules!` with a repetition `$($e:expr),*`",
+    "section": "Macros by example",
+    "input": "7 3 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,7,0",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,7,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,7,0",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,7,0",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_repeat_stmts.rs",
+    "chapter": "macros",
+    "feature": "a repetition expanding to one statement each",
+    "section": "Macros by example",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3,10",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3,10",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3,10",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3,10",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_rules.rs",
+    "chapter": "macros",
+    "feature": "`macro_rules!` with several rules, chosen by the tokens",
+    "section": "Macros by example",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_simple.rs",
+    "chapter": "macros",
+    "feature": "`macro_rules!` with one rule and an `$e:expr`",
+    "section": "Macros by example",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "macros/mbe_stmts.rs",
+    "chapter": "macros",
+    "feature": "a macro that expands to statements",
+    "section": "Macros by example",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3",
+        "cells": 7
+      }
+    }
+  },
+  {
+    "test": "macros/panic_bare.rs",
+    "chapter": "macros",
+    "feature": "`panic!()`",
+    "section": "Panics",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "macros/panic_format.rs",
+    "chapter": "macros",
+    "feature": "`panic!(\"{}\", x)` with a formatted message",
+    "section": "Panics",
+    "disposition": "demand",
+    "notes": [
+      "The check could keep the message's literal text and leave out the values; formatting the values themselves is never."
+    ],
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "macros/panic_message.rs",
+    "chapter": "macros",
+    "feature": "`panic!(\"message\")`",
+    "section": "Panics",
+    "disposition": "easy",
+    "notes": [
+      "The message is a literal, which could go in the panic map as `unwrap()`'s and `expect()`'s messages do."
+    ],
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "macros/std_format_vec.rs",
+    "chapter": "macros",
+    "feature": "`format!` and `vec!`, with `extern crate std`",
+    "section": "Standard library macros",
+    "disposition": "never",
+    "notes": [
+      "Both need the heap."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0035: format! and {} formatting aren't supported on CARDIAC, which has no text: print numbers with out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      }
+    }
+  },
+  {
+    "test": "macros/std_println.rs",
+    "chapter": "macros",
+    "feature": "`println!`, with `extern crate std`",
+    "section": "Standard library macros",
+    "disposition": "never",
+    "notes": [
+      "Needs `std` and string formatting; `out()` prints a value."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0034: println! and print! aren't supported on CARDIAC, which prints only numbers: use out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0034: println! and print! aren't supported on CARDIAC, which prints only numbers: use out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0034: println! and print! aren't supported on CARDIAC, which prints only numbers: use out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0034: println! and print! aren't supported on CARDIAC, which prints only numbers: use out() (enum core::fmt::rt::ArgumentType: field 1 of Placeholder is : the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now)"
+      }
+    }
+  },
+  {
+    "test": "macros/todo_macro.rs",
+    "chapter": "macros",
+    "feature": "`todo!()`",
+    "section": "Panics",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "macros/unimplemented_bare.rs",
+    "chapter": "macros",
+    "feature": "`unimplemented!()`",
+    "section": "Panics",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/unimplemented_message.rs",
+    "chapter": "macros",
+    "feature": "`unimplemented!(\"message\")`",
+    "section": "Panics",
+    "disposition": "easy",
+    "notes": [
+      "The message is a literal, which could go in the panic map as `unwrap()`'s and `expect()`'s messages do."
+    ],
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "macros/unreachable_bare.rs",
+    "chapter": "macros",
+    "feature": "`unreachable!()`",
+    "section": "Panics",
+    "input": "1 2 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,-999",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,-999",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,-999",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,-999",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "macros/unreachable_format.rs",
+    "chapter": "macros",
+    "feature": "`unreachable!(\"{}\", x)` with a formatted message",
+    "section": "Panics",
+    "disposition": "demand",
+    "notes": [
+      "The check could keep the message's literal text and leave out the values; formatting the values themselves is never."
+    ],
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "macros/unreachable_message.rs",
+    "chapter": "macros",
+    "feature": "`unreachable!(\"message\")`",
+    "section": "Panics",
+    "disposition": "easy",
+    "notes": [
+      "The message is a literal, which could go in the panic map as `unwrap()`'s and `expect()`'s messages do."
+    ],
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-999",
+        "cells": 19
+      }
+    }
+  }
+]

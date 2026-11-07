@@ -1,0 +1,8 @@
+Option
+Result
+Arrays and slices
+Iterators
+Comparison (cmp, Ordering)
+Memory (core::mem)
+bool and char
+Hints (core::hint)

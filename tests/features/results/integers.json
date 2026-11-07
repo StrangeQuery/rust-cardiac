@@ -1,0 +1,3127 @@
+[
+  {
+    "test": "integers/abs_diff_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.abs_diff(b)` on `i16`",
+    "section": "Sign and absolute value",
+    "disposition": "easy",
+    "notes": [
+      "It returns a `u16`, which the compiler lacks; on a card the answer is a subtraction and a compare."
+    ],
+    "input": "7 3 3 7 -500 499 -4 -9 0 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,999,5,5",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,999,5,5",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,999,5,5",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,999,5,5",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.abs_diff(b)` on `u8`",
+    "section": "Sign and absolute value",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 2 rustc does the subtraction in `u32`, which the compiler lacks."
+    ],
+    "input": "1 2 3 4 5 6 7 7 6 1 4 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,93,54,0,253,93,255",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,93,54,0,253,93,255",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,93,54,0,253,93,255",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,93,54,0,253,93,255",
+        "cells": 59
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8_add.rs",
+    "chapter": "integers",
+    "feature": "two `u8::abs_diff`s in one function, added with `+` (a panic past 255 with overflow checks on)",
+    "section": "Sign and absolute value",
+    "input": "0 100 50 60 0 200 255 0 10 20 30 30 255 0 0 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 73
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "110,-999",
+        "cells": 75
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 83
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "110,-999",
+        "cells": 80
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8_const.rs",
+    "chapter": "integers",
+    "feature": "`u8::abs_diff` against constants, and with a u8 array element",
+    "section": "Sign and absolute value",
+    "input": "0 1 128 254 255 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,0,0,254,1,127,127,128,127,1,254,254,0,255,127",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,0,0,254,1,127,127,128,127,1,254,254,0,255,127",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,0,0,254,1,127,127,128,127,1,254,254,0,255,127",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,0,0,254,1,127,127,128,127,1,254,254,0,255,127",
+        "cells": 78
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8_ends.rs",
+    "chapter": "integers",
+    "feature": "`a.abs_diff(b)` on `u8`, both orders of every end, through casts of negative cards",
+    "section": "Sign and absolute value",
+    "input": "0 255 255 0 255 255 0 0 -1 0 0 -1 1 -1 -128 127 127 -128 200 7 7 200 999 999",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,255,0,0,255,255,254,1,1,193,193",
+        "cells": 40
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,255,0,0,255,255,254,1,1,193,193",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,255,0,0,255,255,254,1,1,193,193",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,255,0,0,255,255,254,1,1,193,193",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8_loop.rs",
+    "chapter": "integers",
+    "feature": "`u8::abs_diff` of neighbours in a loop, summed in an i16",
+    "section": "Sign and absolute value",
+    "input": "0 255 3 250 7 9 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,252,247,243,2,999",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,252,247,243,2,999",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,252,247,243,2,999",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,252,247,243,2,999",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_u8_sum.rs",
+    "chapter": "integers",
+    "feature": "two `u8::abs_diff`s in one function, added as u8 (overflows past 255)",
+    "section": "Sign and absolute value",
+    "input": "0 100 50 60 0 200 255 0 10 20 30 30 255 0 0 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 73
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 73
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 83
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "110,199,10,0",
+        "cells": 83
+      }
+    }
+  },
+  {
+    "test": "integers/abs_diff_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.abs_diff(b)` on `usize`",
+    "section": "Sign and absolute value",
+    "input": "7 3 3 7 999 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,999",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,999",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,999",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,999",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "integers/abs_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.abs()` on `i16`",
+    "section": "Sign and absolute value",
+    "input": "7 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "integers/bits.rs",
+    "chapter": "integers",
+    "feature": "`i16::BITS`, `u8::BITS` and `usize::BITS`",
+    "section": "Constants",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "16,8,64",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "16,8,64",
+        "cells": 70
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "16,8,64",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "16,8,64",
+        "cells": 70
+      }
+    }
+  },
+  {
+    "test": "integers/checked_add_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_add(b)` on `i16`, on a card",
+    "section": "Checked",
+    "input": "7 3 -7 3 500 499 -500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999,-999",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999,-999",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999,-999",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999,-999",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "integers/checked_add_past_card.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_add(b)` on `i16` past a card",
+    "section": "Checked",
+    "disposition": "never",
+    "notes": [
+      "The `None` is CARDIAC's overflow: every `i16` overflows past a card."
+    ],
+    "input": "500 500 -500 -500",
+    "differs": "CARDIAC's `i16` overflows past a card (999), so 1000 is `None` where native Rust has `Some(1000)`.",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Differ",
+        "output": "-1,-1",
+        "native": "100,-100"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-1,-1",
+        "native": "100,-100"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Differ",
+        "output": "-1,-1",
+        "native": "100,-100"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-1,-1",
+        "native": "100,-100"
+      }
+    }
+  },
+  {
+    "test": "integers/checked_add_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_add(b)` on `u8`",
+    "section": "Checked",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "1 2 5 5 6 1 7 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1,255,-1",
+        "cells": 77
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1,255,-1",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1,255,-1",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1,255,-1",
+        "cells": 77
+      }
+    }
+  },
+  {
+    "test": "integers/checked_div_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_div(b)` on `i16`",
+    "section": "Checked",
+    "disposition": "easy",
+    "notes": [
+      "The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call."
+    ],
+    "input": "7 3 -7 3 7 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-1",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-1",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "integers/checked_mul_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_mul(b)` on `i16`",
+    "section": "Checked",
+    "input": "7 3 -7 3 30 30 -3 -333 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,900,999",
+        "cells": 71
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,900,999",
+        "cells": 71
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,900,999",
+        "cells": 71
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,900,999",
+        "cells": 71
+      }
+    }
+  },
+  {
+    "test": "integers/checked_neg_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_neg()` on `i16`",
+    "section": "Checked",
+    "disposition": "easy",
+    "notes": [
+      "The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call."
+    ],
+    "input": "7 -7 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "integers/checked_pow_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_pow(3)` on `i16`",
+    "section": "Checked",
+    "disposition": "demand",
+    "notes": [
+      "A loop of checked multiplies; rustc calls it at both opt-levels."
+    ],
+    "input": "2 -3 9 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 79
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 79
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 79
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 79
+      }
+    }
+  },
+  {
+    "test": "integers/checked_rem_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_rem(b)` on `i16`",
+    "section": "Checked",
+    "disposition": "easy",
+    "notes": [
+      "The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call."
+    ],
+    "input": "7 3 -7 3 7 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,-1",
+        "cells": 78
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,-1",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,-1",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,-1",
+        "cells": 78
+      }
+    }
+  },
+  {
+    "test": "integers/checked_sub_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_sub(b)` on `i16`",
+    "section": "Checked",
+    "input": "7 3 -7 3 500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "integers/checked_sub_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.checked_sub(b)` on `usize`",
+    "section": "Checked",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "7 3 3 7 5 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1,0",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1,0",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "integers/clamp_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.clamp(lo, hi)` on `i16`",
+    "section": "Min, max and clamp",
+    "input": "5 0 10 -5 0 10 50 0 10 0 0 10",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,10,0",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,10,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,10,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,10,0",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "integers/clamp_panic_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.clamp(lo, hi)` with `lo > hi` panics",
+    "section": "Min, max and clamp",
+    "input": "5 10 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 25
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "integers/clamp_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.clamp(2, 200)` on `u8`",
+    "section": "Min, max and clamp",
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,2,2,7,100,200,200,200",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,2,2,7,100,200,200,200",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,2,2,7,100,200,200,200",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,2,2,7,100,200,200,200",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "integers/cmp_min_max_i16.rs",
+    "chapter": "integers",
+    "feature": "`core::cmp::min(a, b)` and `core::cmp::max(a, b)` on `i16`",
+    "section": "Min, max and clamp",
+    "input": "7 3 -7 3 5 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7,-7,3,5,5",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7,-7,3,5,5",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7,-7,3,5,5",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7,-7,3,5,5",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "integers/count_ones_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.count_ones()` on `i16`",
+    "section": "Bits",
+    "disposition": "demand",
+    "notes": [
+      "Bit counts are `u32`s, and on a decimal machine a loop of halvings."
+    ],
+    "input": "7 8 255 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1,8,16,0",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1,8,16,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1,8,16,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1,8,16,0",
+        "cells": 55
+      }
+    }
+  },
+  {
+    "test": "integers/count_ones_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.count_ones()` on `u8`",
+    "section": "Bits",
+    "disposition": "demand",
+    "notes": [
+      "As for `i16`."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,3,3,3,7,8",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,3,3,3,7,8",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,3,3,3,7,8",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,3,3,3,7,8",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_const_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(7)` on `i16`",
+    "section": "Euclidean division",
+    "input": "10 -10 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,142,-143,0",
+        "cells": 67
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,142,-143,0",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,142,-143,0",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,142,-143,0",
+        "cells": 67
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_k10.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by 10",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0,-1,-1,0,0,-100,99",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0,-1,-1,0,0,-100,99",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0,-1,-1,0,0,-100,99",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0,-1,-1,0,0,-100,99",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_k3.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by 3",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-4,2,-3,-1,0,0,-333,333",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-4,2,-3,-1,0,0,-333,333",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-4,2,-3,-1,0,0,-333,333",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-4,2,-3,-1,0,0,-333,333",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_k7.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by 7",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,1,-1,-1,0,0,-143,142",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,1,-1,-1,0,0,-143,142",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,1,-1,-1,0,0,-143,142",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,1,-1,-1,0,0,-143,142",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_km1.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by -1",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-10,10,-7,7,1,0,-1,999,-999",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-10,10,-7,7,1,0,-1,999,-999",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-10,10,-7,7,1,0,-1,999,-999",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-10,10,-7,7,1,0,-1,999,-999",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_km100.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by -100",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0,0,10,-9",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0,0,10,-9",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0,0,10,-9",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0,0,10,-9",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_km7.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(k)` on `i16` by -7",
+    "section": "Euclidean division",
+    "input": "10 -10 7 -7 -1 0 1 -999 999 998",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,2,-1,1,1,0,0,143,-142",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,2,-1,1,1,0,0,143,-142",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,2,-1,1,1,0,0,143,-142",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,2,-1,1,1,0,0,143,-142",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_var_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(b)` on `i16`",
+    "section": "Euclidean division",
+    "disposition": "easy",
+    "notes": [
+      "`rem_euclid` by a variable works; `div_euclid` is the same test around a divide."
+    ],
+    "input": "10 7 -10 7 10 -7 -10 -7 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2",
+        "cells": 87
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2",
+        "cells": 87
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_var_inplace.rs",
+    "chapter": "integers",
+    "feature": "`a = a.div_euclid(b)`, the result in the dividend's own cell",
+    "section": "Euclidean division",
+    "input": "-10 7 -100 -7 50 -3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_var_inplace_b.rs",
+    "chapter": "integers",
+    "feature": "`b = a.div_euclid(b)`, the result in the divisor's own cell",
+    "section": "Euclidean division",
+    "input": "-10 7 -100 -7 50 -3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2,15,-16",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_var_signs.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(b)` on `i16` by a variable: every sign, exact and not, the ends of a card",
+    "section": "Euclidean division",
+    "input": "10 7 -10 7 10 -7 -10 -7 -7 7 7 -7 -7 -7 -1 7 -1 -7 -1 1 -1 -1 999 1 -999 1 -999 -1 -999 998 -999 -998 999 -998 -998 999 0 5 0 -5 -6 3 -6 -3 -5 3 -5 -3 1 999 -1 999 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2,-1,-1,1,-1,1,-1,1,999,-999,999,-2,2,-1,-1,0,0,-2,2,-2,2,0,-1",
+        "cells": 87
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2,-1,-1,1,-1,1,-1,1,999,-999,999,-2,2,-1,-1,0,0,-2,2,-2,2,0,-1",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2,-1,-1,1,-1,1,-1,1,999,-999,999,-2,2,-1,-1,0,0,-2,2,-2,2,0,-1",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-2,-1,2,-1,-1,1,-1,1,-1,1,999,-999,999,-2,2,-1,-1,0,0,-2,2,-2,2,0,-1",
+        "cells": 87
+      }
+    }
+  },
+  {
+    "test": "integers/div_euclid_var_zero.rs",
+    "chapter": "integers",
+    "feature": "`a.div_euclid(b)` by a variable that is 0: Rust's panic",
+    "section": "Euclidean division",
+    "input": "-10 3 -10 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-4,-999",
+        "cells": 77
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-4,-999",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-4,-999",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-4,-999",
+        "cells": 77
+      }
+    }
+  },
+  {
+    "test": "integers/from_str_radix_i16.rs",
+    "chapter": "integers",
+    "feature": "`i16::from_str_radix(s, 10)`",
+    "section": "Conversions",
+    "disposition": "never",
+    "notes": [
+      "A program's input is numbers on cards, so there is no text to parse; the strings to parse could only be literals, a cell a byte."
+    ],
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type [&str; 2] for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type [&str; 2] for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type [&str; 2] for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type [&str; 2] for _4 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "integers/from_u8_i16.rs",
+    "chapter": "integers",
+    "feature": "`i16::from(a)` for a `u8`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls `From::from`; it is `as i16`, which works."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/from_u8_usize.rs",
+    "chapter": "integers",
+    "feature": "`usize::from(a)` for a `u8`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "As for `i16::from`."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/i16_max.rs",
+    "chapter": "integers",
+    "feature": "`i16::MAX`",
+    "section": "Constants",
+    "disposition": "never",
+    "notes": [
+      "Refused on purpose (RCE0009), as other constants past a card are; comparing with one works."
+    ],
+    "input": "1",
+    "differs": "`i16::MAX` is 32767 in Rust, which no card holds; on CARDIAC an `i16` ends at 999.",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MAX (32767) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_4 = Sub(const i16::MAX, copy _1)`"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MAX (32767) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_5 = SubWithOverflow(const i16::MAX, copy _1)`"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MAX (32767) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_4 = Sub(const i16::MAX, copy _1)`"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MAX (32767) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_5 = SubWithOverflow(const i16::MAX, copy _1)`"
+      }
+    }
+  },
+  {
+    "test": "integers/i16_min.rs",
+    "chapter": "integers",
+    "feature": "`i16::MIN`",
+    "section": "Constants",
+    "disposition": "never",
+    "notes": [
+      "Refused on purpose (RCE0009), as other constants past a card are; comparing with one works."
+    ],
+    "input": "1",
+    "differs": "`i16::MIN` is -32768 in Rust, which no card holds; on CARDIAC an `i16` ends at -999.",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MIN (-32768) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_4 = Add(const i16::MIN, copy _1)`"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MIN (-32768) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_5 = AddWithOverflow(const i16::MIN, copy _1)`"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MIN (-32768) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_4 = Add(const i16::MIN, copy _1)`"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0009: constant out of range: i16::MIN (-32768) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in main: `_5 = AddWithOverflow(const i16::MIN, copy _1)`"
+      }
+    }
+  },
+  {
+    "test": "integers/ilog10_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.ilog10()` on `i16`",
+    "section": "Powers and roots",
+    "disposition": "easy",
+    "notes": [
+      "On a card it is two compares (against 10 and 100); rustc works in `u16` and `u32`, which the compiler lacks."
+    ],
+    "input": "1 9 10 99 100 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,1,1,2,2",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,1,1,2,2",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,1,1,2,2",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,1,1,2,2",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "integers/ilog10_i16_ends.rs",
+    "chapter": "integers",
+    "feature": "`a.ilog10()` on `i16` at every boundary, then a negative: Rust's panic",
+    "section": "Powers and roots",
+    "input": "1 2 9 10 11 99 100 101 998 999 -5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/ilog10_i16_fn.rs",
+    "chapter": "integers",
+    "feature": "`ilog10` in a function of the program's own, its result cast, added to and compared",
+    "section": "Powers and roots",
+    "input": "5 50 500 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,1,3,1",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,1,3,1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,1,3,1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,1,3,1",
+        "cells": 47
+      }
+    }
+  },
+  {
+    "test": "integers/ilog10_i16_zero.rs",
+    "chapter": "integers",
+    "feature": "`a.ilog10()` on `i16` at every boundary, then 0: Rust's panic",
+    "section": "Powers and roots",
+    "input": "1 2 9 10 11 99 100 101 998 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,1,1,2,2,2,2,-999",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/into_u8_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.into()` from `u8` to `i16`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "As for `i16::from`."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,7,100,200,254,255",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/is_negative_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.is_negative()` on `i16`",
+    "section": "Sign and absolute value",
+    "input": "7 -7 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "integers/is_positive_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.is_positive()` on `i16`",
+    "section": "Sign and absolute value",
+    "input": "7 -7 1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,1,0",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,1,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,1,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,1,0",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "integers/is_power_of_two_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.is_power_of_two()` on `u8`",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "rustc counts bits (in `u32`); on a decimal machine it would be a table or a loop of halvings."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,0,0,0",
+        "cells": 66
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,0,0,0",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,0,0,0",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,0,0,0",
+        "cells": 66
+      }
+    }
+  },
+  {
+    "test": "integers/is_power_of_two_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.is_power_of_two()` on `usize`",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "As for `u8`."
+    ],
+    "input": "1 3 4 512 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,1,1,0,0",
+        "cells": 66
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,1,1,0,0",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,1,1,0,0",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,1,1,0,0",
+        "cells": 66
+      }
+    }
+  },
+  {
+    "test": "integers/isqrt_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.isqrt()` on `i16`",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "It works in `u16`, which the compiler lacks; a short loop would do on a card."
+    ],
+    "input": "1 15 16 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3,4,31,0",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3,4,31,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3,4,31,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3,4,31,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "integers/leading_zeros_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.leading_zeros()` on `i16`",
+    "section": "Bits",
+    "disposition": "demand",
+    "notes": [
+      "As for `count_ones`."
+    ],
+    "input": "1 7 256 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,13,7,0,16",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,13,7,0,16",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,13,7,0,16",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,13,7,0,16",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "integers/max_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.max(b)` on `i16`",
+    "section": "Min, max and clamp",
+    "input": "7 3 -7 3 5 5 -999 999 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3,5,999",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3,5,999",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,3,5,999",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,3,5,999",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "integers/max_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.max(b)` on `usize`",
+    "section": "Min, max and clamp",
+    "input": "7 3 3 7 999 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/midpoint_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.midpoint(b)` on `i16`",
+    "section": "Powers and roots",
+    "disposition": "never",
+    "notes": [
+      "Refused on purpose: rustc adds the two in `i32` and halves, and where the sum passes a card (999 and 998) CARDIAC would print 598 where Rust prints 998. `(a + b) / 2` works where the sum stays on a card."
+    ],
+    "input": "7 3 -7 3 999 998 -5 -6 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0002: unsupported call to core::num::<impl i16>::midpoint, in main: `_4 = core::num::<impl i16>::midpoint(move _4, move _2) -> [return: bb7, unwind continue]`"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0002: unsupported call to core::num::<impl i16>::midpoint, in main: `_4 = core::num::<impl i16>::midpoint(move _4, move _2) -> [return: bb7, unwind continue]`"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0010: core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card (-999 to 999), past which it can: it is not supported"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0010: core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card (-999 to 999), past which it can: it is not supported"
+      }
+    }
+  },
+  {
+    "test": "integers/midpoint_i16_small.rs",
+    "chapter": "integers",
+    "feature": "`i16::midpoint` of values whose sum is on a card: still refused, since the rule can't know that",
+    "section": "Powers and roots",
+    "disposition": "never",
+    "input": "7 3 -7 3 400 -500 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0002: unsupported call to core::num::<impl i16>::midpoint, in main: `_4 = core::num::<impl i16>::midpoint(move _4, move _2) -> [return: bb7, unwind continue]`"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0002: unsupported call to core::num::<impl i16>::midpoint, in main: `_4 = core::num::<impl i16>::midpoint(move _4, move _2) -> [return: bb7, unwind continue]`"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0010: core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card (-999 to 999), past which it can: it is not supported"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0010: core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow, and on CARDIAC an i32 is a card (-999 to 999), past which it can: it is not supported"
+      }
+    }
+  },
+  {
+    "test": "integers/midpoint_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.midpoint(b)` on `u8`",
+    "section": "Powers and roots",
+    "disposition": "easy",
+    "notes": [
+      "rustc adds in `u16`, which the compiler lacks; the sum of two `u8`s always fits on a card."
+    ],
+    "input": "1 2 3 4 5 6 7 7 6 1 4 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,53,227,255,127,53,127",
+        "cells": 58
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,53,227,255,127,53,127",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,53,227,255,127,53,127",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,53,227,255,127,53,127",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "integers/min_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.min(b)` on `i16`",
+    "section": "Min, max and clamp",
+    "input": "7 3 -7 3 5 5 -999 999 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-7,5,-999",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-7,5,-999",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-7,5,-999",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-7,5,-999",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "integers/min_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.min(b)` on `u8`",
+    "section": "Min, max and clamp",
+    "input": "1 2 3 4 5 6 7 7 6 1 4 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,7,200,255,1,7,0",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,7,200,255,1,7,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,7,200,255,1,7,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,7,200,255,1,7,0",
+        "cells": 55
+      }
+    }
+  },
+  {
+    "test": "integers/next_power_of_two_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.next_power_of_two()` on `u8`",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "rustc counts leading zeros (in `u32`); on a card it would be a loop of doublings."
+    ],
+    "input": "0 1 2 3 4 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,2,8,128,0",
+        "cells": 90
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,2,8,128,-999",
+        "cells": 90
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,2,8,128,0",
+        "cells": 90
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,2,8,128,-999",
+        "cells": 90
+      }
+    }
+  },
+  {
+    "test": "integers/next_power_of_two_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.next_power_of_two()` on `usize`",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "As for `u8`."
+    ],
+    "input": "1 3 4 500 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,4,4,512,1",
+        "cells": 91
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,4,4,512,1",
+        "cells": 96
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,4,4,512,1",
+        "cells": 91
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,4,4,512,1",
+        "cells": 96
+      }
+    }
+  },
+  {
+    "test": "integers/ord_cmp_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.cmp(&b)` on `i16`, matched on `Ordering`",
+    "section": "Comparison and Ord",
+    "disposition": "easy",
+    "notes": [
+      "`Ord::cmp` is a call at opt-level 1 and a three-way compare (`Cmp`) at opt-level 2; either is two tests on CARDIAC."
+    ],
+    "input": "7 3 -7 3 5 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "integers/ord_cmp_is_lt_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.cmp(&b).is_lt()` and `.is_ge()` on `i16`",
+    "section": "Comparison and Ord",
+    "disposition": "easy",
+    "notes": [
+      "As for `cmp`; at opt-level 2 rustc also reads the `Ordering` as an `i8`, which the compiler lacks."
+    ],
+    "input": "7 3 -7 3 5 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,1",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,0,1",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "integers/ord_cmp_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.cmp(&b)` on `u8`, matched on `Ordering`",
+    "section": "Comparison and Ord",
+    "disposition": "easy",
+    "notes": [
+      "As for `cmp` on `i16`."
+    ],
+    "input": "1 2 3 4 5 6 7 7 6 1 4 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,-1,-1,0,1,1,-1",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,-1,-1,0,1,1,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,-1,-1,0,1,1,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,-1,-1,0,1,1,-1",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "integers/overflowing_add_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.overflowing_add(b)` on `i16`, on a card",
+    "section": "Overflowing",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "7 3 -7 3 500 499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,0,-4,0,999,0",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,0,-4,0,999,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,0,-4,0,999,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,0,-4,0,999,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "integers/overflowing_add_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.overflowing_add(b)` on `u8`",
+    "section": "Overflowing",
+    "disposition": "easy",
+    "notes": [
+      "A wrong answer at opt-level 2: the flag is right but the sum isn't wrapped, so 200 + 100 prints 300 where Rust prints 44. At opt-level 1 it is a call."
+    ],
+    "input": "1 2 5 4 7 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,44,1,254,1",
+        "cells": 70
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,44,1,254,1",
+        "cells": 70
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,44,1,254,1",
+        "cells": 70
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,44,1,254,1",
+        "cells": 70
+      }
+    }
+  },
+  {
+    "test": "integers/overflowing_sub_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.overflowing_sub(b)` on `i16`, on a card",
+    "section": "Overflowing",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "7 3 -7 3 500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,-10,0,999,0",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,-10,0,999,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,-10,0,999,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,-10,0,999,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "integers/pow_const_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.pow(3)` on `i16`",
+    "section": "Powers and roots",
+    "disposition": "easy",
+    "notes": [
+      "With a constant exponent `pow` is a few multiplies, but rustc calls it at both opt-levels."
+    ],
+    "input": "2 -3 9 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 67
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,729,0",
+        "cells": 67
+      }
+    }
+  },
+  {
+    "test": "integers/pow_var_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.pow(n)` on `i16`, `n` from a card",
+    "section": "Powers and roots",
+    "disposition": "demand",
+    "notes": [
+      "The exponent is a `u32`, which the compiler lacks; after that it is a loop of multiplies."
+    ],
+    "input": "2 3 -3 3 10 2 5 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,100,1",
+        "cells": 76
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,100,1",
+        "cells": 76
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-27,100,1",
+        "cells": 76
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-27,100,1",
+        "cells": 76
+      }
+    }
+  },
+  {
+    "test": "integers/rem_euclid_const_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.rem_euclid(7)` on `i16`",
+    "section": "Euclidean division",
+    "input": "10 -10 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4,0,5,2,0",
+        "cells": 74
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4,0,5,2,0",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4,0,5,2,0",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4,0,5,2,0",
+        "cells": 74
+      }
+    }
+  },
+  {
+    "test": "integers/rem_euclid_var_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.rem_euclid(b)` on `i16`",
+    "section": "Euclidean division",
+    "input": "10 7 -10 7 10 -7 -10 -7 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4,3,4",
+        "cells": 94
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4,3,4",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4,3,4",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4,3,4",
+        "cells": 94
+      }
+    }
+  },
+  {
+    "test": "integers/rem_euclid_zero_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.rem_euclid(b)` with `b` zero panics",
+    "section": "Euclidean division",
+    "input": "7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 84
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "integers/rotate_left_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.rotate_left(1)` on `u8`",
+    "section": "Bits",
+    "disposition": "demand",
+    "notes": [
+      "A rotate is a bit operation; rustc calls an intrinsic for it."
+    ],
+    "input": "0 1 2 3 4 5 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,2,4,14,200,145,253,255",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,2,4,14,200,145,253,255",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,2,4,14,200,145,253,255",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,2,4,14,200,145,253,255",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_add_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_add(b)` on `i16`, on a card",
+    "section": "Saturating",
+    "disposition": "demand",
+    "notes": [
+      "Rust saturates at 32767, which no card holds, so past a card CARDIAC would print something else; on a card it is a plain add."
+    ],
+    "input": "7 3 -7 3 500 499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_add_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_add(b)` on `u8`",
+    "section": "Saturating",
+    "disposition": "easy",
+    "notes": [
+      "255 fits on a card, so this is an add and a compare; rustc uses the `saturating_add` intrinsic, which the compiler doesn't know."
+    ],
+    "input": "1 2 5 5 6 6 7 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,255,255,255",
+        "cells": 60
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,255,255,255",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,255,255,255",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,255,255,255",
+        "cells": 60
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_mul_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_mul(b)` on `i16`, on a card",
+    "section": "Saturating",
+    "disposition": "demand",
+    "notes": [
+      "As for `saturating_add`. At opt-level 2 the compiler crashes: rustc's inlined version picks between 32767 and -32768, and the compiler panics on a constant no card holds instead of refusing it."
+    ],
+    "input": "30 -30",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-900",
+        "cells": 51
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-900",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-900",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-900",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_mul_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_mul(b)` on `u8`",
+    "section": "Saturating",
+    "disposition": "demand",
+    "notes": [
+      "At opt-level 2 rustc's inlined version doesn't fit in the cells; a multiply and a compare would."
+    ],
+    "input": "3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_sub_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_sub(b)` on `i16`, on a card",
+    "section": "Saturating",
+    "disposition": "demand",
+    "notes": [
+      "As for `saturating_add`: Rust's limit is -32768, which no card holds."
+    ],
+    "input": "7 3 -7 3 500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_sub_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_sub(b)` on `u8`",
+    "section": "Saturating",
+    "input": "3 1 1 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0,0",
+        "cells": 58
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0,0",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,0,0",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,0,0",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "integers/saturating_sub_usize.rs",
+    "chapter": "integers",
+    "feature": "`a.saturating_sub(b)` on `usize`",
+    "section": "Saturating",
+    "input": "7 3 3 7 5 5 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,0",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,0",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "integers/signum_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.signum()` on `i16`",
+    "section": "Sign and absolute value",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 2 rustc inlines it into a three-way compare (`Cmp`), which is two tests on CARDIAC."
+    ],
+    "input": "7 -7 1 -1 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,1,0",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,1,0",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,1,0",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,1,0",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "integers/swap_bytes_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.swap_bytes()` on `i16`",
+    "section": "Bits",
+    "disposition": "never",
+    "notes": [
+      "Swapping an i16's bytes moves its low byte to the high one: most values on a card come out far past one (100 becomes 25600), so the result can't be held."
+    ],
+    "input": "256 512 768 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u16 for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u16 for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u16 for _4 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u16 for _4 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "integers/trailing_zeros_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.trailing_zeros()` on `i16`",
+    "section": "Bits",
+    "disposition": "demand",
+    "notes": [
+      "As for `count_ones`."
+    ],
+    "input": "1 8 96 -4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,3,5,2,16",
+        "cells": 54
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,3,5,2,16",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,3,5,2,16",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,3,5,2,16",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "integers/try_from_i16_u8.rs",
+    "chapter": "integers",
+    "feature": "`u8::try_from(a)` for an `i16`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "It is a range check (0 to 255) and then the cast."
+    ],
+    "input": "5 255 256 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "integers/try_from_i16_usize.rs",
+    "chapter": "integers",
+    "feature": "`usize::try_from(a)` for an `i16`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "5 999 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,999,-1,0",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,999,-1,0",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,999,-1,0",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,999,-1,0",
+        "cells": 17
+      }
+    }
+  },
+  {
+    "test": "integers/try_from_usize_i16.rs",
+    "chapter": "integers",
+    "feature": "`i16::try_from(a)` for a `usize`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 2 rustc compares against 32767, which no card holds; every `usize` on a card passes that test."
+    ],
+    "input": "5 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,999,0",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,999,0",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,999,0",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,999,0",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "integers/try_from_usize_u8.rs",
+    "chapter": "integers",
+    "feature": "`u8::try_from(a)` for a `usize`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "5 255 256 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,0",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,0",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,0",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,0",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "integers/try_into_i16_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.try_into()` from `i16` to `u8`",
+    "section": "Conversions",
+    "disposition": "easy",
+    "notes": [
+      "As for `u8::try_from`."
+    ],
+    "input": "5 255 256 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,-1,-1,0",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "integers/u8_min_max.rs",
+    "chapter": "integers",
+    "feature": "`u8::MIN` and `u8::MAX`",
+    "section": "Constants",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,254",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,254",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,254",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,254",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "integers/unsigned_abs_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.unsigned_abs()` on `i16`",
+    "section": "Sign and absolute value",
+    "disposition": "easy",
+    "notes": [
+      "It returns a `u16`, which the compiler lacks; on a card it is `abs`."
+    ],
+    "input": "7 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_abs_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_abs()` on `i16`",
+    "section": "Sign and absolute value",
+    "input": "7 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,999,999,0",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_add_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_add(b)` on `i16`, on a card",
+    "section": "Wrapping",
+    "input": "7 3 -7 3 500 499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_add_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_add(b)` on `u8`",
+    "section": "Wrapping",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "1 2 5 4 6 6 7 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,44,252,254",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,44,252,254",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,44,252,254",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,44,252,254",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_div_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_div(b)` on `i16`, on a card",
+    "section": "Wrapping",
+    "disposition": "easy",
+    "notes": [
+      "On a card it is plain `/`; rustc calls `overflowing_div` even at opt-level 2, for the `i16::MIN / -1` case that no card holds."
+    ],
+    "input": "7 3 -7 3 999 -9 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-111",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-111",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-111",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-111",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_mul_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_mul(b)` on `i16`, on a card",
+    "section": "Wrapping",
+    "input": "7 3 -7 3 30 30 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,900",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,900",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,900",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,900",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_neg_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_neg()` on `i16`",
+    "section": "Wrapping",
+    "input": "7 -7 999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,0",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_rem_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_rem(b)` on `i16`, on a card",
+    "section": "Wrapping",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "7 3 -7 3 999 -9 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 87
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 87
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_sub_i16.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_sub(b)` on `i16`, on a card",
+    "section": "Wrapping",
+    "input": "7 3 -7 3 500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,999",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "integers/wrapping_sub_u8.rs",
+    "chapter": "integers",
+    "feature": "`a.wrapping_sub(b)` on `u8`",
+    "section": "Wrapping",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`."
+    ],
+    "input": "3 1 1 3 0 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,250,1",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,250,1",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,250,1",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,250,1",
+        "cells": 56
+      }
+    }
+  }
+]

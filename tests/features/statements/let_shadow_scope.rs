@@ -1,0 +1,16 @@
+//! feature: shadowing in an inner block ends with the block
+//! section: Let statements
+//! input: 7 3
+#![no_std]
+#[inline(never)]
+pub fn out(_v: i16) {}
+#[inline(never)]
+pub fn inp() -> i16 { 0 }
+pub fn main() {
+    let a = inp();
+    {
+        let a = inp();
+        out(a);
+    }
+    out(a);
+}

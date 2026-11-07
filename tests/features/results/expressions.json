@@ -1,0 +1,5429 @@
+[
+  {
+    "test": "expressions/add_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a + b` on `i16`",
+    "section": "Arithmetic operators",
+    "input": "7 3 -7 3 500 499 -999 999 -500 -499 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999,0,-999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999,0,-999",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-4,999,0,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-4,999,0,-999",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "expressions/add_past_card.rs",
+    "chapter": "expressions",
+    "feature": "`a + b` past a card (999 + 1)",
+    "section": "Arithmetic operators",
+    "disposition": "never",
+    "input": "999 1",
+    "differs": "A cell holds -999 to 999. With overflow checks on, CARDIAC panics where native Rust prints 1000; with them off it keeps the low three digits.",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Differ",
+        "output": "0",
+        "native": "1000",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-999",
+        "native": "1000",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Differ",
+        "output": "0",
+        "native": "1000",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-999",
+        "native": "1000",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/add_u8.rs",
+    "chapter": "expressions",
+    "feature": "`a + b` on `u8`",
+    "section": "Arithmetic operators",
+    "input": "1 2 3 4 4 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,107,44",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,107,-999",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,107,44",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,107,-999",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/add_u8_overflow.rs",
+    "chapter": "expressions",
+    "feature": "`a + b` on `u8` past 255: panics, or wraps with checks off",
+    "section": "Arithmetic operators",
+    "input": "5 5 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "144",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "144",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/add_usize.rs",
+    "chapter": "expressions",
+    "feature": "`a + b` on `usize`",
+    "section": "Arithmetic operators",
+    "input": "7 3 100 9 3 3 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,109,6",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,109,6",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,109,6",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,109,6",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "expressions/and_mask.rs",
+    "chapter": "expressions",
+    "feature": "`a & m` with `m` one below a power of two (`a & 3`)",
+    "section": "Bitwise and shift operators",
+    "notes": [
+      "Compiled as `a.rem_euclid(4)`, a subtracting loop."
+    ],
+    "input": "7 -7 12 0 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1,0,0,3",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1,0,0,3",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,1,0,0,3",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,1,0,0,3",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "expressions/and_or.rs",
+    "chapter": "expressions",
+    "feature": "`a && b`, `a || b`",
+    "section": "Lazy boolean operators",
+    "input": "0 0 0 1 1 0 1 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,0,1,1,1",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,0,1,1,1",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,0,1,0,1,1,1",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,0,1,0,1,1,1",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "expressions/and_short_circuit.rs",
+    "chapter": "expressions",
+    "feature": "`&&` doesn't evaluate its right side when the left side is false",
+    "section": "Lazy boolean operators",
+    "notes": [
+      "The right side divides by zero: evaluating it would panic."
+    ],
+    "input": "0 7 2 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 76
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 76
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 76
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 76
+      }
+    }
+  },
+  {
+    "test": "expressions/and_var.rs",
+    "chapter": "expressions",
+    "feature": "`a & b`, `b` a variable",
+    "section": "Bitwise and shift operators",
+    "disposition": "demand",
+    "notes": [
+      "Needs the bits of a decimal number: a digit-by-digit routine."
+    ],
+    "input": "6 3 5 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,1",
+        "cells": 94
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,1",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,1",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,1",
+        "cells": 94
+      }
+    }
+  },
+  {
+    "test": "expressions/arith_i32_default.rs",
+    "chapter": "expressions",
+    "feature": "Integer arithmetic with no type given (`i32`, Rust's default)",
+    "section": "Arithmetic operators",
+    "input": "7 3 -20 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,2",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,2",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,2",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,2",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "expressions/arith_i32_typed.rs",
+    "chapter": "expressions",
+    "feature": "Arithmetic on a variable declared `i32`",
+    "section": "Arithmetic operators",
+    "disposition": "demand",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "22",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "22",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "22",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "22",
+        "cells": 56
+      }
+    }
+  },
+  {
+    "test": "expressions/array_2d_flat.rs",
+    "chapter": "expressions",
+    "feature": "A 2-D grid in one flat array, `t[r * W + c]`",
+    "section": "Array and array index expressions",
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 78
+      }
+    }
+  },
+  {
+    "test": "expressions/array_2d_nested.rs",
+    "chapter": "expressions",
+    "feature": "An array of arrays, `t[r][c]`",
+    "section": "Array and array index expressions",
+    "disposition": "demand",
+    "notes": [
+      "One flat array indexed `r * W + c` already works; an array of arrays is the same thing with the arithmetic written by the compiler."
+    ],
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 83
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 96
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 83
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 96
+      }
+    }
+  },
+  {
+    "test": "expressions/array_index_expr.rs",
+    "chapter": "expressions",
+    "feature": "`t[i + 1]` and `t[n - i]`: an index computed in place",
+    "section": "Array and array index expressions",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,40,30",
+        "cells": 51
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,40,30",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,40,30",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,40,30",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "expressions/array_index_var.rs",
+    "chapter": "expressions",
+    "feature": "`t[i]` read and written with `i` from a card",
+    "section": "Array and array index expressions",
+    "input": "3 9 0 8 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "expressions/array_len.rs",
+    "chapter": "expressions",
+    "feature": "`t.len()`",
+    "section": "Array and array index expressions",
+    "input": "2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/array_literal.rs",
+    "chapter": "expressions",
+    "feature": "An array literal `[a, b, c]` with values read at run time",
+    "section": "Array and array index expressions",
+    "input": "4 5 6 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "expressions/array_of_struct.rs",
+    "chapter": "expressions",
+    "feature": "An array of structs, `t[i].f`",
+    "section": "Array and array index expressions",
+    "input": "1 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,0",
+        "cells": 72
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,0",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,0",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,0",
+        "cells": 80
+      }
+    }
+  },
+  {
+    "test": "expressions/array_out_of_bounds.rs",
+    "chapter": "expressions",
+    "feature": "An index past the end panics",
+    "section": "Array and array index expressions",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/array_repeat.rs",
+    "chapter": "expressions",
+    "feature": "A repeat expression `[v; N]`",
+    "section": "Array and array index expressions",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "28",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "expressions/block_const.rs",
+    "chapter": "expressions",
+    "feature": "An inline `const { ... }` block",
+    "section": "Block expressions",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "46",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "46",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "46",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "46",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/block_nested_scope.rs",
+    "chapter": "expressions",
+    "feature": "Nested blocks shadowing a name",
+    "section": "Block expressions",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,5,4",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,5,4",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,5,4",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,5,4",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/block_unsafe.rs",
+    "chapter": "expressions",
+    "feature": "An `unsafe` block as a value",
+    "section": "Block expressions",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "expressions/block_value.rs",
+    "chapter": "expressions",
+    "feature": "A block as a value, `let x = { ...; e };`",
+    "section": "Block expressions",
+    "input": "4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "expressions/borrow_element.rs",
+    "chapter": "expressions",
+    "feature": "`&mut t[i]` to an array element, passed to a function",
+    "section": "Borrow operators",
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,25,30",
+        "cells": 49
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,25,30",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,25,30",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,25,30",
+        "cells": 59
+      }
+    }
+  },
+  {
+    "test": "expressions/borrow_field.rs",
+    "chapter": "expressions",
+    "feature": "`&mut s.f` to a struct field, passed to a function",
+    "section": "Borrow operators",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,51",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,51",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,51",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,51",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "expressions/borrow_mut.rs",
+    "chapter": "expressions",
+    "feature": "`&mut x` passed to a function that changes it",
+    "section": "Borrow operators",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "expressions/borrow_shared.rs",
+    "chapter": "expressions",
+    "feature": "`&x` passed to a function taking `&i16`",
+    "section": "Borrow operators",
+    "input": "4 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/call_assoc_fn.rs",
+    "chapter": "expressions",
+    "feature": "An associated function, `P::new(a, b)`",
+    "section": "Call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "expressions/call_fn.rs",
+    "chapter": "expressions",
+    "feature": "Calling a function that isn't inlined",
+    "section": "Call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,11",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,11",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,11",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,11",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "expressions/call_fn_pointer.rs",
+    "chapter": "expressions",
+    "feature": "Calling through a function pointer chosen at run time",
+    "section": "Call expressions",
+    "disposition": "demand",
+    "notes": [
+      "A call through a pointer is an indirect jump, which CARDIAC can build like an indexed read."
+    ],
+    "input": "1 5 0 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 63
+      }
+    }
+  },
+  {
+    "test": "expressions/call_fn_pointer_param.rs",
+    "chapter": "expressions",
+    "feature": "A function pointer passed to a function",
+    "section": "Call expressions",
+    "disposition": "demand",
+    "notes": [
+      "A call through a pointer is an indirect jump, which CARDIAC can build like an indexed read."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,20",
+        "cells": 59
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,20",
+        "cells": 81
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,20",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,20",
+        "cells": 81
+      }
+    }
+  },
+  {
+    "test": "expressions/call_generic.rs",
+    "chapter": "expressions",
+    "feature": "A generic function, called with two types",
+    "section": "Call expressions",
+    "disposition": "demand",
+    "notes": [
+      "Generic functions are compiled only when rustc inlines them; each instance would need its own copy."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,5",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,5",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,5",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,5",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "expressions/call_nested.rs",
+    "chapter": "expressions",
+    "feature": "Nested calls, `f(g(a), g(b))`",
+    "section": "Call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-2",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-2",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "expressions/cast_bool_i16.rs",
+    "chapter": "expressions",
+    "feature": "`bool as i16`",
+    "section": "Type cast expressions",
+    "input": "3 -3 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,10,10",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,10,10",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,10,10",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,10,10",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/cast_element.rs",
+    "chapter": "expressions",
+    "feature": "`t[i] as i16` straight from a `u8` array",
+    "section": "Type cast expressions",
+    "disposition": "easy",
+    "notes": [
+      "Copying the element to a local and casting that works."
+    ],
+    "input": "3 6 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,254",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,254",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,254",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,254",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "expressions/cast_i16_u8.rs",
+    "chapter": "expressions",
+    "feature": "`i16 as u8` (it wraps)",
+    "section": "Type cast expressions",
+    "disposition": "easy",
+    "notes": [
+      "Wrapping is `a.rem_euclid(256)` on a card."
+    ],
+    "input": "5 255 300 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,44,255,0",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,44,255,0",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,44,255,0",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,44,255,0",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/cast_i16_usize.rs",
+    "chapter": "expressions",
+    "feature": "`i16 as usize` and `usize as i16`",
+    "section": "Type cast expressions",
+    "input": "0 5 998 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,6,999",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,6,999",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,6,999",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,6,999",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "expressions/cast_u8_i16.rs",
+    "chapter": "expressions",
+    "feature": "`u8 as i16`",
+    "section": "Type cast expressions",
+    "input": "0 3 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-100,-93,155",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-100,-93,155",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-100,-93,155",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-100,-93,155",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_capture_mut.rs",
+    "chapter": "expressions",
+    "feature": "A closure changing a captured variable (`FnMut`)",
+    "section": "Closure expressions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the call is a method on a struct of its captures."
+    ],
+    "input": "3 4 5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_capture_ref.rs",
+    "chapter": "expressions",
+    "feature": "A closure capturing a variable by reference",
+    "section": "Closure expressions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the call is a method on a struct of its captures."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,9",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,9",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,9",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,9",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_local.rs",
+    "chapter": "expressions",
+    "feature": "A closure called where it's made",
+    "section": "Closure expressions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the call is a method on a struct of its captures."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_move.rs",
+    "chapter": "expressions",
+    "feature": "A `move` closure",
+    "section": "Closure expressions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the call is a method on a struct of its captures."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_no_capture_fn_ptr.rs",
+    "chapter": "expressions",
+    "feature": "A closure that captures nothing, coerced to a `fn` pointer",
+    "section": "Closure expressions",
+    "disposition": "demand",
+    "notes": [
+      "A call through a pointer is an indirect jump, which CARDIAC can build like an indexed read."
+    ],
+    "input": "1 5 0 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,4",
+        "cells": 63
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_passed.rs",
+    "chapter": "expressions",
+    "feature": "A closure passed to a generic function",
+    "section": "Closure expressions",
+    "disposition": "demand",
+    "notes": [
+      "Each closure is its own type, so the function it's passed to is generic, compiled once per closure."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_passed_dyn.rs",
+    "chapter": "expressions",
+    "feature": "A closure passed as `&dyn Fn`",
+    "section": "Closure expressions",
+    "disposition": "demand",
+    "notes": [
+      "Dynamic dispatch needs a vtable and an indirect call, which CARDIAC can build as it builds an indexed read."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_returned.rs",
+    "chapter": "expressions",
+    "feature": "A closure returned from a function (`impl Fn`)",
+    "section": "Closure expressions",
+    "disposition": "demand",
+    "notes": [
+      "Each closure is its own type, so the function returning one is generic, compiled once per closure."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,13",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,13",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,13",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,13",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "expressions/closure_stored.rs",
+    "chapter": "expressions",
+    "feature": "A closure stored in a struct field and called from there",
+    "section": "Closure expressions",
+    "disposition": "demand",
+    "notes": [
+      "Each closure is its own type, so the struct holding one is generic, compiled once per closure."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "expressions/compare_bool.rs",
+    "chapter": "expressions",
+    "feature": "`==`, `!=`, `<`, `>` on `bool`",
+    "section": "Comparison operators",
+    "input": "0 0 0 1 1 0 1 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,0,0,1,1,0,0,1,0,1,1,0,0,0",
+        "cells": 72
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,0,0,1,1,0,0,1,0,1,1,0,0,0",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0,0,0,0,1,1,0,0,1,0,1,1,0,0,0",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0,0,0,0,1,1,0,0,1,0,1,1,0,0,0",
+        "cells": 72
+      }
+    }
+  },
+  {
+    "test": "expressions/compare_i16.rs",
+    "chapter": "expressions",
+    "feature": "`==`, `!=`, `<`, `>`, `<=`, `>=` on `i16`",
+    "section": "Comparison operators",
+    "input": "7 3 -7 3 7 -3 -7 -3 999 -999 5 5 0 5 500 499 -1 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,1,0,0,0,1,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0",
+        "cells": 83
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,1,0,0,0,1,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0",
+        "cells": 83
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,1,0,0,0,1,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0",
+        "cells": 83
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,0,1,0,1,0,1,1,0,0,0,1,1,0,1,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0",
+        "cells": 83
+      }
+    }
+  },
+  {
+    "test": "expressions/compare_u8.rs",
+    "chapter": "expressions",
+    "feature": "`==`, `!=`, `<` on `u8`",
+    "section": "Comparison operators",
+    "input": "0 7 7 7 7 0 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,1,0,0,0,1,0,0,1,1",
+        "cells": 86
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,1,0,0,0,1,0,0,1,1",
+        "cells": 86
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,1,0,0,0,1,0,0,1,1",
+        "cells": 86
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,1,0,0,0,1,0,0,1,1",
+        "cells": 86
+      }
+    }
+  },
+  {
+    "test": "expressions/compare_u8_2.rs",
+    "chapter": "expressions",
+    "feature": "`>`, `<=`, `>=` on `u8`",
+    "section": "Comparison operators",
+    "input": "0 7 7 7 7 0 6 7 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,0,1,1,1,0,1,0,1,0",
+        "cells": 79
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,0,1,1,1,0,1,0,1,0",
+        "cells": 79
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,0,1,1,1,0,1,0,1,0",
+        "cells": 79
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,0,1,1,1,0,1,0,1,0",
+        "cells": 79
+      }
+    }
+  },
+  {
+    "test": "expressions/compare_usize.rs",
+    "chapter": "expressions",
+    "feature": "`==`, `!=`, `<`, `>`, `<=`, `>=` on `usize`",
+    "section": "Comparison operators",
+    "input": "3 5 5 5 5 3 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,1,0,1,0,0,0,1,1,0,1,0,1,0,1",
+        "cells": 82
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,1,0,1,0,0,0,1,1,0,1,0,1,0,1",
+        "cells": 82
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1,0,1,0,1,0,0,0,1,1,0,1,0,1,0,1",
+        "cells": 82
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1,0,1,0,1,0,0,0,1,1,0,1,0,1,0,1",
+        "cells": 82
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_add.rs",
+    "chapter": "expressions",
+    "feature": "`x += a` on `i16`",
+    "section": "Assignment and compound assignment",
+    "input": "7 3 -20 6 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "107,110,90,96",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "107,110,90,96",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "107,110,90,96",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "107,110,90,96",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_div.rs",
+    "chapter": "expressions",
+    "feature": "`x /= a` on `i16`",
+    "section": "Assignment and compound assignment",
+    "input": "7 3 -20 6 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,4,0,0",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,4,0,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,4,0,0",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,4,0,0",
+        "cells": 55
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_element.rs",
+    "chapter": "expressions",
+    "feature": "`t[i] += a` on an array element",
+    "section": "Assignment and compound assignment",
+    "input": "0 5 2 -3 0 4 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "19,20,27",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "19,20,27",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "19,20,27",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "19,20,27",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_field.rs",
+    "chapter": "expressions",
+    "feature": "`s.f += a` on a struct field",
+    "section": "Assignment and compound assignment",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,5",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,5",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,5",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,5",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_mul.rs",
+    "chapter": "expressions",
+    "feature": "`x *= a` on `i16`",
+    "section": "Assignment and compound assignment",
+    "input": "2 3 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "200,600,-600",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "200,600,-600",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "200,600,-600",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "200,600,-600",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_rem.rs",
+    "chapter": "expressions",
+    "feature": "`x %= a` on `i16`",
+    "section": "Assignment and compound assignment",
+    "input": "7 3 -20 6 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,2,2,2",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,2,2,2",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,2,2,2",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,2,2,2",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "expressions/compound_sub.rs",
+    "chapter": "expressions",
+    "feature": "`x -= a` on `i16`",
+    "section": "Assignment and compound assignment",
+    "input": "7 3 -20 6 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "93,90,110,104",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "93,90,110,104",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "93,90,110,104",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "93,90,110,104",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/continue_while.rs",
+    "chapter": "expressions",
+    "feature": "`continue` in a `while` loop",
+    "section": "Loop expressions",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3,5",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3,5",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3,5",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3,5",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/deref_choose.rs",
+    "chapter": "expressions",
+    "feature": "A reference returned from a function, `pick(c, &a, &b) -> &i16`, then read",
+    "section": "Dereference operator",
+    "notes": [
+      "Wrong answer: reading through the reference the function returns gets the wrong cells (844 and 100 for 40 and 50)."
+    ],
+    "input": "40 50",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 52
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "expressions/deref_local.rs",
+    "chapter": "expressions",
+    "feature": "`*r` through a local reference, reading and writing",
+    "section": "Dereference operator",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 23
+      }
+    }
+  },
+  {
+    "test": "expressions/deref_raw.rs",
+    "chapter": "expressions",
+    "feature": "`*p` through a raw pointer to an array element",
+    "section": "Dereference operator",
+    "input": "2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "84",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "84",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "84",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "84",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "expressions/deref_ref_ref.rs",
+    "chapter": "expressions",
+    "feature": "`**r` through a reference to a reference",
+    "section": "Dereference operator",
+    "disposition": "demand",
+    "notes": [
+      "A reference to a reference is an address held in a cell, which the compiler doesn't follow twice yet."
+    ],
+    "input": "9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "expressions/destructuring_assign.rs",
+    "chapter": "expressions",
+    "feature": "Destructuring assignment: `(a, b) = (b, a)`",
+    "section": "Assignment and compound assignment",
+    "input": "3 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,3,9,4",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,3,9,4",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,3,9,4",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,3,9,4",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "expressions/div_const_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a / 7`: by a constant other than a power of ten",
+    "section": "Arithmetic operators",
+    "input": "7 -7 99 -99 123 -123 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,14,-14,17,-17,142,-142,0",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,14,-14,17,-17,142,-142,0",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,14,-14,17,-17,142,-142,0",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,14,-14,17,-17,142,-142,0",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/div_pow10_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a / 10`: by a power of ten",
+    "section": "Arithmetic operators",
+    "notes": [
+      "A shift. Rounds toward zero: `-7 / 10` is 0."
+    ],
+    "input": "7 -7 99 -99 123 -123 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,9,-9,12,-12,99,-99,0",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,9,-9,12,-12,99,-99,0",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,9,-9,12,-12,99,-99,0",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,9,-9,12,-12,99,-99,0",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/div_u8.rs",
+    "chapter": "expressions",
+    "feature": "`a / b` on `u8`",
+    "section": "Arithmetic operators",
+    "input": "4 3 5 2 7 3 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,100,36",
+        "cells": 66
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,100,36",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,100,36",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,100,36",
+        "cells": 66
+      }
+    }
+  },
+  {
+    "test": "expressions/div_usize.rs",
+    "chapter": "expressions",
+    "feature": "`a / b` on `usize`",
+    "section": "Arithmetic operators",
+    "input": "7 3 100 9 3 3 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,11,1",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,11,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,11,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,11,1",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "expressions/div_var_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a / b` on `i16`, both variables",
+    "section": "Arithmetic operators",
+    "notes": [
+      "A divide routine, put in once, runs as many steps as the quotient. Rounds toward zero, as Rust does."
+    ],
+    "input": "7 3 -7 3 7 -3 -7 -3 999 -999 0 5 9 10 500 499 -1 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-2,2,-1,0,0,1,-1",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-2,2,-1,0,0,1,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-2,-2,2,-1,0,0,1,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-2,-2,2,-1,0,0,1,-1",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "expressions/div_zero_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a / b` with `b` zero panics",
+    "section": "Arithmetic operators",
+    "input": "7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 55
+      }
+    }
+  },
+  {
+    "test": "expressions/field_array.rs",
+    "chapter": "expressions",
+    "feature": "An array field, `s.t[i]`",
+    "section": "Field access expressions",
+    "input": "2 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,0",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,0",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,0",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "expressions/field_nested.rs",
+    "chapter": "expressions",
+    "feature": "Nested field access, `a.b.c`, read and written",
+    "section": "Field access expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,8",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,8",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,8",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,8",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "expressions/field_through_ref.rs",
+    "chapter": "expressions",
+    "feature": "A field read through `&mut` without `*`, `r.f`",
+    "section": "Field access expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,7",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,7",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,7",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,7",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "expressions/for_array.rs",
+    "chapter": "expressions",
+    "feature": "`for x in array`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "notes": [
+      "The same as `for i in 0..N` with `t[i]`."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,3,5",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,3,5",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,3,5",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,3,5",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "expressions/for_array_ref.rs",
+    "chapter": "expressions",
+    "feature": "`for x in &array` and `array.iter()`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "notes": [
+      "The same as `for i in 0..N` with `t[i]`."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,3,5,2,3,4,6",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,3,5,2,3,4,6",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,3,5,2,3,4,6",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,3,5,2,3,4,6",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/for_enumerate.rs",
+    "chapter": "expressions",
+    "feature": "`for (i, x) in array.iter().enumerate()`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,102,205",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,102,205",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,102,205",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,102,205",
+        "cells": 47
+      }
+    }
+  },
+  {
+    "test": "expressions/for_iter_mut.rs",
+    "chapter": "expressions",
+    "feature": "`for x in array.iter_mut()`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,12,15",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,12,15",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,12,15",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,12,15",
+        "cells": 49
+      }
+    }
+  },
+  {
+    "test": "expressions/for_nested.rs",
+    "chapter": "expressions",
+    "feature": "Nested `for` loops",
+    "section": "Loop expressions",
+    "input": "3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,10,11,20,21",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,10,11,20,21",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,10,11,20,21",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,10,11,20,21",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "expressions/for_range.rs",
+    "chapter": "expressions",
+    "feature": "`for i in a..b`",
+    "section": "Loop expressions",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,3,4,5",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,3,4,5",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,3,4,5",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,3,4,5",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/for_range_empty.rs",
+    "chapter": "expressions",
+    "feature": "`for i in a..b` with `a >= b`: no passes",
+    "section": "Loop expressions",
+    "input": "5 5 6 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,-1",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,-1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,-1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,-1",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/for_range_inclusive.rs",
+    "chapter": "expressions",
+    "feature": "`for i in a..=b`",
+    "section": "Loop expressions",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,3,4,5,6",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,3,4,5,6",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,3,4,5,6",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,3,4,5,6",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/for_range_negative.rs",
+    "chapter": "expressions",
+    "feature": "`for i in a..b` with negative bounds",
+    "section": "Loop expressions",
+    "input": "-3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3,-2,-1,0,1",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3,-2,-1,0,1",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3,-2,-1,0,1",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3,-2,-1,0,1",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/for_rev.rs",
+    "chapter": "expressions",
+    "feature": "`for i in (a..b).rev()`",
+    "section": "Loop expressions",
+    "input": "2 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,4,3,2",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,4,3,2",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,4,3,2",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,4,3,2",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/for_step_by.rs",
+    "chapter": "expressions",
+    "feature": "`for i in (a..b).step_by(k)`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "notes": [
+      "A `while` loop that adds `k` does the same."
+    ],
+    "input": "0 10 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,3,6,9",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,3,6,9",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,3,6,9",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,3,6,9",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/for_usize.rs",
+    "chapter": "expressions",
+    "feature": "`for i in 0..n` over `usize`, indexing an array",
+    "section": "Loop expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,30",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,30",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,30",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,30",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "expressions/grouped_parens.rs",
+    "chapter": "expressions",
+    "feature": "Parentheses changing the order: `(a + b) * 3` against `a + b * 3`",
+    "section": "Grouped expressions",
+    "input": "4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "27,19,0",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "27,19,0",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "27,19,0",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "27,19,0",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "expressions/if_else_chain.rs",
+    "chapter": "expressions",
+    "feature": "An `if` / `else if` / `else` chain",
+    "section": "If and if let expressions",
+    "input": "-5 0 5 50 500 999",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3,3",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3,3",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3,3",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3,3",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "expressions/if_let_chain.rs",
+    "chapter": "expressions",
+    "feature": "A let chain, `if let ... && ...`",
+    "section": "If and if let expressions",
+    "notes": [
+      "Let chains are Rust 2024's: the row is built in that edition, natively too."
+    ],
+    "input": "8 3 4 20",
+    "edition": "2024",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,0,10",
+        "cells": 84
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,0,10",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0,0,10",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0,0,10",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "expressions/if_let_enum.rs",
+    "chapter": "expressions",
+    "feature": "`if let` on an enum variant with fields",
+    "section": "If and if let expressions",
+    "input": "1 4 5 2 4 5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 51
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "expressions/if_let_option.rs",
+    "chapter": "expressions",
+    "feature": "`if let Some(x) = ... else`",
+    "section": "If and if let expressions",
+    "input": "4 -4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-1",
+        "cells": 29
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-1",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-1",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-1",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "expressions/if_value.rs",
+    "chapter": "expressions",
+    "feature": "`if` as a value, `let x = if c { a } else { b };`",
+    "section": "If and if let expressions",
+    "input": "3 9 7 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,7",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,7",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,7",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,7",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "expressions/iter_map_sum.rs",
+    "chapter": "expressions",
+    "feature": "`array.iter().map(...).sum()`",
+    "section": "Loop expressions",
+    "disposition": "demand",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "expressions/labelled_block.rs",
+    "chapter": "expressions",
+    "feature": "A labelled block, `'a: { ... break 'a v; ... }`",
+    "section": "Loop expressions",
+    "input": "3 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-1",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-1",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-1",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-1",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "expressions/labelled_break_continue.rs",
+    "chapter": "expressions",
+    "feature": "Labelled `break 'outer` and `continue 'outer`",
+    "section": "Loop expressions",
+    "input": "4 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,10,11,20,21,22,30,31",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,10,11,20,21,22,30,31",
+        "cells": 74
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,10,11,20,21,22,30,31",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,10,11,20,21,22,30,31",
+        "cells": 74
+      }
+    }
+  },
+  {
+    "test": "expressions/let_else.rs",
+    "chapter": "expressions",
+    "feature": "`let Some(x) = ... else { ... };`",
+    "section": "If and if let expressions",
+    "input": "4 -4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "expressions/lit_bool_char.rs",
+    "chapter": "expressions",
+    "feature": "`true`, `false` and a `char` literal cast to a number (`'A' as i16`)",
+    "section": "Literal expressions",
+    "disposition": "easy",
+    "notes": [
+      "A `char` is a number, its code point, and one that fits on a card can be held as a `u8` is."
+    ],
+    "input": "1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,65",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,65",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,65",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,65",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "expressions/lit_byte.rs",
+    "chapter": "expressions",
+    "feature": "A byte literal (`b'A'`)",
+    "section": "Literal expressions",
+    "input": "1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "65",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "65",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "65",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "65",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/lit_int_forms.rs",
+    "chapter": "expressions",
+    "feature": "Integer literals: decimal, `0x`, `0o`, `0b`, with `_` separators and a type suffix",
+    "section": "Literal expressions",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "31,16,6,101,8",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "31,16,6,101,8",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "31,16,6,101,8",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "31,16,6,101,8",
+        "cells": 59
+      }
+    }
+  },
+  {
+    "test": "expressions/lit_negative.rs",
+    "chapter": "expressions",
+    "feature": "A negative literal (`-999`) and the largest a card holds (`999`)",
+    "section": "Literal expressions",
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999,999",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999,999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999,999",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999,999",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "expressions/loop_break.rs",
+    "chapter": "expressions",
+    "feature": "`loop` with `break`",
+    "section": "Loop expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "expressions/loop_break_value.rs",
+    "chapter": "expressions",
+    "feature": "`loop` with `break value`",
+    "section": "Loop expressions",
+    "input": "4 9 2 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      }
+    }
+  },
+  {
+    "test": "expressions/match_array.rs",
+    "chapter": "expressions",
+    "feature": "`match` on an array pattern, `[a, 0, _]`",
+    "section": "Match expressions",
+    "input": "1 0 3 1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,5",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,5",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,5",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,5",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "expressions/match_binding.rs",
+    "chapter": "expressions",
+    "feature": "`match` binding with `@`, `n @ 1..=9`",
+    "section": "Match expressions",
+    "input": "7 70",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,71",
+        "cells": 23
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,71",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,71",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,71",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "expressions/match_bool.rs",
+    "chapter": "expressions",
+    "feature": "`match` on a `bool`",
+    "section": "Match expressions",
+    "input": "1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,9",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,9",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,9",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,9",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/match_enum.rs",
+    "chapter": "expressions",
+    "feature": "`match` on an enum with fields",
+    "section": "Match expressions",
+    "input": "0 0 0 1 3 0 2 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,6,43",
+        "cells": 66
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,6,43",
+        "cells": 93
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,6,43",
+        "cells": 66
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,6,43",
+        "cells": 93
+      }
+    }
+  },
+  {
+    "test": "expressions/match_guard.rs",
+    "chapter": "expressions",
+    "feature": "`match` arms with guards, `x if x > b`",
+    "section": "Match expressions",
+    "input": "5 3 3 5 4 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,0",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "expressions/match_i16.rs",
+    "chapter": "expressions",
+    "feature": "`match` on an `i16` with literal arms and `_`",
+    "section": "Match expressions",
+    "input": "1 2 3 -7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,30,0",
+        "cells": 33
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,30,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,30,0",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,30,0",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "expressions/match_nested.rs",
+    "chapter": "expressions",
+    "feature": "`match` on a nested pattern, `Some(Shape::Sq(a))`",
+    "section": "Match expressions",
+    "input": "1 3 2 0 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,-1",
+        "cells": 63
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,-1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,-1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,-1",
+        "cells": 63
+      }
+    }
+  },
+  {
+    "test": "expressions/match_option.rs",
+    "chapter": "expressions",
+    "feature": "`match` on an `Option`",
+    "section": "Match expressions",
+    "input": "4 -4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-1",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-1",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/match_or.rs",
+    "chapter": "expressions",
+    "feature": "`match` with `|` alternatives",
+    "section": "Match expressions",
+    "input": "1 2 3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,1,2,1",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,1,2,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,1,2,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,1,2,1",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "expressions/match_ranges.rs",
+    "chapter": "expressions",
+    "feature": "`match` with range patterns, `a..=b` and `..0`",
+    "section": "Match expressions",
+    "input": "-5 0 7 50 999",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,0,1,2,3",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "expressions/match_struct.rs",
+    "chapter": "expressions",
+    "feature": "`match` destructuring a struct, `P { x: 0, y }`",
+    "section": "Match expressions",
+    "input": "0 5 3 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,53",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,53",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,53",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,53",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "expressions/match_tuple.rs",
+    "chapter": "expressions",
+    "feature": "`match` on a tuple of two values",
+    "section": "Match expressions",
+    "input": "0 0 0 5 5 0 5 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,3",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,3",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,2,3",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,2,3",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "expressions/method_autoref.rs",
+    "chapter": "expressions",
+    "feature": "Auto-ref and auto-deref: a `&self` method called on a value, on `&P` and on `&&P`",
+    "section": "Method-call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,7",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,7",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,7,7",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,7,7",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "expressions/method_chained.rs",
+    "chapter": "expressions",
+    "feature": "Chained methods, `p.moved(1).moved(2).sum()`",
+    "section": "Method-call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "61",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "61",
+        "cells": 73
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "61",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "61",
+        "cells": 73
+      }
+    }
+  },
+  {
+    "test": "expressions/method_dyn.rs",
+    "chapter": "expressions",
+    "feature": "A trait object, `&dyn Trait`, chosen at run time",
+    "section": "Method-call expressions",
+    "disposition": "demand",
+    "notes": [
+      "Dynamic dispatch needs a vtable and an indirect call, which CARDIAC can build as it builds an indexed read."
+    ],
+    "input": "1 3 0 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-3",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-3",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-3",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-3",
+        "cells": 56
+      }
+    }
+  },
+  {
+    "test": "expressions/method_inherent.rs",
+    "chapter": "expressions",
+    "feature": "An inherent method taking `&self`",
+    "section": "Method-call expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/method_mut_self.rs",
+    "chapter": "expressions",
+    "feature": "A method taking `&mut self`",
+    "section": "Method-call expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "expressions/method_trait.rs",
+    "chapter": "expressions",
+    "feature": "A trait method, two types implementing it",
+    "section": "Method-call expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,15",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,15",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,15",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,15",
+        "cells": 77
+      }
+    }
+  },
+  {
+    "test": "expressions/method_trait_default.rs",
+    "chapter": "expressions",
+    "feature": "A trait's default method calling a required one",
+    "section": "Method-call expressions",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the default method with the struct by reference, which inherent methods already handle."
+    ],
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/mul_const_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a * 7`: by a constant",
+    "section": "Arithmetic operators",
+    "input": "7 -7 99 -99 142 -142 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "49,-49,693,-693,994,-994,0",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "49,-49,693,-693,994,-994,0",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "49,-49,693,-693,994,-994,0",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "49,-49,693,-693,994,-994,0",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "expressions/mul_pow10_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a * 10`: by a power of ten",
+    "section": "Arithmetic operators",
+    "input": "7 -7 99 -99 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "70,-70,990,-990,0",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "70,-70,990,-990,0",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "70,-70,990,-990,0",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "70,-70,990,-990,0",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "expressions/mul_u8.rs",
+    "chapter": "expressions",
+    "feature": "`a * b` on `u8`",
+    "section": "Arithmetic operators",
+    "input": "2 3 3 3 1 6 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,49,254",
+        "cells": 82
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,49,254",
+        "cells": 90
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,49,254",
+        "cells": 82
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,49,254",
+        "cells": 90
+      }
+    }
+  },
+  {
+    "test": "expressions/mul_usize.rs",
+    "chapter": "expressions",
+    "feature": "`a * b` on `usize`",
+    "section": "Arithmetic operators",
+    "input": "7 3 100 9 3 3 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,900,9",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,900,9",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,900,9",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,900,9",
+        "cells": 59
+      }
+    }
+  },
+  {
+    "test": "expressions/mul_var_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a * b` on `i16`, both variables",
+    "section": "Arithmetic operators",
+    "notes": [
+      "A multiply routine, put in once, runs as many steps as the smaller factor."
+    ],
+    "input": "7 3 -7 3 7 -3 -7 -3 0 5 33 30 -1 999 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,-21,21,0,990,-999",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,-21,21,0,990,-999",
+        "cells": 61
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "21,-21,-21,21,0,990,-999",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "21,-21,-21,21,0,990,-999",
+        "cells": 61
+      }
+    }
+  },
+  {
+    "test": "expressions/neg_i16.rs",
+    "chapter": "expressions",
+    "feature": "`-a` on `i16`",
+    "section": "Arithmetic operators",
+    "input": "7 -7 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,999,0",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-7,7,-999,999,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-7,7,-999,999,0",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "expressions/not_bool.rs",
+    "chapter": "expressions",
+    "feature": "`!b` on `bool`",
+    "section": "Negation operators",
+    "input": "0 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "expressions/not_i16.rs",
+    "chapter": "expressions",
+    "feature": "`!a` on `i16` (bitwise not)",
+    "section": "Negation operators",
+    "disposition": "easy",
+    "notes": [
+      "On a signed integer `!a` is `-a - 1`, which CARDIAC can do in two instructions."
+    ],
+    "input": "7 -7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8,6,-1",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8,6,-1",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8,6,-1",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8,6,-1",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "expressions/not_u8.rs",
+    "chapter": "expressions",
+    "feature": "`!a` on `u8` (bitwise not)",
+    "section": "Negation operators",
+    "disposition": "easy",
+    "notes": [
+      "On a `u8`, `!a` is `255 - a`."
+    ],
+    "input": "0 3 6 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,248,1",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,248,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255,248,1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "255,248,1",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "expressions/or_short_circuit.rs",
+    "chapter": "expressions",
+    "feature": "`||` doesn't evaluate its right side when the left side is true",
+    "section": "Lazy boolean operators",
+    "notes": [
+      "The right side divides by zero: evaluating it would panic."
+    ],
+    "input": "0 7 2 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 69
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "expressions/or_var.rs",
+    "chapter": "expressions",
+    "feature": "`a | b`",
+    "section": "Bitwise and shift operators",
+    "disposition": "demand",
+    "notes": [
+      "Needs the bits of a decimal number: a digit-by-digit routine."
+    ],
+    "input": "6 3 5 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 94
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 94
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,5",
+        "cells": 94
+      }
+    }
+  },
+  {
+    "test": "expressions/path_assoc_const.rs",
+    "chapter": "expressions",
+    "feature": "An associated constant (`Point::ORIGIN_X`)",
+    "section": "Path expressions",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/path_const.rs",
+    "chapter": "expressions",
+    "feature": "A `const` used in an expression",
+    "section": "Path expressions",
+    "input": "3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "expressions/path_i16_max.rs",
+    "chapter": "expressions",
+    "feature": "`i16::MAX` compared with a value (`a < i16::MAX`)",
+    "section": "Path expressions",
+    "disposition": "easy",
+    "notes": [
+      "32767 is past what a card holds, but comparing a value with it works; `i16::MAX - a` is refused on purpose (RCE0009)."
+    ],
+    "input": "0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/path_static.rs",
+    "chapter": "expressions",
+    "feature": "Reading a `static`",
+    "section": "Path expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/path_static_array.rs",
+    "chapter": "expressions",
+    "feature": "Indexing a `static` array",
+    "section": "Path expressions",
+    "disposition": "easy",
+    "notes": [
+      "A `static` is a fixed place in memory, which every CARDIAC variable already is; a `const` table works today."
+    ],
+    "input": "2 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "44",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "44",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "44",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "44",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "expressions/path_static_mut.rs",
+    "chapter": "expressions",
+    "feature": "Reading and writing a `static mut`",
+    "section": "Path expressions",
+    "disposition": "easy",
+    "notes": [
+      "A `static` is a fixed place in memory, which every CARDIAC variable already is."
+    ],
+    "input": "3 4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "expressions/path_trait_assoc_const.rs",
+    "chapter": "expressions",
+    "feature": "A trait's associated constant (`T::SIZE` in a generic function)",
+    "section": "Path expressions",
+    "disposition": "demand",
+    "notes": [
+      "At opt-level 1 rustc doesn't inline the generic function, and generic functions are compiled only when rustc inlines them."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,35",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,35",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,35",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,35",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "expressions/path_u8_max.rs",
+    "chapter": "expressions",
+    "feature": "`u8::MAX` as a value",
+    "section": "Path expressions",
+    "input": "0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "expressions/range_contains.rs",
+    "chapter": "expressions",
+    "feature": "`(a..b).contains(&x)`",
+    "section": "Range expressions",
+    "input": "3 7 5 9 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,0,0",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,0,0",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,0,0",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,0,0",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "expressions/range_sum.rs",
+    "chapter": "expressions",
+    "feature": "`(a..b).sum()`",
+    "section": "Loop expressions",
+    "disposition": "easy",
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_const_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a % 7`: by a constant other than a power of ten",
+    "section": "Arithmetic operators",
+    "input": "7 -7 99 -99 123 -123 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,1,-1,4,-4,5,-5,0",
+        "cells": 68
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,1,-1,4,-4,5,-5,0",
+        "cells": 68
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,0,1,-1,4,-4,5,-5,0",
+        "cells": 68
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,0,1,-1,4,-4,5,-5,0",
+        "cells": 68
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_pow10_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a % 10`: by a power of ten",
+    "section": "Arithmetic operators",
+    "input": "7 -7 99 -99 123 -123 999 -999 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-7,9,-9,3,-3,9,-9,0",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-7,9,-9,3,-3,9,-9,0",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-7,9,-9,3,-3,9,-9,0",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-7,9,-9,3,-3,9,-9,0",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_u8.rs",
+    "chapter": "expressions",
+    "feature": "`a % b` on `u8`",
+    "section": "Arithmetic operators",
+    "input": "4 3 5 2 7 3 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,0,3",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,0,3",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,0,3",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,0,3",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_usize.rs",
+    "chapter": "expressions",
+    "feature": "`a % b` on `usize`",
+    "section": "Arithmetic operators",
+    "input": "7 3 100 9 3 3 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,0",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,0",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,0",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,0",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_var_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a % b` on `i16`, both variables",
+    "section": "Arithmetic operators",
+    "notes": [
+      "The remainder takes the sign of `a`, as in Rust."
+    ],
+    "input": "7 3 -7 3 7 -3 -7 -3 999 -999 0 5 500 499 -1 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,0,0,1,0",
+        "cells": 78
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,0,0,1,0",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,0,0,1,0",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1,1,-1,0,0,1,0",
+        "cells": 78
+      }
+    }
+  },
+  {
+    "test": "expressions/rem_zero_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a % b` with `b` zero panics",
+    "section": "Arithmetic operators",
+    "input": "7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 67
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 67
+      }
+    }
+  },
+  {
+    "test": "expressions/return_early.rs",
+    "chapter": "expressions",
+    "feature": "An early `return` from a function",
+    "section": "Return expressions",
+    "input": "-4 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,12",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,12",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,12",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,12",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "expressions/return_in_loop.rs",
+    "chapter": "expressions",
+    "feature": "`return` from inside a loop",
+    "section": "Return expressions",
+    "input": "3 5 7 9 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-1",
+        "cells": 62
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-1",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,-1",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,-1",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "expressions/return_unit.rs",
+    "chapter": "expressions",
+    "feature": "A bare `return;` from a function that returns nothing",
+    "section": "Return expressions",
+    "input": "-4 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,0",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,0",
+        "cells": 17
+      }
+    }
+  },
+  {
+    "test": "expressions/shift_var.rs",
+    "chapter": "expressions",
+    "feature": "`a << b`, `a >> b`: shifts by a variable",
+    "section": "Bitwise and shift operators",
+    "disposition": "demand",
+    "input": "3 2 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      }
+    }
+  },
+  {
+    "test": "expressions/shl_const.rs",
+    "chapter": "expressions",
+    "feature": "`a << 2`: a shift left by a constant",
+    "section": "Bitwise and shift operators",
+    "disposition": "easy",
+    "notes": [
+      "`a << k` is `a * 2^k`, which the compiler already does for a constant."
+    ],
+    "input": "3 -3 100 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-12,400,0",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-12,400,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-12,400,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-12,400,0",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/shr_const.rs",
+    "chapter": "expressions",
+    "feature": "`a >> 2`: a shift right by a constant",
+    "section": "Bitwise and shift operators",
+    "disposition": "easy",
+    "notes": [
+      "`a >> k` on an `i16` is `a.div_euclid(2^k)`, which the compiler already does for a constant."
+    ],
+    "input": "13 -13 100 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-4,25,0",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-4,25,0",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-4,25,0",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-4,25,0",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_enum_variant_call.rs",
+    "chapter": "expressions",
+    "feature": "An enum variant built from a call's result, `Shape::Rect(k, inp())`, and returned",
+    "section": "Struct expressions",
+    "notes": [
+      "Wrong answer: the field set from the call's result comes back as 0; built from parameters the same enum is right."
+    ],
+    "input": "1 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "41",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "41",
+        "cells": 64
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "41",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "41",
+        "cells": 64
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_named.rs",
+    "chapter": "expressions",
+    "feature": "A struct literal with named fields",
+    "section": "Struct expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_nested.rs",
+    "chapter": "expressions",
+    "feature": "A struct literal with a struct field",
+    "section": "Struct expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 25
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_shorthand.rs",
+    "chapter": "expressions",
+    "feature": "Field init shorthand, `P { x, y }`",
+    "section": "Struct expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_tuple.rs",
+    "chapter": "expressions",
+    "feature": "A tuple struct built with a call, `Pair(a, b)`",
+    "section": "Struct expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_unit.rs",
+    "chapter": "expressions",
+    "feature": "A unit struct and its method",
+    "section": "Struct expressions",
+    "disposition": "easy",
+    "notes": [
+      "A unit struct has no fields, so it needs no cells at all."
+    ],
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "expressions/struct_update.rs",
+    "chapter": "expressions",
+    "feature": "Functional update, `P { x: 1, ..base }`",
+    "section": "Struct expressions",
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,5,3,4,5",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,5,3,4,5",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0,5,3,4,5",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0,5,3,4,5",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "expressions/sub_i16.rs",
+    "chapter": "expressions",
+    "feature": "`a - b` on `i16`",
+    "section": "Arithmetic operators",
+    "input": "7 3 -7 3 3 7 -500 499 999 999 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,-4,-999,0",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,-4,-999,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,-10,-4,-999,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,-10,-4,-999,0",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "expressions/sub_u8.rs",
+    "chapter": "expressions",
+    "feature": "`a - b` on `u8`",
+    "section": "Arithmetic operators",
+    "input": "3 2 7 0 5 4 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,100",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,100",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,255,100",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,255,100",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "expressions/sub_u8_underflow.rs",
+    "chapter": "expressions",
+    "feature": "`a - b` on `u8` below 0: panics, or wraps with checks off",
+    "section": "Arithmetic operators",
+    "input": "1 2 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "255",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "expressions/sub_usize.rs",
+    "chapter": "expressions",
+    "feature": "`a - b` on `usize`",
+    "section": "Arithmetic operators",
+    "input": "7 3 100 9 3 3 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,91,0",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,91,0",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,91,0",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,91,0",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "expressions/sub_usize_underflow.rs",
+    "chapter": "expressions",
+    "feature": "`a - b` on `usize` below 0: panics, or wraps with checks off",
+    "section": "Arithmetic operators",
+    "input": "3 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-999",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "expressions/try_chain.rs",
+    "chapter": "expressions",
+    "feature": "Several `?` in one function: the first `None` returns",
+    "section": "The question mark operator",
+    "input": "1 2 -1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 52
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 93
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-1",
+        "cells": 93
+      }
+    }
+  },
+  {
+    "test": "expressions/try_option.rs",
+    "chapter": "expressions",
+    "feature": "`?` on an `Option` in a function returning `Option`",
+    "section": "The question mark operator",
+    "input": "5 3 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,3,-1",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,3,-1",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,3,-1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,3,-1",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "expressions/try_result.rs",
+    "chapter": "expressions",
+    "feature": "`?` on a `Result` in a function returning `Result`",
+    "section": "The question mark operator",
+    "input": "5 -3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-300",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-300",
+        "cells": 81
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-300",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-300",
+        "cells": 81
+      }
+    }
+  },
+  {
+    "test": "expressions/try_result_from.rs",
+    "chapter": "expressions",
+    "feature": "`?` converting the error with `From` (`Result<_, u8>` into `Result<_, i16>`)",
+    "section": "The question mark operator",
+    "notes": [
+      "Wrong answer at opt-level 1: the error comes back unconverted (7, not 70), as if `From` weren't called."
+    ],
+    "input": "-3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "70",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "70",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "70",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "70",
+        "cells": 87
+      }
+    }
+  },
+  {
+    "test": "expressions/tuple_index.rs",
+    "chapter": "expressions",
+    "feature": "A tuple and `.0`, `.1`",
+    "section": "Tuple and tuple indexing expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,7",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,7",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,7",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,7",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "expressions/tuple_mixed.rs",
+    "chapter": "expressions",
+    "feature": "A tuple of `i16`, `bool` and `u8`",
+    "section": "Tuple and tuple indexing expressions",
+    "input": "3 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,1,7",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,1,7",
+        "cells": 58
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,1,7",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,1,7",
+        "cells": 58
+      }
+    }
+  },
+  {
+    "test": "expressions/tuple_nested.rs",
+    "chapter": "expressions",
+    "feature": "A nested tuple, `t.1.0`",
+    "section": "Tuple and tuple indexing expressions",
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,14,5",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,14,5",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,14,5",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,14,5",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "expressions/tuple_return.rs",
+    "chapter": "expressions",
+    "feature": "A tuple returned from a function and taken apart",
+    "section": "Tuple and tuple indexing expressions",
+    "input": "17 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "22,12,34",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "22,12,34",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "22,12,34",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "22,12,34",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "expressions/tuple_struct_index.rs",
+    "chapter": "expressions",
+    "feature": "A tuple struct's fields, `p.0`, `p.1`",
+    "section": "Tuple and tuple indexing expressions",
+    "input": "6 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,7",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,7",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,7",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,7",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "expressions/underscore_assign.rs",
+    "chapter": "expressions",
+    "feature": "`_ = f()`: calling and dropping the result",
+    "section": "Underscore expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "expressions/underscore_destructure.rs",
+    "chapter": "expressions",
+    "feature": "`_` in destructuring assignment, `(a, _) = (x, y)`",
+    "section": "Underscore expressions",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "expressions/while.rs",
+    "chapter": "expressions",
+    "feature": "`while`",
+    "section": "Loop expressions",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2,1,0",
+        "cells": 9
+      }
+    }
+  },
+  {
+    "test": "expressions/while_let.rs",
+    "chapter": "expressions",
+    "feature": "`while let Some(x) = ...`",
+    "section": "Loop expressions",
+    "input": "4 9 2 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,18,4",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,18,4",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,18,4",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,18,4",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "expressions/xor_var.rs",
+    "chapter": "expressions",
+    "feature": "`a ^ b`",
+    "section": "Bitwise and shift operators",
+    "disposition": "demand",
+    "notes": [
+      "Needs the bits of a decimal number: a digit-by-digit routine."
+    ],
+    "input": "6 3 5 1 0 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,4",
+        "cells": 95
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,4",
+        "cells": 95
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,4",
+        "cells": 95
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,4",
+        "cells": 95
+      }
+    }
+  }
+]

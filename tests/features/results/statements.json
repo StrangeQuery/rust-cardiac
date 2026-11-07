@@ -1,0 +1,786 @@
+[
+  {
+    "test": "statements/expr_stmt_block.rs",
+    "chapter": "statements",
+    "feature": "`if` and `match` as statements without a semicolon",
+    "section": "Expression statements",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,70,-1,0",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,70,-1,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,70,-1,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,70,-1,0",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "statements/expr_stmt_call.rs",
+    "chapter": "statements",
+    "feature": "a call as a statement, its result unused",
+    "section": "Expression statements",
+    "input": "7 3 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 6
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 6
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 6
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 6
+      }
+    }
+  },
+  {
+    "test": "statements/expr_stmt_tail.rs",
+    "chapter": "statements",
+    "feature": "a block whose value is its tail expression",
+    "section": "Expression statements",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 23
+      }
+    }
+  },
+  {
+    "test": "statements/expr_stmt_unused.rs",
+    "chapter": "statements",
+    "feature": "an unused arithmetic result (`a + b;`)",
+    "section": "Expression statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "statements/item_const.rs",
+    "chapter": "statements",
+    "feature": "a `const` declared inside a function",
+    "section": "Item declarations",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "32",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "statements/item_enum.rs",
+    "chapter": "statements",
+    "feature": "an `enum` declared inside a function",
+    "section": "Item declarations",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "statements/item_fn.rs",
+    "chapter": "statements",
+    "feature": "a `fn` declared inside a function",
+    "section": "Item declarations",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,6",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,6",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,6",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,6",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "statements/item_static.rs",
+    "chapter": "statements",
+    "feature": "a `static` declared inside a function",
+    "section": "Item declarations",
+    "disposition": "demand",
+    "input": "1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "20,30",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "20,30",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "20,30",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "20,30",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "statements/item_struct.rs",
+    "chapter": "statements",
+    "feature": "a `struct` with an `impl` declared inside a function",
+    "section": "Item declarations",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "statements/item_use.rs",
+    "chapter": "statements",
+    "feature": "a `use` declaration inside a function",
+    "section": "Item declarations",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 11
+      }
+    }
+  },
+  {
+    "test": "statements/let_block_init.rs",
+    "chapter": "statements",
+    "feature": "`let x = { ...; e };` with a block as initialiser",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "17",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "statements/let_deferred.rs",
+    "chapter": "statements",
+    "feature": "`let x;` without an initialiser, assigned later",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "statements/let_deferred_branch.rs",
+    "chapter": "statements",
+    "feature": "`let x;` assigned in each branch of an `if`",
+    "section": "Let statements",
+    "input": "7 -3 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,-1,0",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,-1,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "14,-1,0",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "14,-1,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "statements/let_deferred_match.rs",
+    "chapter": "statements",
+    "feature": "`let x;` assigned in each arm of a `match`",
+    "section": "Let statements",
+    "input": "1 2 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,5",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,5",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,20,5",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,20,5",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "statements/let_else.rs",
+    "chapter": "statements",
+    "feature": "`let Some(v) = e else { ... };` (let-else)",
+    "section": "Let-else",
+    "input": "7 -3 4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-1,5",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-1,5",
+        "cells": 29
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-1,5",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-1,5",
+        "cells": 29
+      }
+    }
+  },
+  {
+    "test": "statements/let_else_panic.rs",
+    "chapter": "statements",
+    "feature": "let-else whose `else` panics",
+    "section": "Let-else",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-999",
+        "cells": 15
+      }
+    }
+  },
+  {
+    "test": "statements/let_else_range.rs",
+    "chapter": "statements",
+    "feature": "let-else with a refutable range pattern",
+    "section": "Let-else",
+    "input": "5 12 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-1,3",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-1,3",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-1,3",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-1,3",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "statements/let_inferred.rs",
+    "chapter": "statements",
+    "feature": "`let x = e;` with the type inferred",
+    "section": "Let statements",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "statements/let_inferred_later.rs",
+    "chapter": "statements",
+    "feature": "`let mut x = 0;` whose type comes from a later use",
+    "section": "Let statements",
+    "input": "7 -3 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "statements/let_mut_reassign.rs",
+    "chapter": "statements",
+    "feature": "`let mut x = e;` and later assignments",
+    "section": "Let statements",
+    "input": "7 3 -5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,10,5",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,10,5",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,10,5",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,10,5",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "statements/let_shadow.rs",
+    "chapter": "statements",
+    "feature": "shadowing: `let a = a + 1;`",
+    "section": "Let statements",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,8,80",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,8,80",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,8,80",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,8,80",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "statements/let_shadow_scope.rs",
+    "chapter": "statements",
+    "feature": "shadowing in an inner block ends with the block",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,7",
+        "cells": 7
+      }
+    }
+  },
+  {
+    "test": "statements/let_shadow_type.rs",
+    "chapter": "statements",
+    "feature": "shadowing with a new type (`i16` to `bool` to `u8`)",
+    "section": "Let statements",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "statements/let_tuple.rs",
+    "chapter": "statements",
+    "feature": "`let (a, b) = (e1, e2);`",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "statements/let_typed.rs",
+    "chapter": "statements",
+    "feature": "`let x: i16 = e;` with a type",
+    "section": "Let statements",
+    "input": "7 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "statements/let_underscore.rs",
+    "chapter": "statements",
+    "feature": "`let _ = e;` evaluates `e` and drops it",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      }
+    }
+  },
+  {
+    "test": "statements/let_underscore_named.rs",
+    "chapter": "statements",
+    "feature": "`let _x = e;` (an unused binding)",
+    "section": "Let statements",
+    "input": "7 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 5
+      }
+    }
+  }
+]

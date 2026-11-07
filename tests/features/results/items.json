@@ -1,0 +1,2974 @@
+[
+  {
+    "test": "items/assoc_const_inherent.rs",
+    "chapter": "items",
+    "feature": "An associated `const` in an inherent impl",
+    "section": "Associated items",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "29,8",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "29,8",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "29,8",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "29,8",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "items/const_array.rs",
+    "chapter": "items",
+    "feature": "A `const` array indexed at run time",
+    "section": "Constant items",
+    "input": "2 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,10",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,10",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,10",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,10",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "items/const_computed.rs",
+    "chapter": "items",
+    "feature": "A `const` computed from other constants",
+    "section": "Constant items",
+    "disposition": "easy",
+    "notes": [
+      "rustc has already worked out the array; the compiler only has to read its value, as it does for a literal table."
+    ],
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "87,87",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "87,87",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "87,87",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "87,87",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "items/const_from_const_fn.rs",
+    "chapter": "items",
+    "feature": "A `const` from a `const fn`",
+    "section": "Constant items",
+    "disposition": "easy",
+    "notes": [
+      "rustc has already run the `const fn`; the compiler only has to read the array it made."
+    ],
+    "input": "0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,4,9,16",
+        "cells": 22
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,4,9,16",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,4,9,16",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,4,9,16",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "items/const_past_card.rs",
+    "chapter": "items",
+    "feature": "A `const` past a card (`const BIG: i16 = 1500`)",
+    "section": "Constant items",
+    "notes": [
+      "Only `BIG / 10` (150) is used, and rustc works it out before the compiler sees it; `BIG` used at run time, as in `BIG / inp()`, is refused on purpose (RCE0009)."
+    ],
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "151",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "151",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "151",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "151",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "items/const_scalar.rs",
+    "chapter": "items",
+    "feature": "A `const` scalar",
+    "section": "Constant items",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "895",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "895",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "895",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "895",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "items/const_struct.rs",
+    "chapter": "items",
+    "feature": "A `const` struct",
+    "section": "Constant items",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 18
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/enum_clike.rs",
+    "chapter": "items",
+    "feature": "A C-like enum with given discriminants, cast with `as`",
+    "section": "Enumerations",
+    "input": "0 1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5,10,900",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5,10,900",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5,10,900",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5,10,900",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "items/enum_data.rs",
+    "chapter": "items",
+    "feature": "An enum whose variants carry data, built from `inp()` in a function that returns it",
+    "section": "Enumerations",
+    "notes": [
+      "A wrong answer: `Shape::Rect(inp(), inp())` returned from a function loses its second field (prints 3 for 3 - 4); with the fields read into locals first it is right. Even `fn read() -> Shape { Shape::Rect(inp(), inp()) }` alone gives 0, 0."
+    ],
+    "input": "0 5 1 3 4 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-1,0",
+        "cells": 63
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-1,0",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-1,0",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-1,0",
+        "cells": 80
+      }
+    }
+  },
+  {
+    "test": "items/enum_data_locals.rs",
+    "chapter": "items",
+    "feature": "An enum whose variants carry data, built from locals and passed to a function",
+    "section": "Enumerations",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,6",
+        "cells": 64
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,6",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,6",
+        "cells": 64
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,6",
+        "cells": 84
+      }
+    }
+  },
+  {
+    "test": "items/enum_derive_partialeq.rs",
+    "chapter": "items",
+    "feature": "`==` on an enum with `#[derive(PartialEq)]`",
+    "section": "Enumerations",
+    "input": "1 1 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 77
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 77
+      }
+    }
+  },
+  {
+    "test": "items/enum_generic.rs",
+    "chapter": "items",
+    "feature": "A generic enum of your own (`enum Maybe<T>`)",
+    "section": "Enumerations",
+    "disposition": "easy",
+    "notes": [
+      "Once rustc fills in `T`, the layout is the same as a non-generic enum's, which already works."
+    ],
+    "input": "1 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "items/enum_recursive_box.rs",
+    "chapter": "items",
+    "feature": "A recursive enum through `Box`",
+    "section": "Enumerations",
+    "disposition": "never",
+    "notes": [
+      "`Box` needs a heap; this row uses a `&'static` link instead, the nearest a `no_std` program gets without an allocator."
+    ],
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now"
+      }
+    }
+  },
+  {
+    "test": "items/enum_repr_i16.rs",
+    "chapter": "items",
+    "feature": "A `#[repr(i16)]` C-like enum",
+    "section": "Enumerations",
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,1,7",
+        "cells": 59
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,1,7",
+        "cells": 71
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "13,1,7",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "13,1,7",
+        "cells": 71
+      }
+    }
+  },
+  {
+    "test": "items/enum_struct_variant.rs",
+    "chapter": "items",
+    "feature": "An enum with a struct-like variant (`V { x, y }`)",
+    "section": "Enumerations",
+    "disposition": "easy",
+    "notes": [
+      "A variant with named fields is laid out as one with unnamed fields, which already works."
+    ],
+    "input": "1 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 31
+      }
+    }
+  },
+  {
+    "test": "items/extern_block.rs",
+    "chapter": "items",
+    "feature": "An `extern \"C\"` block declaring a function",
+    "section": "External blocks",
+    "disposition": "never",
+    "notes": [
+      "There is nothing on the other side of an FFI call on CARDIAC; the card reader and the printer are the whole outside world. The call never runs here, but natively it needs a definition to link."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function host_add"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function host_add"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function host_add"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function host_add"
+      }
+    }
+  },
+  {
+    "test": "items/extern_fn_def.rs",
+    "chapter": "items",
+    "feature": "An `extern \"C\" fn` defined in Rust and called from Rust",
+    "section": "External blocks",
+    "disposition": "easy",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "items/fn_calls_fn.rs",
+    "chapter": "items",
+    "feature": "A non-inlined function calling another",
+    "section": "Functions",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "items/fn_const_fn_runtime.rs",
+    "chapter": "items",
+    "feature": "A `const fn` called with a value read at run time",
+    "section": "Functions",
+    "input": "9 -2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "28,-5",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "28,-5",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "28,-5",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "28,-5",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "items/fn_const_generic.rs",
+    "chapter": "items",
+    "feature": "A const generic parameter (`fn f<const N: usize>`)",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,35",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,35",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "15,35",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "15,35",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "items/fn_const_generic_array.rs",
+    "chapter": "items",
+    "feature": "A const generic array length (`fn sum<const N: usize>(t: &[i16; N])`)",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "1 2 3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 50
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 86
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,9",
+        "cells": 86
+      }
+    }
+  },
+  {
+    "test": "items/fn_diverging.rs",
+    "chapter": "items",
+    "feature": "A diverging function (`-> !`)",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "A call that never returns needs nothing after it; the second card is negative, so the program then panics."
+    ],
+    "input": "3 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-999",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,-999",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,-999",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "items/fn_generic_inlined.rs",
+    "chapter": "items",
+    "feature": "A generic function rustc inlines",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "3 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      }
+    }
+  },
+  {
+    "test": "items/fn_generic_not_inlined.rs",
+    "chapter": "items",
+    "feature": "A generic function marked `#[inline(never)]`",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "3 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,1",
+        "cells": 63
+      }
+    }
+  },
+  {
+    "test": "items/fn_impl_trait_arg.rs",
+    "chapter": "items",
+    "feature": "`impl Trait` in argument position",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "4 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "16,24",
+        "cells": 68
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "16,24",
+        "cells": 89
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "16,24",
+        "cells": 68
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "16,24",
+        "cells": 89
+      }
+    }
+  },
+  {
+    "test": "items/fn_impl_trait_return.rs",
+    "chapter": "items",
+    "feature": "`impl Trait` in return position",
+    "section": "Functions",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "items/fn_inline_always.rs",
+    "chapter": "items",
+    "feature": "`#[inline(always)]` on a helper",
+    "section": "Functions",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,11",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,11",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,11",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,11",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "items/fn_inlined.rs",
+    "chapter": "items",
+    "feature": "A small helper rustc inlines, called twice",
+    "section": "Functions",
+    "input": "5 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,9",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "items/fn_many_params.rs",
+    "chapter": "items",
+    "feature": "A function of six parameters, not inlined",
+    "section": "Functions",
+    "input": "1 2 3 4 5 6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "items/fn_nested.rs",
+    "chapter": "items",
+    "feature": "A function defined inside another",
+    "section": "Functions",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "40,50",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "items/fn_no_return.rs",
+    "chapter": "items",
+    "feature": "A function with no result (`-> ()`) that prints",
+    "section": "Functions",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,1,1",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,1,1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4,1,1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4,1,1",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "items/fn_param_bool.rs",
+    "chapter": "items",
+    "feature": "A function taking and returning `bool`, not inlined",
+    "section": "Functions",
+    "input": "3 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1",
+        "cells": 47
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,1",
+        "cells": 47
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,1",
+        "cells": 47
+      }
+    }
+  },
+  {
+    "test": "items/fn_param_i16.rs",
+    "chapter": "items",
+    "feature": "A function taking and returning `i16`, not inlined",
+    "section": "Functions",
+    "input": "12 -5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "17,-17",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "17,-17",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "17,-17",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "17,-17",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "items/fn_param_u8.rs",
+    "chapter": "items",
+    "feature": "A function taking and returning `u8`, not inlined",
+    "section": "Functions",
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "150",
+        "cells": 49
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "150",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "150",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "150",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "items/fn_param_usize.rs",
+    "chapter": "items",
+    "feature": "A function taking and returning `usize`, not inlined",
+    "section": "Functions",
+    "input": "30 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "38",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "38",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "38",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "38",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "items/fn_pointer.rs",
+    "chapter": "items",
+    "feature": "A function pointer (`fn(i16) -> i16`) chosen at run time",
+    "section": "Functions",
+    "disposition": "demand",
+    "notes": [
+      "A call through a cell holding an address can be built with self-modifying code, as variable indexing is."
+    ],
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "items/fn_recursion_direct.rs",
+    "chapter": "items",
+    "feature": "Direct recursion (`fn sum(n) { n + sum(n - 1) }`)",
+    "section": "Functions",
+    "disposition": "demand",
+    "notes": [
+      "CARDIAC has no stack and each function's locals and return address are fixed cells, so a recursive call needs a software stack of its own (an array and self-modifying loads); possible, but slow and costly in cells, and a loop does the same."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "15",
+        "cells": 96
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "15",
+        "cells": 96
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "15",
+        "cells": 96
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "15",
+        "cells": 96
+      }
+    }
+  },
+  {
+    "test": "items/fn_recursion_mutual.rs",
+    "chapter": "items",
+    "feature": "Mutual recursion (`is_even` and `is_odd`)",
+    "section": "Functions",
+    "disposition": "demand",
+    "notes": [
+      "As for direct recursion: it needs a software stack, since each function's cells are fixed."
+    ],
+    "input": "7 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 49
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 49
+      }
+    }
+  },
+  {
+    "test": "items/fn_recursion_tail.rs",
+    "chapter": "items",
+    "feature": "Tail recursion (`fn count(n, acc)`)",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "A call in tail position needs no stack: the compiler could turn it into a jump back to the start, as a loop."
+    ],
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "items/fn_return_ref.rs",
+    "chapter": "items",
+    "feature": "A function returning a reference (`fn id(a: &i16) -> &i16`)",
+    "section": "Generic parameters",
+    "notes": [
+      "A wrong answer: the reference that comes back reads the wrong cell (609 for 8), at every setting."
+    ],
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "items/fn_tuple_param.rs",
+    "chapter": "items",
+    "feature": "A tuple passed as a parameter",
+    "section": "Functions",
+    "input": "3 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "items/fn_tuple_return.rs",
+    "chapter": "items",
+    "feature": "Several results returned as a tuple",
+    "section": "Functions",
+    "input": "17 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 87
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 87
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,2",
+        "cells": 87
+      }
+    }
+  },
+  {
+    "test": "items/fn_where_clause.rs",
+    "chapter": "items",
+    "feature": "A `where` clause on a generic function",
+    "section": "Functions",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "7 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-5",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-5",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-5",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-5",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "items/generic_default_param.rs",
+    "chapter": "items",
+    "feature": "A generic type parameter with a default (`struct W<T = i16>`)",
+    "section": "Generic parameters",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/generic_trait_bound_multi.rs",
+    "chapter": "items",
+    "feature": "Several trait bounds (`T: Copy + PartialOrd + Add`)",
+    "section": "Generic parameters",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "5 3 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,10",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,10",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,10",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,10",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "items/impl_chained.rs",
+    "chapter": "items",
+    "feature": "Chained methods returning `Self`",
+    "section": "Implementations",
+    "input": "2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-6",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-6",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-6",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-6",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "items/impl_generic.rs",
+    "chapter": "items",
+    "feature": "A generic `impl<T>` block",
+    "section": "Implementations",
+    "disposition": "easy",
+    "input": "4 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 11
+      }
+    }
+  },
+  {
+    "test": "items/impl_generic_call.rs",
+    "chapter": "items",
+    "feature": "A method of a generic `impl<T>` block that stays a call",
+    "section": "Implementations",
+    "disposition": "easy",
+    "notes": [
+      "`#[inline(never)]` keeps the method a call at every opt-level, so `Pair<i16>` is a local of its own: each instance of a generic struct is laid out as a plain struct."
+    ],
+    "input": "4 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "items/impl_generic_two.rs",
+    "chapter": "items",
+    "feature": "A generic struct at two types",
+    "section": "Implementations",
+    "disposition": "easy",
+    "notes": [
+      "`Pair<i16>` and `Pair<bool>` are two structs, each with its own cells."
+    ],
+    "input": "4 9 1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 40
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,0",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "items/impl_mut_self.rs",
+    "chapter": "items",
+    "feature": "A method taking `&mut self`, not inlined",
+    "section": "Implementations",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,2",
+        "cells": 65
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,2",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,2",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,2",
+        "cells": 80
+      }
+    }
+  },
+  {
+    "test": "items/impl_new.rs",
+    "chapter": "items",
+    "feature": "An associated function `new()` and `Self`",
+    "section": "Implementations",
+    "input": "2 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 43
+      }
+    }
+  },
+  {
+    "test": "items/impl_ref_self.rs",
+    "chapter": "items",
+    "feature": "A method taking `&self`, not inlined",
+    "section": "Implementations",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,3",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,3",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "items/impl_self_value.rs",
+    "chapter": "items",
+    "feature": "A method taking `self` by value",
+    "section": "Implementations",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "items/impl_trait_for_enum.rs",
+    "chapter": "items",
+    "feature": "A trait implemented for an enum",
+    "section": "Implementations",
+    "input": "0 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 38
+      }
+    }
+  },
+  {
+    "test": "items/lifetime_fn.rs",
+    "chapter": "items",
+    "feature": "A lifetime-annotated function (`fn pick<'a>(&'a i16, &'a i16) -> &'a i16`)",
+    "section": "Generic parameters",
+    "notes": [
+      "A wrong answer: the returned reference reads the wrong cell (128 for 8), as in the row for a function returning a reference."
+    ],
+    "input": "3 8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "items/lifetime_struct.rs",
+    "chapter": "items",
+    "feature": "A struct holding a reference (`struct View<'a>`)",
+    "section": "Generic parameters",
+    "disposition": "demand",
+    "notes": [
+      "A function that returns such a struct is refused (RCE0004: unsupported local type `View<'_>`)."
+    ],
+    "input": "1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "2,4,6",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "items/mod_inline.rs",
+    "chapter": "items",
+    "feature": "An inline `mod` with a `pub fn`",
+    "section": "Modules",
+    "input": "4 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-6",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-6",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-6",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-6",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "items/mod_nested.rs",
+    "chapter": "items",
+    "feature": "Nested modules and a full path (`crate::a::b::f`)",
+    "section": "Modules",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,8",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,8",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,8",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "items/mod_private_field.rs",
+    "chapter": "items",
+    "feature": "A struct with a private field, built by a module's `pub fn new`",
+    "section": "Modules",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 22
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 22
+      }
+    }
+  },
+  {
+    "test": "items/mod_pub_struct.rs",
+    "chapter": "items",
+    "feature": "A `pub struct` with `pub` fields from a module",
+    "section": "Modules",
+    "input": "3 9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,3",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,3",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,3",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,3",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "items/mod_super.rs",
+    "chapter": "items",
+    "feature": "`super::` and `self::` paths",
+    "section": "Modules",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "13",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "13",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "13",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "13",
+        "cells": 23
+      }
+    }
+  },
+  {
+    "test": "items/static_array.rs",
+    "chapter": "items",
+    "feature": "A `static` array indexed at run time",
+    "section": "Static items",
+    "disposition": "easy",
+    "notes": [
+      "An immutable `static` is a table in fixed cells, as a `const` array already is."
+    ],
+    "input": "1 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-6,-8",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-6,-8",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-6,-8",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-6,-8",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "items/static_mut.rs",
+    "chapter": "items",
+    "feature": "A `static mut` counter",
+    "section": "Static items",
+    "disposition": "easy",
+    "notes": [
+      "A `static mut` is just a fixed cell, which is what every CARDIAC variable already is."
+    ],
+    "input": "3 4 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "items/static_scalar.rs",
+    "chapter": "items",
+    "feature": "A `static` scalar",
+    "section": "Static items",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "304",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "304",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "304",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "304",
+        "cells": 19
+      }
+    }
+  },
+  {
+    "test": "items/struct_array_of.rs",
+    "chapter": "items",
+    "feature": "An array of structs",
+    "section": "Structs",
+    "input": "2 3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,1",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,1",
+        "cells": 64
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,1",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,1",
+        "cells": 64
+      }
+    }
+  },
+  {
+    "test": "items/struct_generic.rs",
+    "chapter": "items",
+    "feature": "A generic struct (`struct Pair<T>`) at two types",
+    "section": "Structs",
+    "input": "3 9 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,243",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,243",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,243",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,243",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "items/struct_named.rs",
+    "chapter": "items",
+    "feature": "A struct with named fields, passed by value",
+    "section": "Structs",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "items/struct_nested.rs",
+    "chapter": "items",
+    "feature": "A struct inside a struct",
+    "section": "Structs",
+    "input": "1 2 5 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,5",
+        "cells": 25
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,5",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,5",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,5",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "items/struct_newtype.rs",
+    "chapter": "items",
+    "feature": "A newtype struct (`struct Cents(i16)`)",
+    "section": "Structs",
+    "input": "250 125",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "375",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "375",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "375",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "375",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "items/struct_of_array.rs",
+    "chapter": "items",
+    "feature": "A struct with an array field",
+    "section": "Structs",
+    "input": "1 2 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3,2,1",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3,2,1",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,3,2,1",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,3,2,1",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "items/struct_tuple.rs",
+    "chapter": "items",
+    "feature": "A tuple struct",
+    "section": "Structs",
+    "input": "6 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,6",
+        "cells": 20
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,6",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,6",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,6",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "items/struct_unit.rs",
+    "chapter": "items",
+    "feature": "A unit struct with a method",
+    "section": "Structs",
+    "disposition": "easy",
+    "notes": [
+      "A unit struct holds nothing, so it needs no cells."
+    ],
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/struct_update.rs",
+    "chapter": "items",
+    "feature": "Struct update syntax (`S { x: 1, ..s }`)",
+    "section": "Structs",
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 10
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 10
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "items/trait_assoc_const.rs",
+    "chapter": "items",
+    "feature": "An associated `const` in a trait",
+    "section": "Traits",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,12",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,12",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,12",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,12",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "items/trait_assoc_type.rs",
+    "chapter": "items",
+    "feature": "An associated type in a trait",
+    "section": "Traits",
+    "disposition": "easy",
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "items/trait_blanket_impl.rs",
+    "chapter": "items",
+    "feature": "A blanket impl (`impl<T: A> B for T`)",
+    "section": "Traits",
+    "disposition": "easy",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/trait_default_method.rs",
+    "chapter": "items",
+    "feature": "A trait's default method",
+    "section": "Traits",
+    "disposition": "easy",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "24",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "items/trait_derive_clone_copy.rs",
+    "chapter": "items",
+    "feature": "`#[derive(Clone, Copy)]` and `.clone()`",
+    "section": "Traits",
+    "input": "9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,10",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,10",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,10",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,10",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "items/trait_dyn_dispatch.rs",
+    "chapter": "items",
+    "feature": "Dynamic dispatch: `&dyn Trait` chosen at run time",
+    "section": "Traits",
+    "disposition": "demand",
+    "notes": [
+      "A `&dyn` is a pointer and a table of functions: a call through it is a computed jump, which self-modifying code can do."
+    ],
+    "input": "1 5 0 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-5",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-5",
+        "cells": 64
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,-5",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,-5",
+        "cells": 64
+      }
+    }
+  },
+  {
+    "test": "items/trait_dyn_single.rs",
+    "chapter": "items",
+    "feature": "A `&dyn Trait` with one implementation",
+    "section": "Traits",
+    "disposition": "demand",
+    "notes": [
+      "A `&dyn` is a pointer and a table of functions: a call through it is a computed jump, which self-modifying code can do."
+    ],
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 23
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "items/trait_generic.rs",
+    "chapter": "items",
+    "feature": "A generic trait (`trait Scale<T>`)",
+    "section": "Traits",
+    "disposition": "easy",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-4",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-4",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-4",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-4",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "items/trait_method.rs",
+    "chapter": "items",
+    "feature": "A trait method, static dispatch",
+    "section": "Traits",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/trait_ops_add.rs",
+    "chapter": "items",
+    "feature": "Operator overloading: `core::ops::Add` on a struct",
+    "section": "Traits",
+    "input": "1 2 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,6",
+        "cells": 17
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,6",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,6",
+        "cells": 17
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,6",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "items/trait_ops_addassign_neg.rs",
+    "chapter": "items",
+    "feature": "`AddAssign` on a struct",
+    "section": "Traits",
+    "input": "3 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,10",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,10",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,10",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,10",
+        "cells": 25
+      }
+    }
+  },
+  {
+    "test": "items/trait_ops_neg.rs",
+    "chapter": "items",
+    "feature": "`Neg` on a struct",
+    "section": "Traits",
+    "input": "3 -5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3,5",
+        "cells": 14
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3,5",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-3,5",
+        "cells": 14
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-3,5",
+        "cells": 14
+      }
+    }
+  },
+  {
+    "test": "items/trait_partialeq_by_hand.rs",
+    "chapter": "items",
+    "feature": "`PartialEq` implemented by hand",
+    "section": "Traits",
+    "input": "3 13 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "items/trait_partialord_by_hand.rs",
+    "chapter": "items",
+    "feature": "`PartialOrd` implemented by hand",
+    "section": "Traits",
+    "disposition": "demand",
+    "notes": [
+      "`partial_cmp` returns `Option<Ordering>`, and rustc turns `<` into a three-way compare the compiler doesn't handle yet."
+    ],
+    "input": "5 -7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 85
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 85
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 86
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 85
+      }
+    }
+  },
+  {
+    "test": "items/trait_static_method.rs",
+    "chapter": "items",
+    "feature": "A trait's associated function (no `self`): `T::zero()`",
+    "section": "Traits",
+    "disposition": "easy",
+    "notes": [
+      "rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones."
+    ],
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 25
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "items/trait_supertrait.rs",
+    "chapter": "items",
+    "feature": "A supertrait",
+    "section": "Traits",
+    "disposition": "easy",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "50",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "50",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "50",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "50",
+        "cells": 40
+      }
+    }
+  },
+  {
+    "test": "items/type_alias_array.rs",
+    "chapter": "items",
+    "feature": "A type alias for an array and a tuple",
+    "section": "Type aliases",
+    "input": "1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "items/type_alias_scalar.rs",
+    "chapter": "items",
+    "feature": "A type alias for a scalar (`type Card = i16`)",
+    "section": "Type aliases",
+    "input": "42",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "43",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "items/union_basic.rs",
+    "chapter": "items",
+    "feature": "A `union` read through the field it was written by",
+    "section": "Unions",
+    "disposition": "never",
+    "notes": [
+      "A union's point is reading one type's bits as another, and CARDIAC's cells hold decimal numbers, not bits."
+    ],
+    "input": "12",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 4
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 4
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 4
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 4
+      }
+    }
+  },
+  {
+    "test": "items/use_enum_variants.rs",
+    "chapter": "items",
+    "feature": "`use Enum::*` to bring variants into scope",
+    "section": "Use declarations",
+    "input": "1 2 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,1,0",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,1,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1,1,0",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1,1,0",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "items/use_glob.rs",
+    "chapter": "items",
+    "feature": "`use m::*` (glob import)",
+    "section": "Use declarations",
+    "input": "4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,-1,104",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,-1,104",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,-1,104",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,-1,104",
+        "cells": 34
+      }
+    }
+  },
+  {
+    "test": "items/use_group_self.rs",
+    "chapter": "items",
+    "feature": "`use m::{self, f}` (nested groups with `self`)",
+    "section": "Use declarations",
+    "input": "10",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,9",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "items/use_pub_reexport.rs",
+    "chapter": "items",
+    "feature": "`pub use` to re-export",
+    "section": "Use declarations",
+    "input": "9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "81",
+        "cells": 34
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "81",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "81",
+        "cells": 34
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "81",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "items/use_rename.rs",
+    "chapter": "items",
+    "feature": "`use ... as` to rename",
+    "section": "Use declarations",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      }
+    }
+  },
+  {
+    "test": "items/use_simple.rs",
+    "chapter": "items",
+    "feature": "`use` of a function from a module",
+    "section": "Use declarations",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-8",
+        "cells": 8
+      }
+    }
+  }
+]

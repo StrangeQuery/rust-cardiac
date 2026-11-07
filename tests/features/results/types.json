@@ -1,0 +1,2626 @@
+[
+  {
+    "test": "types/array_arrays.rs",
+    "chapter": "types",
+    "feature": "An array of arrays `[[i16; 2]; 2]`",
+    "section": "Array types",
+    "disposition": "demand",
+    "notes": [
+      "It is one array indexed `row * width + column`, which the compiler could build itself."
+    ],
+    "input": "1 2 3 4 1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 54
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "types/array_bool.rs",
+    "chapter": "types",
+    "feature": "An array of `bool`",
+    "section": "Array types",
+    "input": "5 -6 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/array_char.rs",
+    "chapter": "types",
+    "feature": "An array of `char`",
+    "section": "Array types",
+    "disposition": "easy",
+    "input": "65 66 67 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "65,67",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "65,67",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "65,67",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "65,67",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "types/array_i16.rs",
+    "chapter": "types",
+    "feature": "An array of `i16`",
+    "section": "Array types",
+    "input": "5 -6 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "types/array_i32.rs",
+    "chapter": "types",
+    "feature": "An array of `i32` whose values fit on a card",
+    "section": "Array types",
+    "input": "5 -6 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "types/array_i8.rs",
+    "chapter": "types",
+    "feature": "An array of `i8`",
+    "section": "Array types",
+    "disposition": "easy",
+    "input": "5 -6 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 57
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "types/array_len.rs",
+    "chapter": "types",
+    "feature": "`.len()` of an array passed by reference",
+    "section": "Array types",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,5",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,5",
+        "cells": 69
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,5",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,5",
+        "cells": 69
+      }
+    }
+  },
+  {
+    "test": "types/array_repeat.rs",
+    "chapter": "types",
+    "feature": "An array made with `[x; N]` from an input",
+    "section": "Array types",
+    "input": "9 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,18",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,18",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,18",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,18",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "types/array_structs.rs",
+    "chapter": "types",
+    "feature": "An array of structs",
+    "section": "Array types",
+    "input": "1 2 3 4 5 6 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 67
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 78
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 67
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 78
+      }
+    }
+  },
+  {
+    "test": "types/array_tuples.rs",
+    "chapter": "types",
+    "feature": "An array of tuples `[(i16, i16); 3]`",
+    "section": "Array types",
+    "disposition": "demand",
+    "notes": [
+      "The compiler could keep one array per tuple field, as it does for an array of structs."
+    ],
+    "input": "1 2 3 4 5 6 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 51
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,4",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "types/array_u8.rs",
+    "chapter": "types",
+    "feature": "An array of `u8`",
+    "section": "Array types",
+    "input": "1 4 5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,255",
+        "cells": 62
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,255",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,255",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,255",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "types/array_usize.rs",
+    "chapter": "types",
+    "feature": "An array of `usize`",
+    "section": "Array types",
+    "disposition": "easy",
+    "notes": [
+      "A `usize` element is a cell, as an `i16` one is."
+    ],
+    "input": "5 6 7 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,7",
+        "cells": 46
+      }
+    }
+  },
+  {
+    "test": "types/array_zero.rs",
+    "chapter": "types",
+    "feature": "A zero-length array `[i16; 0]`",
+    "section": "Array types",
+    "input": "3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,0",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "types/bool_ops.rs",
+    "chapter": "types",
+    "feature": "`&`, `|` and `!` on `bool` (not short-circuiting)",
+    "section": "Boolean type",
+    "input": "1 0 1 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1,0,1,1,0",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "types/bool_param.rs",
+    "chapter": "types",
+    "feature": "A `bool` passed to and returned from a function",
+    "section": "Boolean type",
+    "input": "3 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 42
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "0,1",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "types/bool_value.rs",
+    "chapter": "types",
+    "feature": "A `bool` made from a comparison, cast to `i16`",
+    "section": "Boolean type",
+    "input": "5 -5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 26
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "types/bool_xor.rs",
+    "chapter": "types",
+    "feature": "`^` on `bool`",
+    "section": "Boolean type",
+    "disposition": "easy",
+    "notes": [
+      "`a ^ b` on `bool` is `a != b`, which the compiler already does."
+    ],
+    "input": "1 0 1 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,0",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "types/cast_i16_i8.rs",
+    "chapter": "types",
+    "feature": "`i16 as i8` and `i8 as i16`",
+    "section": "Integer types",
+    "disposition": "easy",
+    "notes": [
+      "The values here fit in an `i8`, so the cast keeps them as they are."
+    ],
+    "input": "100 -100",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,-100,0",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,-100,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,-100,0",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,-100,0",
+        "cells": 35
+      }
+    }
+  },
+  {
+    "test": "types/cast_u8_usize.rs",
+    "chapter": "types",
+    "feature": "`u8 as usize` and `usize as u8`",
+    "section": "Integer types",
+    "input": "4 7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "207,7",
+        "cells": 41
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "207,7",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "207,7",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "207,7",
+        "cells": 48
+      }
+    }
+  },
+  {
+    "test": "types/char_literal.rs",
+    "chapter": "types",
+    "feature": "`char` literals compared with an input (`'0'..='9'`)",
+    "section": "Textual types",
+    "disposition": "easy",
+    "input": "55 65",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,7,0,17",
+        "cells": 40
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,7,0,17",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,7,0,17",
+        "cells": 40
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,7,0,17",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "types/char_value.rs",
+    "chapter": "types",
+    "feature": "A `char` from a `u8`, compared and cast back",
+    "section": "Textual types",
+    "disposition": "easy",
+    "notes": [
+      "An ASCII `char` fits on a card; one past 999 never would."
+    ],
+    "input": "65 98",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "65,1,1",
+        "cells": 50
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "65,1,1",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "65,1,1",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "65,1,1",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "types/closure_capture.rs",
+    "chapter": "types",
+    "feature": "A closure that captures a variable, called where it is made",
+    "section": "Closure types",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the closure is a struct of references and a function, both of which the compiler already handles."
+    ],
+    "input": "5 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "types/closure_fnmut.rs",
+    "chapter": "types",
+    "feature": "An `FnMut` closure that changes a captured counter",
+    "section": "Closure types",
+    "disposition": "easy",
+    "notes": [
+      "At opt-level 1 rustc calls the closure rather than inlining it; the closure is a struct of references and a function, both of which the compiler already handles."
+    ],
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "types/closure_generic_arg.rs",
+    "chapter": "types",
+    "feature": "A closure passed to a generic `F: Fn(i16) -> i16` parameter",
+    "section": "Closure types",
+    "disposition": "demand",
+    "notes": [
+      "A generic function rustc doesn't inline gets one copy per closure type, each an ordinary function."
+    ],
+    "input": "5 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 31
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 42
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 31
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 42
+      }
+    }
+  },
+  {
+    "test": "types/dyn_choose.rs",
+    "chapter": "types",
+    "feature": "A `&dyn Trait` whose type is chosen at run time",
+    "section": "Trait object types",
+    "disposition": "demand",
+    "input": "1 3 4 -1 3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,12",
+        "cells": 89
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,12",
+        "cells": 89
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "TooBig",
+        "error": "RCE0032: program runs past cell 98"
+      }
+    }
+  },
+  {
+    "test": "types/dyn_one.rs",
+    "chapter": "types",
+    "feature": "A `&dyn Trait` with one implementation",
+    "section": "Trait object types",
+    "disposition": "demand",
+    "notes": [
+      "Dynamic dispatch needs a vtable and an indirect call, the same machinery as function pointers."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "49",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "49",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "49",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "49",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "types/enum_type.rs",
+    "chapter": "types",
+    "feature": "An enum type with and without data",
+    "section": "Enumerated types",
+    "input": "1 5 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 53
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/float_f32.rs",
+    "chapter": "types",
+    "feature": "`f32` arithmetic, cast back to `i16`",
+    "section": "Floating-point types",
+    "disposition": "never",
+    "input": "7 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f32 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/float_f64.rs",
+    "chapter": "types",
+    "feature": "`f64` arithmetic and comparison",
+    "section": "Floating-point types",
+    "disposition": "never",
+    "input": "7 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type f64 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/fn_item.rs",
+    "chapter": "types",
+    "feature": "A function item held in a variable and called",
+    "section": "Function item types",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "types/fnptr_array.rs",
+    "chapter": "types",
+    "feature": "An array of function pointers indexed by an input",
+    "section": "Function pointer types",
+    "disposition": "demand",
+    "input": "1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5",
+        "cells": 64
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-5",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-5",
+        "cells": 64
+      }
+    }
+  },
+  {
+    "test": "types/fnptr_choose.rs",
+    "chapter": "types",
+    "feature": "A function pointer `fn(i16) -> i16` chosen at run time",
+    "section": "Function pointer types",
+    "disposition": "demand",
+    "notes": [
+      "An indirect call is a computed jump, which CARDIAC can make with self-modifying code."
+    ],
+    "input": "1 5 -1 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-5",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-5",
+        "cells": 59
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10,-5",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10,-5",
+        "cells": 59
+      }
+    }
+  },
+  {
+    "test": "types/fnptr_param.rs",
+    "chapter": "types",
+    "feature": "A function pointer passed as a parameter",
+    "section": "Function pointer types",
+    "disposition": "demand",
+    "input": "5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 25
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 39
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 25
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11",
+        "cells": 39
+      }
+    }
+  },
+  {
+    "test": "types/i32_past_card.rs",
+    "chapter": "types",
+    "feature": "An `i32` holding more than a card (50 * 50 = 2500), divided back onto one",
+    "section": "Integer types",
+    "disposition": "never",
+    "notes": [
+      "A cell holds -999..=999, so an `i32` past a card cannot be held, even for a moment."
+    ],
+    "input": "50 50",
+    "differs": "The product 2500 is past a card: with overflow checks on CARDIAC panics, and with them off it keeps the low three digits (500), so it prints 50 where Rust prints 250.",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Differ",
+        "output": "50",
+        "native": "250",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-999",
+        "native": "250",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Differ",
+        "output": "50",
+        "native": "250",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Differ",
+        "output": "-999",
+        "native": "250",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "types/impl_arg.rs",
+    "chapter": "types",
+    "feature": "`impl Trait` as a parameter type",
+    "section": "Impl trait type",
+    "disposition": "demand",
+    "notes": [
+      "`impl Trait` in argument position is a generic function."
+    ],
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,25",
+        "cells": 63
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,25",
+        "cells": 88
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,25",
+        "cells": 63
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,25",
+        "cells": 88
+      }
+    }
+  },
+  {
+    "test": "types/impl_return.rs",
+    "chapter": "types",
+    "feature": "`impl Fn(i16) -> i16` returned from a function",
+    "section": "Impl trait type",
+    "disposition": "demand",
+    "notes": [
+      "At opt-level 1 rustc calls `adder`, which returns a closure: a struct the compiler would have to pass back."
+    ],
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "types/int_i128.rs",
+    "chapter": "types",
+    "feature": "`i128`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "never",
+    "input": "400 -300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/int_i16.rs",
+    "chapter": "types",
+    "feature": "`i16`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "input": "400 -300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "types/int_i32.rs",
+    "chapter": "types",
+    "feature": "`i32`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "notes": [
+      "The values fit on a card here; an `i32` past a card is its own row."
+    ],
+    "input": "400 -300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/int_i64.rs",
+    "chapter": "types",
+    "feature": "`i64`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "never",
+    "input": "400 -300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type i64 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/int_i8.rs",
+    "chapter": "types",
+    "feature": "`i8`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "easy",
+    "notes": [
+      "An `i8` holds -128..=127, all on a card; only the overflow check at 127 is new."
+    ],
+    "input": "50 -20",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,70,0,0",
+        "cells": 80
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,70,0,0",
+        "cells": 77
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "30,70,0,0",
+        "cells": 80
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "30,70,0,0",
+        "cells": 77
+      }
+    }
+  },
+  {
+    "test": "types/int_isize.rs",
+    "chapter": "types",
+    "feature": "`isize`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Machine-dependent integer types",
+    "disposition": "demand",
+    "notes": [
+      "An `isize` is 64 bits natively, but one that fits on a card can be held as an `i16` is."
+    ],
+    "input": "400 -300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,700,0,0",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/int_min_max.rs",
+    "chapter": "types",
+    "feature": "`u8::MAX`, `i8::MIN` and `i8::MAX` used with an input",
+    "section": "Integer types",
+    "input": "200 -100",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,55,27",
+        "cells": 38
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,55,27",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,1,55,27",
+        "cells": 38
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,1,55,27",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "types/int_u128.rs",
+    "chapter": "types",
+    "feature": "`u128`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "never",
+    "input": "400 300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u128 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u128 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/int_u16.rs",
+    "chapter": "types",
+    "feature": "`u16`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "demand",
+    "notes": [
+      "Every `u16` on a card is fine and one past a card can't be held, as for `i16`."
+    ],
+    "input": "400 300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 46
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 46
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "types/int_u32.rs",
+    "chapter": "types",
+    "feature": "`u32`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "never",
+    "input": "400 300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u32 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u32 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/int_u64.rs",
+    "chapter": "types",
+    "feature": "`u64`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "disposition": "never",
+    "input": "400 300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u64 for _1 (this backend has u8, i16, usize and bool)"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0004: unsupported local type u64 for _1 (this backend has u8, i16, usize and bool)"
+      }
+    }
+  },
+  {
+    "test": "types/int_u8.rs",
+    "chapter": "types",
+    "feature": "`u8`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Integer types",
+    "input": "4 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "250,150,0,0",
+        "cells": 84
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "250,150,0,0",
+        "cells": 81
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "250,150,0,0",
+        "cells": 84
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "250,150,0,0",
+        "cells": 81
+      }
+    }
+  },
+  {
+    "test": "types/int_usize.rs",
+    "chapter": "types",
+    "feature": "`usize`: declared, added, subtracted, compared and cast back to `i16`",
+    "section": "Machine-dependent integer types",
+    "input": "400 300",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 45
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 62
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "700,100,0,0",
+        "cells": 62
+      }
+    }
+  },
+  {
+    "test": "types/literal_byte.rs",
+    "chapter": "types",
+    "feature": "Byte literals (`b'a'`, `b'\\n'`), which are `u8`",
+    "section": "Integer literals",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,13,1",
+        "cells": 56
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,13,1",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "100,13,1",
+        "cells": 56
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "100,13,1",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/literal_byte_string.rs",
+    "chapter": "types",
+    "feature": "A byte string literal (`b\"CARD\"`), indexed by an input",
+    "section": "Integer literals",
+    "disposition": "easy",
+    "notes": [
+      "A byte string literal is a constant `u8` table, which the compiler already has for `const` arrays."
+    ],
+    "input": "0 3 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "67,68,65",
+        "cells": 28
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "67,68,65",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "67,68,65",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "67,68,65",
+        "cells": 30
+      }
+    }
+  },
+  {
+    "test": "types/literal_hex_oct_bin.rs",
+    "chapter": "types",
+    "feature": "Hexadecimal, octal and binary literals (`0x1F`, `0o17`, `0b101`)",
+    "section": "Integer literals",
+    "input": "100",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "131,115,105,-155",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "131,115,105,-155",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "131,115,105,-155",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "131,115,105,-155",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "types/literal_suffix.rs",
+    "chapter": "types",
+    "feature": "Integer literals with type suffixes (`5i16`, `3u8`, `2usize`)",
+    "section": "Integer literals",
+    "input": "4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,203,6",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,203,6",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,203,6",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,203,6",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "types/literal_underscore.rs",
+    "chapter": "types",
+    "feature": "Literals with underscores (`1_0`, `0b_1_1`, `9_9_9`)",
+    "section": "Integer literals",
+    "input": "1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,4,998",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,4,998",
+        "cells": 33
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "11,4,998",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "11,4,998",
+        "cells": 33
+      }
+    }
+  },
+  {
+    "test": "types/never_break_expr.rs",
+    "chapter": "types",
+    "feature": "`break` as an expression of type `!` in one arm of an `if`",
+    "section": "Never type",
+    "input": "4 -2 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-4",
+        "cells": 12
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-4",
+        "cells": 23
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8,-4",
+        "cells": 12
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8,-4",
+        "cells": 23
+      }
+    }
+  },
+  {
+    "test": "types/never_fn.rs",
+    "chapter": "types",
+    "feature": "A function returning `!` (it panics), called on one branch",
+    "section": "Never type",
+    "disposition": "easy",
+    "notes": [
+      "A call to a function that never returns is an ordinary call with nothing after it; `panic!()` itself already works."
+    ],
+    "input": "5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-999",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-999",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-999",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-999",
+        "cells": 13
+      }
+    }
+  },
+  {
+    "test": "types/option_bool.rs",
+    "chapter": "types",
+    "feature": "`Option<bool>`, whose `None` fills a niche in `bool`",
+    "section": "Type layout",
+    "input": "5 -4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 44
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 45
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 45
+      }
+    }
+  },
+  {
+    "test": "types/option_enum.rs",
+    "chapter": "types",
+    "feature": "`Option` of a C-like enum, whose `None` is a spare variant number",
+    "section": "Type layout",
+    "disposition": "easy",
+    "notes": [
+      "The refusal is a constant `Some` of a C-like enum, which is just two numbers."
+    ],
+    "input": "1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 35
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 35
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,-1",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "types/option_i16.rs",
+    "chapter": "types",
+    "feature": "`Option<i16>` returned from a function",
+    "section": "Type layout",
+    "input": "4 -4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12,-1",
+        "cells": 51
+      }
+    }
+  },
+  {
+    "test": "types/option_nonzero.rs",
+    "chapter": "types",
+    "feature": "`Option<NonZeroI16>`, whose `None` is zero",
+    "section": "Type layout",
+    "disposition": "demand",
+    "input": "5 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-1",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-1",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,-1",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,-1",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "types/option_option.rs",
+    "chapter": "types",
+    "feature": "A nested `Option<Option<i16>>`",
+    "section": "Type layout",
+    "input": "1 5 1 -1 -1 0",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,-1",
+        "cells": 48
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,-1",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,-1",
+        "cells": 48
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,-1",
+        "cells": 50
+      }
+    }
+  },
+  {
+    "test": "types/option_ref.rs",
+    "chapter": "types",
+    "feature": "`Option<&i16>`, whose `None` is the null pointer",
+    "section": "Type layout",
+    "disposition": "demand",
+    "input": "4 -4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "20,-1",
+        "cells": 50
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "20,-1",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "20,-1",
+        "cells": 50
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "20,-1",
+        "cells": 52
+      }
+    }
+  },
+  {
+    "test": "types/option_u8.rs",
+    "chapter": "types",
+    "feature": "`Option<u8>`",
+    "section": "Type layout",
+    "input": "4 -4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "200,-1",
+        "cells": 55
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "200,-1",
+        "cells": 57
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "200,-1",
+        "cells": 55
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "200,-1",
+        "cells": 57
+      }
+    }
+  },
+  {
+    "test": "types/option_unit.rs",
+    "chapter": "types",
+    "feature": "`Option<()>`, laid out as a `bool`",
+    "section": "Type layout",
+    "disposition": "easy",
+    "notes": [
+      "`Option<()>` is a `bool`."
+    ],
+    "input": "1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,-1",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "types/raw_add.rs",
+    "chapter": "types",
+    "feature": "Pointer arithmetic: `p.add(i)` into an array",
+    "section": "Pointer types",
+    "disposition": "demand",
+    "input": "4 5 6 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6",
+        "cells": 16
+      }
+    }
+  },
+  {
+    "test": "types/raw_const.rs",
+    "chapter": "types",
+    "feature": "A raw pointer `*const i16` read with `unsafe`",
+    "section": "Pointer types",
+    "input": "9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 7
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 18
+      }
+    }
+  },
+  {
+    "test": "types/raw_mut_fn.rs",
+    "chapter": "types",
+    "feature": "A raw pointer `*mut i16` written through in a function",
+    "section": "Pointer types",
+    "input": "9",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 24
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "18",
+        "cells": 36
+      }
+    }
+  },
+  {
+    "test": "types/ref_mut.rs",
+    "chapter": "types",
+    "feature": "A mutable reference `&mut i16` passed to a function",
+    "section": "Pointer types",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 44
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "10",
+        "cells": 44
+      }
+    }
+  },
+  {
+    "test": "types/ref_mut_element.rs",
+    "chapter": "types",
+    "feature": "A `&mut` to an array element chosen by an input",
+    "section": "Pointer types",
+    "input": "1 2 3 2",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,13",
+        "cells": 51
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,13",
+        "cells": 60
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "1,2,13",
+        "cells": 51
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "1,2,13",
+        "cells": 60
+      }
+    }
+  },
+  {
+    "test": "types/ref_shared.rs",
+    "chapter": "types",
+    "feature": "A shared reference `&i16` passed to a function",
+    "section": "Pointer types",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "16",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "types/ref_to_ref.rs",
+    "chapter": "types",
+    "feature": "A reference to a reference `&&i16`",
+    "section": "Pointer types",
+    "disposition": "demand",
+    "input": "8",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 30
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 30
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9",
+        "cells": 41
+      }
+    }
+  },
+  {
+    "test": "types/slice_mut.rs",
+    "chapter": "types",
+    "feature": "A mutable slice `&mut [i16]` written by a function",
+    "section": "Slice types",
+    "disposition": "demand",
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,8,10",
+        "cells": 72
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,8,10",
+        "cells": 82
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,8,10",
+        "cells": 72
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,8,10",
+        "cells": 82
+      }
+    }
+  },
+  {
+    "test": "types/slice_param.rs",
+    "chapter": "types",
+    "feature": "A slice `&[i16]` passed to a function and read in a loop",
+    "section": "Slice types",
+    "disposition": "demand",
+    "notes": [
+      "A slice is an address and a length, two cells, read the way arrays by reference already are."
+    ],
+    "input": "3 4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 52
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 65
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 52
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "12",
+        "cells": 65
+      }
+    }
+  },
+  {
+    "test": "types/slice_range.rs",
+    "chapter": "types",
+    "feature": "A sub-slice `&t[1..3]`, indexed",
+    "section": "Slice types",
+    "disposition": "demand",
+    "input": "3 4 5 6 1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,2",
+        "cells": 32
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,2",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,2",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,2",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "types/str_eq.rs",
+    "chapter": "types",
+    "feature": "`==` of two string literals chosen by inputs",
+    "section": "Textual types",
+    "disposition": "never",
+    "notes": [
+      "A string compare is a byte loop over every literal it might meet, each a cell a byte: two short literals compared come to about 124 cells, more than CARDIAC has."
+    ],
+    "input": "1 1 1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function compare_bytes"
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function compare_bytes"
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function compare_bytes"
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Refused",
+        "error": "RCE0007: call to unknown function compare_bytes"
+      }
+    }
+  },
+  {
+    "test": "types/str_len.rs",
+    "chapter": "types",
+    "feature": "`.len()` of one of two string literals chosen by an input",
+    "section": "Textual types",
+    "disposition": "demand",
+    "notes": [
+      "A `&str` is a slice: an address and a length."
+    ],
+    "input": "1 -1",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,5",
+        "cells": 19
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,5",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "3,5",
+        "cells": 19
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "3,5",
+        "cells": 21
+      }
+    }
+  },
+  {
+    "test": "types/str_literal_bytes.rs",
+    "chapter": "types",
+    "feature": "A string literal's bytes, indexed by an input",
+    "section": "Textual types",
+    "disposition": "demand",
+    "notes": [
+      "A `&str` passed to a function is refused (RCE0019: the length of the slice it is passed isn't known here), though its `.as_bytes()` can be passed."
+    ],
+    "input": "0 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "104,111",
+        "cells": 37
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "104,111",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "104,111",
+        "cells": 37
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "104,111",
+        "cells": 37
+      }
+    }
+  },
+  {
+    "test": "types/struct_generic.rs",
+    "chapter": "types",
+    "feature": "A generic struct `Pair<T>` with `T = i16` and `T = u8`",
+    "section": "Struct types",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,205",
+        "cells": 43
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,205",
+        "cells": 53
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7,205",
+        "cells": 43
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7,205",
+        "cells": 53
+      }
+    }
+  },
+  {
+    "test": "types/struct_tuple.rs",
+    "chapter": "types",
+    "feature": "A tuple struct `struct Meters(i16)` passed and returned",
+    "section": "Struct types",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "types/struct_type.rs",
+    "chapter": "types",
+    "feature": "A struct type with named fields",
+    "section": "Struct types",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 9
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 20
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 9
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "-1",
+        "cells": 20
+      }
+    }
+  },
+  {
+    "test": "types/struct_unit.rs",
+    "chapter": "types",
+    "feature": "A unit struct passed to a function",
+    "section": "Struct types",
+    "disposition": "easy",
+    "notes": [
+      "A unit struct is no cells at all."
+    ],
+    "input": "7",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 13
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 24
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 13
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "8",
+        "cells": 24
+      }
+    }
+  },
+  {
+    "test": "types/tuple_nested.rs",
+    "chapter": "types",
+    "feature": "A nested tuple `((i16, i16), i16)`",
+    "section": "Tuple types",
+    "input": "1 2 3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4",
+        "cells": 28
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "4,4",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "4,4",
+        "cells": 28
+      }
+    }
+  },
+  {
+    "test": "types/tuple_nested_return.rs",
+    "chapter": "types",
+    "feature": "A nested tuple returned from a function",
+    "section": "Tuple types",
+    "disposition": "demand",
+    "input": "4 5",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,-1,1",
+        "cells": 36
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,-1,1",
+        "cells": 54
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "9,-1,1",
+        "cells": 36
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "9,-1,1",
+        "cells": 54
+      }
+    }
+  },
+  {
+    "test": "types/tuple_scalars.rs",
+    "chapter": "types",
+    "feature": "A tuple of `i16`, `bool` and `u8`",
+    "section": "Tuple types",
+    "input": "5 -3",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,12",
+        "cells": 21
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,12",
+        "cells": 32
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "5,0,12",
+        "cells": 21
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "5,0,12",
+        "cells": 32
+      }
+    }
+  },
+  {
+    "test": "types/tuple_unit.rs",
+    "chapter": "types",
+    "feature": "The unit type `()`: a function returning it, a tuple holding it",
+    "section": "Tuple types",
+    "input": "6",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,7",
+        "cells": 16
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,7",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "6,7",
+        "cells": 16
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "6,7",
+        "cells": 27
+      }
+    }
+  },
+  {
+    "test": "types/type_alias.rs",
+    "chapter": "types",
+    "feature": "Type aliases `type Score = i16` and `type Pair<T> = (T, T)`",
+    "section": "Type aliases",
+    "input": "3 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 15
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "7",
+        "cells": 26
+      }
+    }
+  },
+  {
+    "test": "types/union_basic.rs",
+    "chapter": "types",
+    "feature": "A `union` of `i16` and `u8`, read back through the field written",
+    "section": "Union types",
+    "notes": [
+      "Reading another field than the one written would reinterpret bytes, which a decimal cell has none of."
+    ],
+    "input": "42 4",
+    "runs": {
+      "opt-level 1, overflow checks off": {
+        "outcome": "Match",
+        "output": "42,200",
+        "cells": 27
+      },
+      "opt-level 1, overflow checks on": {
+        "outcome": "Match",
+        "output": "42,200",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks off": {
+        "outcome": "Match",
+        "output": "42,200",
+        "cells": 27
+      },
+      "opt-level 2, overflow checks on": {
+        "outcome": "Match",
+        "output": "42,200",
+        "cells": 27
+      }
+    }
+  }
+]

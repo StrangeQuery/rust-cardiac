@@ -14,3 +14,5 @@ tests/programs/crates/*.cqb.meta
 tests/programs/crates/*.cq
 # rustc's internal error reports, which the test scripts check for
 rustc-ice-*.txt
+# the feature tests' harness
+tests/features/target/

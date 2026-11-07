@@ -231,7 +231,9 @@ Anything else that is refused is work not done yet. The build stops with an erro
 says what its code means and what to write instead.
 
 [docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
-and what to write instead.
+and what to write instead. [tests/features/SUPPORT.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/tests/features/SUPPORT.md)
+is the table behind it: one small program for each piece of Rust, in the Rust Reference's order, built four ways
+and run on CARDIAC and natively.
 
 ## The built-ins
 
@@ -460,6 +462,7 @@ The tests run decks on burn, heartburn's runtime: the one on the PATH, or the on
     ./test_compiler.sh       # every test program in tests/programs natively and on CARDIAC, outputs compared;
                              # and the programs that must not compile
     ./test_examples.sh       # every example: cargo run against its deck on burn
+    ./test_features.sh       # one program per piece of Rust, in four settings: remakes tests/features/SUPPORT.md
     ./fuzz.sh                # the programs in tests/fuzz/targets on generated inputs, natively and on CARDIAC,
                              # every opt-level with overflow checks on and off (--runs N, --seed S, --only NAME)
     ./fuzz.sh --generate 200 # 200 generated programs, each built in those settings and run so

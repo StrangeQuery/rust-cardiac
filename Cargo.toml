@@ -68,8 +68,8 @@ heartburn = { version = "0.1.3", features = ["tools"] }
 
 [workspace]
 members = ["cardiac", "examples", "examples/collatz"]
-# the compiler's test package for programs of two crates: built only by the tests
-exclude = ["tests/programs/crates"]
+# the compiler's test package for programs of two crates, and the feature tests: built only by their scripts
+exclude = ["tests/programs/crates", "tests/features"]
 
 # the repository's address and the project's page, for both published crates
 [workspace.package]
