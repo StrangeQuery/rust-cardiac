@@ -219,12 +219,13 @@ pub fn dev_defaults(p: &Package, profile: Option<&str>) -> Vec<(&'static str, &'
 ///
 /// Each program's report, in the order given (None for one cargo stopped before), and whether cargo's build
 /// succeeded. rustc's diagnostics are rendered on standard error as they come, but for the driver's errors, which
-/// are in the reports.
+/// are in the reports; with `quiet` (-q), only its errors.
 pub fn build(
     p: &Package,
     programs: &[&Target],
     profile: Option<&str>,
     settings: &Settings,
+    quiet: bool,
 ) -> Result<(Vec<Option<Report>>, bool), String> {
     let driver = crate::driver::find()?;
     let mut cmd = Command::new(cargo());
@@ -273,7 +274,7 @@ pub fn build(
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("{} check: {e}", cargo()))?;
-    let mut listener = Listener::default();
+    let mut listener = Listener::new(quiet);
     for line in BufReader::new(child.stdout.take().unwrap()).lines() {
         let line = line.map_err(|e| format!("{} check: {e}", cargo()))?;
         let Ok(m) = serde_json::from_str::<Json>(&line) else {

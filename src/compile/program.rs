@@ -499,34 +499,24 @@ impl Built {
     }
 
     pub fn json(&self) -> serde_json::Value {
-        let code: Vec<serde_json::Value> = self
-            .sections
-            .code
-            .iter()
-            .map(|(name, n)| serde_json::json!([name, n]))
-            .collect();
-        serde_json::json!({"file": self.file, "data": self.data, "code": self.code, "functions": code,
-            "variables": self.sections.variables, "constants": self.sections.constants, "deck": self.deck_file,
+        let mut v = self.sections.json();
+        let more = serde_json::json!({"file": self.file, "data": self.data, "code": self.code, "deck": self.deck_file,
             "map": self.map_file, "empty": self.empty,
-            "advice": self.advice.iter().map(Diag::json).collect::<Vec<_>>()})
+            "advice": self.advice.iter().map(Diag::json).collect::<Vec<_>>()});
+        if let (Some(v), serde_json::Value::Object(more)) = (v.as_object_mut(), more) {
+            v.extend(more);
+        }
+        v
     }
 
     pub fn from_json(v: &serde_json::Value) -> Option<Built> {
         let text = |k: &str| v[k].as_str().map(str::to_string);
         let number = |v: &serde_json::Value| v.as_u64().map(|n| n as usize);
-        let functions = v["functions"]
-            .as_array()?
-            .iter()
-            .map(|f| Some((f[0].as_str()?.to_string(), number(&f[1])?)));
         Some(Built {
             file: text("file")?,
             data: number(&v["data"])?,
             code: v["code"].as_array()?.iter().map(number).collect::<Option<_>>()?,
-            sections: Sections {
-                code: functions.collect::<Option<_>>()?,
-                variables: number(&v["variables"])?,
-                constants: number(&v["constants"])?,
-            },
+            sections: Sections::from_json(v)?,
             deck_file: text("deck")?,
             map_file: text("map")?,
             empty: v["empty"]
@@ -552,6 +542,28 @@ pub struct Sections {
     pub constants: usize,
 }
 
+impl Sections {
+    /// As the driver passes them to `cargo cardiac`: `functions` (each `[name, cells]`), `variables` and
+    /// `constants`.
+    pub fn json(&self) -> serde_json::Value {
+        let code: Vec<serde_json::Value> = self.code.iter().map(|(name, n)| serde_json::json!([name, n])).collect();
+        serde_json::json!({"functions": code, "variables": self.variables, "constants": self.constants})
+    }
+
+    pub fn from_json(v: &serde_json::Value) -> Option<Sections> {
+        let number = |v: &serde_json::Value| v.as_u64().map(|n| n as usize);
+        let functions = v["functions"]
+            .as_array()?
+            .iter()
+            .map(|f| Some((f[0].as_str()?.to_string(), number(&f[1])?)));
+        Some(Sections {
+            code: functions.collect::<Option<_>>()?,
+            variables: number(&v["variables"])?,
+            constants: number(&v["constants"])?,
+        })
+    }
+}
+
 impl std::fmt::Display for Sections {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let code: Vec<String> = self.code.iter().map(|(name, n)| format!("{name} {n}")).collect();
@@ -573,11 +585,32 @@ fn dir_of(path: &Path) -> &Path {
     }
 }
 
+/// Why `build` made nothing: the error; and where the cells go when the program compiled but is too big for
+/// CARDIAC's memory, for `build -v` to say what to shrink.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NotBuilt {
+    pub error: Diag,
+    pub sections: Option<Sections>,
+}
+
+impl From<Diag> for NotBuilt {
+    fn from(error: Diag) -> NotBuilt {
+        NotBuilt { error, sections: None }
+    }
+}
+
 /// Compile one program, NAME, from `file`'s IR, and write its assembly, its deck and its panic map next to it.
 /// `file` is the source as it is shown (relative to where `cargo cardiac` runs); `source` is where it is from
 /// here. The deck's resource slots are filled from the files in `resources` that are there; `Built::empty` names
 /// the others.
-pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path, emit: &Emit) -> Result<Built, Diag> {
+pub fn build(
+    file: &str,
+    source: &Path,
+    name: &str,
+    mir: &Mir,
+    resources: &Path,
+    emit: &Emit,
+) -> Result<Built, NotBuilt> {
     let linked = &mir.linked;
     let compile = || -> Result<_, Diag> {
         let compiled = compile_mir(
@@ -637,7 +670,10 @@ pub fn build(file: &str, source: &Path, name: &str, mir: &Mir, resources: &Path,
         for w in compiled.advice.iter().filter(|d| d.kind() == codes::Kind::Warning) {
             e = e.with_note(w.clone().at(file));
         }
-        return Err(hint(e, mir.opt_level));
+        return Err(NotBuilt {
+            error: hint(e, mir.opt_level),
+            sections: Some(sections(&r)),
+        });
     }
     let mut tape = crate::tape::of(&r).map_err(|e| e.at(file))?;
     let empty = tape

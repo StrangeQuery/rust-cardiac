@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use cargo_cardiac::cargo::{self, packages, Package, Target};
 use cargo_cardiac::codes::{self, Diag};
-use cargo_cardiac::compile::program::{self, Built, Emit, Rustc};
+use cargo_cardiac::compile::program::{self, Built, Emit, Rustc, Sections};
 use cargo_cardiac::driver::{self, Dep, Mode, Outcome, Program, Settings};
 use cargo_cardiac::{CARDIAC, TARGET, TOOL};
 use serde_json::{json, Value};
@@ -198,8 +198,9 @@ enum Message<'a> {
         resource: &'a str,
         file: &'a Path,
     },
-    /// why the program can't be built, with its code (`codes`)
-    Failed(&'a Diag),
+    /// why the program can't be built, with its code (`codes`); and, of a program too big for CARDIAC's memory,
+    /// where its cells go, which -v says as it says them of a program built
+    Failed(&'a Diag, Option<&'a Sections>),
     /// an error of the tool's or the command line's, with no code; with `usage`, one in the command line, said with
     /// the usage after it
     Error {
@@ -209,10 +210,11 @@ enum Message<'a> {
 }
 
 impl Message<'_> {
-    /// The least verbosity the message is said at: -1 (always) for an error or a note.
+    /// The least verbosity the message is said at: -1 (always) for an error; 0 for the rest, notes and warnings
+    /// among them, which -q leaves out.
     fn level(&self) -> i8 {
         match self {
-            Message::Note { .. } | Message::Advice { .. } | Message::Failed(_) | Message::Error { .. } => -1,
+            Message::Failed(..) | Message::Error { .. } => -1,
             _ => 0,
         }
     }
@@ -233,8 +235,9 @@ impl Message<'_> {
             Message::Note { deck, resource, file } => codes::resource_empty(deck, resource, file.display()).to_string(),
             Message::Advice { file, said } => (*said).clone().at(file).to_string(),
             // an internal error asks for a bug report, as rustc's do
-            Message::Failed(e) if e.is_bug() => format!("{e}\n{}", codes::BUG_REPORT),
-            Message::Failed(e) => e.to_string(),
+            Message::Failed(e, _) if e.is_bug() => format!("{e}\n{}", codes::BUG_REPORT),
+            Message::Failed(e, Some(cells)) if v => format!("{e}\nnote: where the cells go: {cells}"),
+            Message::Failed(e, _) => e.to_string(),
             Message::Error { why, usage: false } => format!("error: {why}"),
             Message::Error { why, usage: true } => format!("error: {why}\n\n{}", usage()),
         }
@@ -255,15 +258,7 @@ impl Message<'_> {
                 let mut m = json!({"reason": "compiled", "file": b.file, "deck": b.deck_file, "phases": b.code.len(),
                     "cells": b.cells(), "data": b.data, "code": b.code});
                 if v {
-                    let functions: Vec<Value> = b
-                        .sections
-                        .code
-                        .iter()
-                        .map(|(name, n)| json!({"name": name, "cells": n}))
-                        .collect();
-                    m["functions"] = functions.into();
-                    m["variables"] = b.sections.variables.into();
-                    m["constants"] = b.sections.constants.into();
+                    where_the_cells_go(&mut m, &b.sections);
                 }
                 m
             }
@@ -279,17 +274,29 @@ impl Message<'_> {
                 m["file"] = (*file).into();
                 m
             }
-            Message::Failed(e) => {
+            Message::Failed(e, cells) => {
                 let mut m = e.json();
                 if e.is_bug() {
                     let note = codes::BUG_REPORT.trim_start_matches("note: ");
                     m["bug_report"] = note.into();
+                }
+                if let Some(cells) = cells.filter(|_| v) {
+                    where_the_cells_go(&mut m, cells);
                 }
                 m
             }
             Message::Error { why, .. } => json!({"reason": "error", "message": why}),
         }
     }
+}
+
+/// What -v adds to a message in JSON: where the cells go, as `functions` (each with its `name` and `cells`),
+/// `variables` and `constants`.
+fn where_the_cells_go(m: &mut Value, s: &Sections) {
+    let functions: Vec<Value> = s.code.iter().map(|(name, n)| json!({"name": name, "cells": n})).collect();
+    m["functions"] = functions.into();
+    m["variables"] = s.variables.into();
+    m["constants"] = s.constants.into();
 }
 
 /// The codes of the errors and warnings said for a person, for `more_information` to say where they are explained.
@@ -305,7 +312,7 @@ fn tell(m: Message) {
         return;
     }
     eprintln!("{}", m.text());
-    if let Message::Failed(said) | Message::Advice { said, .. } = m {
+    if let Message::Failed(said, _) | Message::Advice { said, .. } = m {
         SAID.lock().unwrap().extend(said.codes());
     }
 }
@@ -341,7 +348,12 @@ fn die(e: String) -> ! {
 
 /// Stop, saying why the program can't be built.
 fn fail(e: Diag) -> ! {
-    tell(Message::Failed(&e));
+    fail_in(e, None)
+}
+
+/// Stop, saying why the program can't be built, and, when it is too big, where its cells go (with -v).
+fn fail_in(e: Diag, cells: Option<Sections>) -> ! {
+    tell(Message::Failed(&e, cells.as_ref()));
     more_information();
     std::process::exit(1)
 }
@@ -628,14 +640,14 @@ fn compile(p: &Package, programs: &[&Target], profile: Option<&str>, mode: Mode,
             said: &codes::dev_defaults(list.join(", ")),
         });
     }
-    let (reports, ok) = cargo::build(p, programs, profile, &settings).unwrap_or_else(|e| die(e));
+    let (reports, ok) = cargo::build(p, programs, profile, &settings, verbosity() < 0).unwrap_or_else(|e| die(e));
     let mut made = vec![];
     for (t, r) in programs.iter().zip(reports) {
         match r.map(|r| r.outcome) {
-            Some(Outcome::Failed(e)) => {
+            Some(Outcome::Failed(e, cells)) => {
                 // what came before is said, as each program was compiled in turn
                 say_made(&made, p);
-                fail(e)
+                fail_in(e, cells)
             }
             Some(o) => made.push(o),
             None if ok => die(format!("the CARDIAC driver said nothing of {}", t.name)),
@@ -924,9 +936,9 @@ fn compile_single(f: &str, rustc: &Rustc, auto_overlay: bool, mode: Mode, emit: 
         crates: vec![],
         single: true,
     };
-    match driver::single(f, rustc, &settings).unwrap_or_else(|e| die(e)) {
+    match driver::single(f, rustc, &settings, verbosity() < 0).unwrap_or_else(|e| die(e)) {
         Some(r) => match r.outcome {
-            Outcome::Failed(e) => fail(e),
+            Outcome::Failed(e, cells) => fail_in(e, cells),
             o => o,
         },
         None => die(format!("rustc failed on {f}")),
@@ -1059,4 +1071,60 @@ fn main() -> ExitCode {
         c => bad_usage(&format!("unknown command {c}")),
     }
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quiet_says_only_errors() {
+        let note = codes::dev_defaults("opt-level = 2");
+        let error = codes::too_big(143);
+        let file = Path::new("resources/font");
+        let said = [
+            Message::Advice {
+                file: "Cargo.toml",
+                said: &note,
+            },
+            Message::Note {
+                deck: "big.cqb",
+                resource: "font",
+                file,
+            },
+            Message::Compiling {
+                package: "big",
+                programs: 1,
+                profile: "dev",
+            },
+        ];
+        for m in said {
+            assert_eq!(m.level(), 0, "{}", m.text());
+        }
+        assert_eq!(Message::Failed(&error, None).level(), -1);
+        assert_eq!(Message::Error { why: "no", usage: false }.level(), -1);
+    }
+
+    /// The only test that sets the verbosity.
+    #[test]
+    fn verbose_says_where_the_cells_go_of_a_program_too_big() {
+        let error = codes::too_big(143).at("src/main.rs");
+        let cells = program::Sections {
+            code: vec![("main".into(), 120), ("rt_panic".into(), 2)],
+            variables: 18,
+            constants: 3,
+        };
+        let m = Message::Failed(&error, Some(&cells));
+        assert_eq!(m.text(), error.to_string());
+        VERBOSITY.store(1, Ordering::Relaxed);
+        let (text, json) = (m.text(), m.json());
+        VERBOSITY.store(0, Ordering::Relaxed);
+        assert_eq!(
+            text,
+            format!("{error}\nnote: where the cells go: code: main 120, rt_panic 2; data: 18 variables, 3 constants")
+        );
+        assert_eq!(json["code"], "RCE0032");
+        assert_eq!(json["functions"], json!([{"name": "main", "cells": 120}, {"name": "rt_panic", "cells": 2}]));
+        assert_eq!((json["variables"].as_u64(), json["constants"].as_u64()), (Some(18), Some(3)));
+    }
 }
