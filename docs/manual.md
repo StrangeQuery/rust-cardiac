@@ -49,25 +49,169 @@ refused. Each area links to its chapter.
 
 Use these freely: they compile to what you'd write by hand.
 
-| Area | What works |
-|------|------------|
-| [**Types**](manual/types.md) | `i16`, the card's own number; `i8`, from -128 to 127, wrapping as Rust's does; `u8`; `u16`; `usize` for indexes and counters; `isize` and `i32` whose values stay on a card; `bool`; `char`, a cell holding its code point. An integer literal with no type (`i32` by default) works as an `i16` would. Literals in hexadecimal, octal and binary, with `_` and a type suffix, and byte literals (`b'A'`). |
-| [**Arithmetic**](manual/statements-and-expressions.md#operators) | `+`, `-`, unary `-`, comparisons. `*` by a constant (adds and decimal shifts), `/` and `%` by a power of ten (shifts). `!` on integers, `<<` and `>>` by a constant. `digit(v, k)` for one digit of a number; `add_times(c, n)` for `n * c` by additions (n 0..=99). `x & m` for a mask m one below a power of two (`x & 3` is `x.rem_euclid(4)`, a subtracting loop). Compound assignment, and destructuring assignment (`(a, b) = (b, a)`). |
-| [**Integer methods**](manual/library.md#integer-methods) | `abs`, `wrapping_abs`, `unsigned_abs`, `abs_diff`, `signum`, `is_negative`, `is_positive`; `min`, `max`, `clamp`, `cmp`; `checked_` `add`, `sub`, `mul`, `div`, `rem`, `neg` and `pow`; `wrapping_` `add`, `sub`, `mul`, `div`, `rem` and `neg`; `saturating_` `add`, `sub` and `mul`; `overflowing_add` and `overflowing_sub`; `div_euclid` and `rem_euclid`; `pow`, `isqrt`, `ilog10`; on a `u8` or a `usize`, `is_power_of_two`, `next_power_of_two`, and a `u8`'s `midpoint`; `from`, `into`, `try_from` and `try_into` between the types above; `BITS`, `u8::MIN` and `u8::MAX`. Where rustc calls one rather than inlining it, the compiler writes the code rustc would have inlined. No card holds `i16::MIN` or `i16::MAX`, so `abs` has nothing to check, an `i16`'s saturating methods panic past a card as its plain arithmetic does, and `checked_add` is `None` past 999. |
-| [**Control flow**](manual/statements-and-expressions.md#control-flow) | `if`/`else`, also as an expression; `if let`, let chains, `let else`, `while let`; `while`; `loop`, also with `break value`; labelled blocks, `break` and `continue`; early `return`; `match` on integers, `bool`s, `char`s, enums, structs, tuples and arrays, with ranges, guards, `@` bindings, `\|` alternatives and nested patterns; `for` over a range (`a..b`, `a..=b`, `.rev()`, `.step_by(k)`), over an array, `.iter()`, `.iter_mut()` and `.iter().enumerate()`. |
-| [**Data**](manual/types.md#arrays) | Fixed-size arrays of any of the types above, of structs, of tuples and of arrays (`[[i16; 3]; 3]` is one array, row after row); `const` values and tables, also from other crates; `static` and `static mut`; tuples, nested too, passed and returned; structs with named fields, tuple structs, unit structs and generic structs, with methods (`impl`), functional update and destructuring; a `union` read through the field it was written by; shadowing and block expressions. |
-| [**C-like enums**](manual/items.md#enumerations) | `enum Colour { Red, Green, Blue }`, with numbers given (`Low = -5`, `High = 3 * 300`) or not, and `#[repr(i16)]` or `#[repr(u8)]`: one cell, the variant's number; `match`, `as i16`, passed and returned. `==`, `<` and `cmp` of a derived `PartialEq`, `PartialOrd` or `Ord`. |
-| [**Enums with data**](manual/types.md#enums) | `enum Shape { Dot, Circle(i16), Rect { w: i16, h: i16 } }`, generic enums of the program's own, `Option` and `Result`: built, matched, `if let`, passed and returned, nested. `?`, also converting the error with `From`. `Option`'s and `Result`'s methods: `is_some`, `unwrap`, `expect`, `unwrap_or`, `unwrap_or_else`, `unwrap_or_default`, `map`, `map_or`, `and_then`, `filter`, `ok_or`, `or`, `xor`, `zip`, `take`, `replace`, `insert`, `get_or_insert`, `as_ref`, `as_mut`, `copied`, `map_err`, `ok`, `err` and the rest; `==` and `<` of two `Option`s. `unwrap()` and `expect()` panic with Rust's message (`Result`'s without the `Err`'s value). `Option<NonZeroI16>`, `Option<bool>` and `Option<&i16>` use their niche, as Rust does. Costs a tag cell: see group 2. |
-| [**Functions**](manual/items.md#functions) | Parameters and a result; small helpers rustc inlines (`#[inline(never)]` keeps one shared copy); generic functions, inlined or not, and const generics; traits with static dispatch, default methods, associated types and constants, supertraits, generic traits and blanket impls; operator overloading (`Add`, `AddAssign`, `Neg`, `PartialEq`, `PartialOrd`); `impl Trait` as a parameter and as a result; `const fn`; methods taking `self`, `&self` or `&mut self`. A function's call of itself as the last thing it does is a loop, and functions that call one another at their ends are one function, so neither needs a stack. Other recursion has a stack: see group 2. |
-| [**Closures and indirect calls**](manual/statements-and-expressions.md#closures) | Closures that capture or not, `move` closures and `FnMut` ones: called where they are made, passed to a generic function, returned as `impl Fn`, stored in a struct, or behind a `&dyn Fn`. Function pointers, chosen at run time, kept in an array, passed and returned. `&dyn Trait` of the program's structs, chosen at run time. |
-| [**References**](manual/types.md#references-and-pointers) | `&mut` and `&` to a scalar, a struct or an enum; arrays by reference, `&[i16; N]` and `&mut [i16; N]`; slices, `&[T]` and `&mut [T]`, of a length known only at run time, subslices (`&t[1..n]`) and slice patterns (`[first, .., last]`); a reference to a reference; a reference returned from a function; raw pointers and `p.add(i)`. |
-| [**Iterators**](manual/library.md#iterators) | On a range or an array's iterator: `sum`, `count`, `fold`, `max`, `min`, `find`, `position`, `all`, `any`, `last`, `nth`; adaptor chains of `map`, `filter`, `enumerate`, `skip`, `take`, `rev`, `chain`, `zip` and `step_by`, from a range, an array, `once`, `repeat` or `successors`, consumed by `sum`, `count`, `fold`, `for_each`, `max` or `min`. A chain is compiled as the one loop it stands for. |
-| [**Array and slice methods**](manual/library.md#arrays-and-slices) | `len`, `is_empty`, `get`, `first`, `last`, `contains`, `fill`, `swap`, `reverse`, `rotate_left`, `sort_unstable`, `binary_search`, `split_at`, `copy_from_slice`, `chunks`, `windows`; `[T; N]::map` and `core::array::from_fn`; `==` of two arrays. |
-| [**Strings**](manual/library.md#strings) | A string literal's `len()`, its bytes (`as_bytes()`) and indexing; byte strings (`b"CARD"`); `concat!`, `stringify!`, `file!` and `line!`. A literal is a cell a byte. |
-| [**The rest of core**](manual/library.md#the-rest-of-core) | `core::mem::swap`, `replace` and `take`; `Ordering` and its methods, `then`, `partial_cmp`, `core::cmp::Reverse`; `bool::then` and `then_some`; `char::to_digit`, `char::from_digit` and `is_ascii_digit`; `core::hint::black_box`, `assert_unchecked` and `unreachable_unchecked`. |
-| [**Checks**](manual/panic.md) | `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!` and its kin, `panic!()`, `unreachable!()`, `todo!()`, `unimplemented!()`, with a literal message or a formatted one (the panic map keeps its literal text, without the values); bounds and overflow checks, `assume()`; a check rustc has proved fails (`#[allow(unconditional_panic)]`) is the panic. |
-| [**Macros and attributes**](manual/macros.md) | `macro_rules!`, `matches!`, `cfg!` and `#[cfg]`; derives of `Clone`, `Copy`, `Default`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash`, and `Debug` on a value that is never formatted; `#[repr]`, `#[inline]`, `#[cold]`, `#[track_caller]`; `#[test]` functions beside the program. |
-| [**Built-ins**](manual/runtime.md) | `inp()`, `out()`, `overlay()` for a program in phases, `load_resource("NAME")` for data loaded with the deck, `digit()`, `skip_cards(n)` and `add_times(c, n)`. |
+#### [Types](manual/types.md)
+
+- `i16`, the card's own number.
+- `i8`, from -128 to 127, wrapping as Rust's does.
+- `u8` and `u16`.
+- `usize`, for indexes and counters.
+- `isize` and `i32`, whose values stay on a card.
+- `bool`, and `char`, a cell holding its code point.
+- An integer literal with no type (`i32` by default), which works as an `i16` would.
+- Literals in hexadecimal, octal and binary, with `_` and a type suffix, and byte literals (`b'A'`).
+
+#### [Arithmetic](manual/statements-and-expressions.md#operators)
+
+- `+`, `-`, unary `-`, and comparisons.
+- `*` by a constant (adds and decimal shifts), and `/` and `%` by a power of ten (shifts).
+- `!` on integers, and `<<` and `>>` by a constant.
+- `digit(v, k)` for one digit of a number, and `add_times(c, n)` for `n * c` by additions (n 0..=99).
+- `x & m` for a mask m one below a power of two: `x & 3` is `x.rem_euclid(4)`, a subtracting loop.
+- Compound assignment, and destructuring assignment (`(a, b) = (b, a)`).
+
+#### [Integer methods](manual/library.md#integer-methods)
+
+- `abs`, `wrapping_abs`, `unsigned_abs`, `abs_diff`, `signum`, `is_negative` and `is_positive`.
+- `min`, `max`, `clamp` and `cmp`.
+- `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_neg` and `checked_pow`.
+- `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `wrapping_div`, `wrapping_rem` and `wrapping_neg`.
+- `saturating_add`, `saturating_sub` and `saturating_mul`.
+- `overflowing_add` and `overflowing_sub`.
+- `div_euclid` and `rem_euclid`, and `pow`, `isqrt` and `ilog10`.
+- On a `u8` or a `usize`, `is_power_of_two` and `next_power_of_two`, and a `u8`'s `midpoint`.
+- `from`, `into`, `try_from` and `try_into` between the types above.
+- `BITS`, `u8::MIN` and `u8::MAX`.
+
+Where rustc calls one rather than inlining it, the compiler writes the code rustc would have inlined. No card holds
+`i16::MIN` or `i16::MAX`, so `abs` has nothing to check, an `i16`'s saturating methods panic past a card as its plain
+arithmetic does, and `checked_add` is `None` past 999.
+
+#### [Control flow](manual/statements-and-expressions.md#control-flow)
+
+- `if` and `else`, also as an expression.
+- `if let`, let chains, `let else` and `while let`.
+- `while`, and `loop`, also with `break value`.
+- Labelled blocks, `break` and `continue`, and early `return`.
+- `match` on integers, `bool`s, `char`s, enums, structs, tuples and arrays, with ranges, guards, `@` bindings, `|`
+  alternatives and nested patterns.
+- `for` over a range (`a..b`, `a..=b`, `.rev()`, `.step_by(k)`), over an array, and over `.iter()`, `.iter_mut()`
+  and `.iter().enumerate()`.
+
+#### [Data](manual/types.md#arrays)
+
+- Fixed-size arrays of any of the types above, of structs, of tuples and of arrays. `[[i16; 3]; 3]` is one array,
+  row after row.
+- `const` values and tables, also from other crates, and `static` and `static mut`.
+- Tuples, nested too, passed and returned.
+- Structs with named fields, tuple structs, unit structs and generic structs, with methods (`impl`), functional
+  update and destructuring.
+- A `union` read through the field it was written by.
+- Shadowing and block expressions.
+
+#### [C-like enums](manual/items.md#enumerations)
+
+- `enum Colour { Red, Green, Blue }`, with numbers given (`Low = -5`, `High = 3 * 300`) or not, and `#[repr(i16)]`
+  or `#[repr(u8)]`. One cell, the variant's number.
+- `match`, `as i16`, passed and returned.
+- `==`, `<` and `cmp` of a derived `PartialEq`, `PartialOrd` or `Ord`.
+
+#### [Enums with data](manual/types.md#enums)
+
+- `enum Shape { Dot, Circle(i16), Rect { w: i16, h: i16 } }`, generic enums of the program's own, `Option` and
+  `Result`: built, matched, `if let`, passed and returned, nested.
+- `?`, also converting the error with `From`.
+- `Option`'s and `Result`'s methods: `is_some`, `unwrap`, `expect`, `unwrap_or`, `unwrap_or_else`,
+  `unwrap_or_default`, `map`, `map_or`, `and_then`, `filter`, `ok_or`, `or`, `xor`, `zip`, `take`, `replace`,
+  `insert`, `get_or_insert`, `as_ref`, `as_mut`, `copied`, `map_err`, `ok`, `err` and the rest.
+- `==` and `<` of two `Option`s.
+- `unwrap()` and `expect()` panic with Rust's message (`Result`'s without the `Err`'s value).
+- `Option<NonZeroI16>`, `Option<bool>` and `Option<&i16>` use their niche, as Rust does.
+
+An enum with data costs a tag cell: see group 2.
+
+#### [Functions](manual/items.md#functions)
+
+- Parameters and a result.
+- Small helpers rustc inlines. `#[inline(never)]` keeps one shared copy.
+- Generic functions, inlined or not, and const generics.
+- Traits with static dispatch, default methods, associated types and constants, supertraits, generic traits and
+  blanket impls.
+- Operator overloading (`Add`, `AddAssign`, `Neg`, `PartialEq`, `PartialOrd`).
+- `impl Trait` as a parameter and as a result, and `const fn`.
+- Methods taking `self`, `&self` or `&mut self`.
+- A function's call of itself as the last thing it does, which is a loop. Functions that call one another at their
+  ends are one function, so neither needs a stack.
+
+Other recursion has a stack: see group 2.
+
+#### [Closures and indirect calls](manual/statements-and-expressions.md#closures)
+
+- Closures that capture or not, `move` closures and `FnMut` ones: called where they are made, passed to a generic
+  function, returned as `impl Fn`, stored in a struct, or behind a `&dyn Fn`.
+- Function pointers, chosen at run time, kept in an array, passed and returned.
+- `&dyn Trait` of the program's structs, chosen at run time.
+
+#### [References](manual/types.md#references-and-pointers)
+
+- `&mut` and `&` to a scalar, a struct or an enum.
+- Arrays by reference, `&[i16; N]` and `&mut [i16; N]`.
+- Slices, `&[T]` and `&mut [T]`, of a length known only at run time, subslices (`&t[1..n]`) and slice patterns
+  (`[first, .., last]`).
+- A reference to a reference, and a reference returned from a function.
+- Raw pointers and `p.add(i)`.
+
+#### [Iterators](manual/library.md#iterators)
+
+- On a range or an array's iterator: `sum`, `count`, `fold`, `max`, `min`, `find`, `position`, `all`, `any`, `last`
+  and `nth`.
+- Adaptor chains of `map`, `filter`, `enumerate`, `skip`, `take`, `rev`, `chain`, `zip` and `step_by`, from a range,
+  an array, `once`, `repeat` or `successors`, consumed by `sum`, `count`, `fold`, `for_each`, `max` or `min`. A chain
+  is compiled as the one loop it stands for.
+
+#### [Array and slice methods](manual/library.md#arrays-and-slices)
+
+- `len`, `is_empty`, `get`, `first`, `last` and `contains`.
+- `fill`, `swap`, `reverse`, `rotate_left`, `sort_unstable` and `binary_search`.
+- `split_at`, `copy_from_slice`, `chunks` and `windows`.
+- `[T; N]::map` and `core::array::from_fn`.
+- `==` of two arrays.
+
+#### [Strings](manual/library.md#strings)
+
+- A string literal's `len()`, its bytes (`as_bytes()`) and indexing. A literal is a cell a byte.
+- Byte strings (`b"CARD"`).
+- `concat!`, `stringify!`, `file!` and `line!`.
+
+#### [The rest of core](manual/library.md#the-rest-of-core)
+
+- `core::mem::swap`, `replace` and `take`.
+- `Ordering` and its methods, `then`, `partial_cmp` and `core::cmp::Reverse`.
+- `bool::then` and `then_some`.
+- `char::to_digit`, `char::from_digit` and `is_ascii_digit`.
+- `core::hint::black_box`, `assert_unchecked` and `unreachable_unchecked`.
+
+#### [Checks](manual/panic.md)
+
+- `assert!`, `assert_eq!`, `assert_ne!`, `debug_assert!` and its kin.
+- `panic!()`, `unreachable!()`, `todo!()` and `unimplemented!()`, with a literal message or a formatted one. The
+  panic map keeps the literal text, without the values.
+- Bounds and overflow checks, and `assume()`.
+- A check rustc has proved fails (`#[allow(unconditional_panic)]`), which is the panic.
+
+#### [Macros and attributes](manual/macros.md)
+
+- `macro_rules!`, `matches!`, `cfg!` and `#[cfg]`.
+- Derives of `Clone`, `Copy`, `Default`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash`, and `Debug` on a value
+  that is never formatted.
+- `#[repr]`, `#[inline]`, `#[cold]` and `#[track_caller]`.
+- `#[test]` functions beside the program.
+
+#### [Built-ins](manual/runtime.md)
+
+- `inp()` and `out()`.
+- `overlay()`, for a program in phases.
+- `load_resource("NAME")`, for data loaded with the deck.
+- `digit()`, `skip_cards(n)` and `add_times(c, n)`.
 
 ### 2. Works, but costs more than it looks
 
