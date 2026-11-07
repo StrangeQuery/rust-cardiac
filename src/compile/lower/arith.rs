@@ -507,41 +507,47 @@ impl<'a> Lowering<'a> {
         if n >= 100 && !(n == 100 || n == 200) {
             return self.mul_call(&a, &b, check.is_some(), comment); // a big constant: the routine
         }
+        // by a negative constant the product is taken away from 0, so the accumulator holds it whole, as the check
+        // after it reads it (stored and negated, a product past a card would keep three digits)
         if n >= 100 {
-            self.times(&a, d2, true)?;
+            self.times(&a, d2, true, neg)?;
             if let Some(fail) = check {
                 self.check99(fail);
             }
             self.emit(Op::Sft, shift(1, 0));
             self.emit(Op::Sft, shift(1, 0));
         } else if n >= 10 {
-            self.times(&a, d1, true)?;
+            self.times(&a, d1, true, neg)?;
             if let Some(fail) = check {
                 self.check99(fail);
             }
             self.emit(Op::Sft, shift(1, 0));
-            self.times(&a, d0, false)?;
+            self.times(&a, d0, false, neg)?;
         } else {
-            self.times(&a, d0, true)?;
-        }
-        if neg {
-            let t = self.temp();
-            self.emit(Op::Sto, t.clone());
-            let z = self.konst(0);
-            self.emit(Op::Cla, z);
-            self.emit(Op::Sub, t);
+            self.times(&a, d0, true, neg)?;
         }
         Ok(())
     }
 
-    /// a added up k times into the accumulator (loaded first when `first`).
-    fn times(&mut self, a: &Value, k: i64, first: bool) -> Result<(), Fail> {
+    /// a added up k times into the accumulator (loaded first when `first`), or taken away k times when `neg` (from
+    /// 0 when `first`).
+    fn times(&mut self, a: &Value, k: i64, first: bool, neg: bool) -> Result<(), Fail> {
+        if first && neg {
+            // a value carried in the accumulator is read from its cell here, so it goes there first
+            if matches!(a, Value::At(c) if self.carried.as_ref() == Some(c)) {
+                self.carried = None;
+                let x = self.arith(a)?;
+                self.emit(Op::Sto, x);
+            }
+            let z = self.konst(0);
+            self.emit(Op::Cla, z);
+        }
         for i in 0..k {
-            if i == 0 && first {
+            if i == 0 && first && !neg {
                 self.load(a)?;
             } else {
                 let v = self.arith(a)?;
-                self.emit(Op::Add, v);
+                self.emit(if neg { Op::Sub } else { Op::Add }, v);
             }
         }
         Ok(())
