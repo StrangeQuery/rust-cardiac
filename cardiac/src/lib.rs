@@ -1,47 +1,57 @@
-//! The built-ins of a Rust program for CARDIAC.
+//! Rust on CARDIAC.
+//!
+//! A program uses this crate for CARDIAC's card reader and teletype, `inp()` and `out()`, and for a few built-ins
+//! that CARDIAC does its own way. The same program builds two ways:
+//!
+//! - `cargo run` builds it for your machine. `inp()` reads numbers from standard input, and `out()` prints them.
+//! - `cargo cardiac run` builds it for CARDIAC with the rust-cardiac compiler and runs it on heartburn's `burn`.
+//!   `inp()` is the instruction INP, and `out()` is OUT.
 //!
 //! ```no_run
 //! use cardiac::*;
 //!
 //! fn main() {
-//!     let n = inp();          // the next card from the reader
+//!     let n = inp();
 //!     for i in (0..=n).rev() {
-//!         out(i);             // a value output, a line printed
+//!         out(i);
 //!     }
 //! }
 //! ```
 //!
-//! Built with `cargo run`, the program runs on your machine: `inp()` reads a number from standard input and
-//! `out()` prints one. Built and run with `cargo cardiac run`, each call is one CARDIAC instruction: `inp()` is
-//! INP, the card reader, and `out()` is OUT, the teletype. The two builds print the same numbers.
+//! Given 5, both builds print 5 down to 0.
 //!
-//! A CARDIAC cell holds a sign and three digits, so every value a card carries is -999..=999.
+//! A CARDIAC cell holds a sign and three digits, so every value is from -999 to 999. A program whose values stay in
+//! that range prints the same numbers both ways. With overflow checks on, arithmetic that leaves the range panics on
+//! CARDIAC. With them off, a cell keeps the last three digits.
+//!
+//! To build for CARDIAC, install the cargo subcommands with `cargo install cargo-cardiac`, then
+//! `cargo cardiac new countdown` makes a package like the one above. The guide, what Rust is supported and the
+//! compiler's messages are at [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/).
+//!
+//! Each function's documentation says what it is on CARDIAC, what it costs there and what it does with `cargo run`.
 #![cfg_attr(cardiac, no_std)]
 
 // On CARDIAC. The compiler turns each call into instructions; these bodies are never run. `inline(never)` keeps
 // rustc from inlining them into the program, so the calls stay where the compiler can see them.
 
-/// The card reader: the next card. INP.
+/// On CARDIAC: INP. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn inp() -> i16 {
     0
 }
 
-/// The teletype. OUT.
+/// On CARDIAC: OUT. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn out(_v: i16) {}
 
-/// The end of a phase. HRS n: the machine stops for deck n, the next phase's, which the loader reads in over this
-/// one's code (the data stays).
+/// On CARDIAC: HRS n. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn overlay() {}
 
-/// A resource, `resources/NAME`, that the loader puts in memory with the program. No code: the array lives at a
-/// label of its own, and the deck names its cells so they can be filled when it is built or loaded. Called once, in
-/// `main` and on no loop, as the loader fills it once; the program may write to the array after.
+/// On CARDIAC: an array the loader fills, at a label of its own. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn load_resource<const N: usize>(_name: &str) -> [i16; N] {
@@ -63,23 +73,12 @@ pub fn digit(v: i16, k: i16) -> i16 {
     }
 }
 
-/// Reads `n` cards and drops them: `for _ in 0..n { inp(); }`. `n` is 0..=999.
-///
-/// On CARDIAC it is a computed jump into a row of ten `INP 00`: in for the units, then the whole row once for each
-/// ten. A call takes 17 instructions, one more a card and two more a ten (about 1.2 a card), where the loop takes 6
-/// a card. The row is a routine put in once (27 cells), a call to it 2 cells; a constant `n` of 3 or less is that
-/// many `INP 00` in place. Natively, an `n` outside 0..=999 panics; on CARDIAC it is undefined.
+/// On CARDIAC: a jump into a row of `INP 00`. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn skip_cards(_n: i16) {}
 
-/// `c` added up `n` times: `n * c`. `n` is 0..=99, and `n * c` must fit on a card (-999..=999).
-///
-/// On CARDIAC it is a computed jump into a row of nine `ADD c`: in for the tens digit of `n`, a shift, and in again
-/// for the units. A call takes about 27 instructions and one more an addition, T for the tens and u for the units
-/// (`add_times(c, 37)` is 37, a loop's 7 an addition 263). The row is a routine put in once (34 cells), a call to
-/// it 4 cells; a constant `n` is `c * n` in place (adds and a shift). Natively, an `n` outside 0..=99 or a product
-/// past a card panics; on CARDIAC they are undefined.
+/// On CARDIAC: a jump into a row of `ADD c`. Documented on the native version.
 #[cfg(cardiac)]
 #[inline(never)]
 pub fn add_times(_c: i16, _n: i16) -> i16 {
@@ -164,17 +163,11 @@ impl core::ops::Not for Flag {
     }
 }
 
-/// An assumption about a value that the compiler can't see for itself (a month is always 1..=12, say), so it can
-/// leave out the checks it would otherwise need.
-///
-/// On CARDIAC it is `core::hint::assert_unchecked`: no code. With debug assertions on (`debug-assertions = true`
-/// in the profile), it is checked on CARDIAC too: a false assumption panics, as `assert!` does. Natively it is
-/// always checked.
+/// On CARDIAC: `core::hint::assert_unchecked`. Documented on the native version.
 ///
 /// # Safety
 ///
-/// `condition` must hold. On CARDIAC without debug assertions a false assumption is undefined behaviour: the checks
-/// it let the compiler drop are gone, and the program reads or computes whatever is there.
+/// `condition` must hold.
 #[cfg(cardiac)]
 #[inline(always)]
 pub unsafe fn assume(condition: bool) {
@@ -279,19 +272,27 @@ mod native {
     }
 }
 
-/// The card reader: the next number on standard input (numbers are separated by spaces or new lines). When there
-/// are no more, the program stops, as CARDIAC stops when its reader is empty. Anything that isn't a number from
-/// -999 to 999 stops it with an error.
+/// Reads the next card.
+///
+/// On CARDIAC this is INP, one instruction, which reads a card into memory. When the reader is empty, the machine
+/// stops.
+///
+/// With `cargo run`, it reads the next number from standard input. Numbers are separated by spaces or new lines.
+/// When there are none left, the program stops, as CARDIAC does. Anything that isn't a number from -999 to 999 stops
+/// it with an error.
 #[cfg(not(cardiac))]
 pub fn inp() -> i16 {
     native::next()
 }
 
-/// The teletype: prints `v` on a line of its own.
+/// Outputs a value.
 ///
-/// A value outside -999..=999 doesn't fit on a card, and panics. Like every panic here, it prints -999 first, the
-/// value CARDIAC outputs when it panics. CARDIAC itself never gets that far: built with overflow checks on, the
-/// arithmetic that made the value panics; built without (as in release), the cell keeps the low three digits.
+/// On CARDIAC this is OUT, one instruction, which sends a cell to the teletype.
+///
+/// With `cargo run`, it prints `v` on a line of its own. A value outside -999..=999 can't be on a card, so it
+/// panics. Every panic with `cargo run` prints -999 first, which is what CARDIAC outputs when it panics. On CARDIAC
+/// such a value never reaches `out()`: with overflow checks on, the arithmetic that made it panics, and with them
+/// off, the cell keeps the last three digits.
 #[cfg(not(cardiac))]
 pub fn out(v: i16) {
     native::setup();
@@ -302,22 +303,45 @@ pub fn out(v: i16) {
     println!("{v}");
 }
 
-/// Nothing: natively the whole program is in memory at once, so one phase simply runs on into the next.
+/// Ends a phase of a program too big for CARDIAC's memory.
+///
+/// On CARDIAC this is HRS n: the machine stops for deck n, the next phase. The loader reads that phase's code in
+/// over this one's, and the data stays where it is. A program in phases builds as `NAME.cqb`, `NAME.2.cqb` and so
+/// on. Put `overlay()` in `main` where each phase ends, or turn on `auto-overlay` under
+/// `[package.metadata.cardiac]` and the compiler places the phases itself.
+///
+/// With `cargo run`, it does nothing. The whole program is in memory, so one phase runs straight into the next.
 #[cfg(not(cardiac))]
 pub fn overlay() {}
 
-/// A resource: the `N` values of the file `resources/NAME`, separated by spaces or new lines as the input is. On
-/// CARDIAC the loader puts them in memory with the program. Natively the file is read here, when the program runs
-/// (never built into it, so it can change between runs), from beside the package's `Cargo.toml`, the directory
-/// `cargo run` gives as `CARGO_MANIFEST_DIR`; run some other way, from the current directory. A missing file, a
-/// value that isn't a card, or other than `N` values stops the program with an error.
+/// An array of `N` values from the file `resources/NAME`, beside the package's `Cargo.toml`.
+///
+/// ```no_run
+/// # use cardiac::*;
+/// let key: [i16; 10] = load_resource("key");
+/// ```
+///
+/// The file holds numbers separated by spaces or new lines, as the input does.
+///
+/// On CARDIAC the loader puts the values in memory with the program, so the array costs no code. Call it once, in
+/// `main` and outside any loop, since the loader fills it once. The program may change the array afterwards.
+///
+/// With `cargo run`, the file is read when the program runs, so it can change between runs. It is found through
+/// `CARGO_MANIFEST_DIR`, or the current directory when the program is run some other way. A missing file, a value
+/// that isn't a card, or a count other than `N` stops the program with an error.
 #[cfg(not(cardiac))]
 pub fn load_resource<const N: usize>(name: &str) -> [i16; N] {
     native::resource(name)
 }
 
-/// Reads `n` cards and drops them. On CARDIAC a computed jump into a row of `INP 00`s; here, `n` calls of `inp()`.
-/// An `n` outside 0..=999 panics.
+/// Reads `n` cards and drops them, as `for _ in 0..n { inp(); }` does. `n` is from 0 to 999.
+///
+/// On CARDIAC it jumps into a row of ten `INP 00`: once for the units of `n`, then through the whole row once for
+/// each ten. A call takes 17 instructions, plus one for each card and two more for each ten, about 1.2 a card. The
+/// loop takes 6 a card. The row is a routine put in once (27 cells), and each call costs 2 cells. A constant `n` of
+/// 3 or less is that many `INP 00` in place. An `n` outside 0..=999 is undefined on CARDIAC.
+///
+/// With `cargo run`, it calls `inp()` `n` times. An `n` outside 0..=999 panics.
 #[cfg(not(cardiac))]
 #[track_caller]
 pub fn skip_cards(n: i16) {
@@ -327,8 +351,15 @@ pub fn skip_cards(n: i16) {
     }
 }
 
-/// `n * c`, as `c` added up `n` times. On CARDIAC a computed jump into a row of `ADD c`s. An `n` outside 0..=99, or
-/// a product that doesn't fit on a card (-999..=999), panics.
+/// `n * c`, as `c` added up `n` times. `n` is from 0 to 99, and the product must be from -999 to 999.
+///
+/// On CARDIAC it jumps into a row of nine `ADD c`: once for the tens digit of `n`, then a shift, then again for the
+/// units. A call takes about 27 instructions plus one for each addition, so `add_times(c, 37)` takes 37, where a loop
+/// at 7 instructions an addition takes 263. The row is a routine put in once (34 cells), and each call costs 4 cells. A
+/// constant `n` becomes `c * n` in place, with adds and a shift. An `n` or a product out of range is undefined on
+/// CARDIAC.
+///
+/// With `cargo run`, it multiplies. An `n` or a product out of range panics.
 #[cfg(not(cardiac))]
 #[track_caller]
 pub fn add_times(c: i16, n: i16) -> i16 {
@@ -342,13 +373,19 @@ pub fn add_times(c: i16, n: i16) -> i16 {
     product as i16
 }
 
-/// An assumption about a value that the compiler can't see for itself, so it can leave out the checks it would
-/// otherwise need: on CARDIAC (without debug assertions), no code. Natively it is checked: a false assumption
-/// panics, naming the line that made it.
+/// Tells the compiler something about a value that it can't see for itself, such as a month always being from 1
+/// to 12, so it can leave out checks it would otherwise need.
+///
+/// On CARDIAC it is `core::hint::assert_unchecked` and costs no code. With debug assertions on
+/// (`debug-assertions = true` in the profile), CARDIAC checks it too, and a false assumption panics as `assert!`
+/// does.
+///
+/// With `cargo run`, it is always checked. A false assumption panics and names the line that made it.
 ///
 /// # Safety
 ///
-/// `condition` must hold: on CARDIAC without debug assertions a false assumption is undefined behaviour.
+/// `condition` must hold. On CARDIAC without debug assertions, a false assumption is undefined behaviour: the
+/// checks it let the compiler drop are gone, and the program reads or computes whatever is there.
 #[cfg(not(cardiac))]
 #[track_caller]
 pub unsafe fn assume(condition: bool) {
