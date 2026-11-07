@@ -20,10 +20,14 @@ to give you a full development environment and high-performance runtime. Build a
 ## Quick start
 ```
 cargo install cargo-cardiac
+cargo cardiac setup
 cargo cardiac new countdown
 cd countdown
 cargo cardiac run
 ```
+
+`cargo cardiac setup` downloads what the compiler needs, once: its driver (about 1 MB) and the Rust nightly the
+driver runs on (about 550 MB on disk). Skip it and the first build does the same.
 
 `cargo cardiac new` makes a package as `cargo new` does, with `cardiac` as a dependency and a `src/main.rs` that
 counts down from the number it reads. `cargo cardiac run` builds it for CARDIAC and runs it. Type a number and
