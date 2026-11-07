@@ -39,6 +39,8 @@ open in Cardigan, panic maps, running a deck from your own Rust program, and wha
 
 ## What's new
 
+**0.2.4.** A clearer opening for cargo-cardiac's docs.
+
 **0.2.3.** Tweaks to the compiler's messages.
 
 **0.2.2.** Three wrong answers fixed, all with values past a card. A `u8` or `i8` multiply past a card now
