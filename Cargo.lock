@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "cardiac"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "cargo-cardiac"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "heartburn",
  "serde_json",

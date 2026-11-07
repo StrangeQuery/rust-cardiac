@@ -35,6 +35,8 @@ open in Cardigan, panic maps, running a deck from your own Rust program, and wha
 
 ## What's new
 
+**0.2.1.** New crate descriptions.
+
 **0.2.0.** Two wrong answers in 0.1.3 are fixed. A value borrowed for a call could share a cell with another value
 and be read wrongly, and an overflow-checked sum of three terms could lose its first term when another of them was
 an array element at an index worked out at run time.
