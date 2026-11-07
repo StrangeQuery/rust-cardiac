@@ -134,6 +134,13 @@ impl rustc_driver::Callbacks for Driver {
 }
 
 fn main() {
+    // a panic that gets past the backend (rustc's, or the driver's outside `backend::loudly`) is said as Rust says
+    // one, then asks for a bug report, as rustc's own driver does for an internal compiler error
+    let said = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        said(info);
+        eprintln!("{}", cargo_cardiac::codes::BUG_REPORT);
+    }));
     let args: Vec<String> = std::env::args().collect();
     let settings = match Settings::from_env() {
         Some(Ok(s)) => Some(s),

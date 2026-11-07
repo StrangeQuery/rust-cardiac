@@ -105,6 +105,12 @@ impl Diag {
         self.code == Some(code)
     }
 
+    /// Whether it is cargo-cardiac's own fault, not the program's: an internal error (RCE0001), which `cargo
+    /// cardiac` follows with `BUG_REPORT`.
+    pub fn is_bug(&self) -> bool {
+        self.is(&RCE0001) || self.notes.iter().any(Diag::is_bug)
+    }
+
     /// The message, with where it is from in front: `src/main.rs: ...`.
     pub fn at(mut self, place: &str) -> Diag {
         self.message = format!("{place}: {}", self.message);
@@ -170,6 +176,15 @@ impl Display for Diag {
         Ok(())
     }
 }
+
+/// What follows an internal error or a panic of cargo-cardiac's (in `cargo cardiac` or the CARDIAC driver), as
+/// rustc's "we would appreciate a bug report" follows its own: once, after the error.
+pub const BUG_REPORT: &str = concat!(
+    "note: this is a bug in cargo-cardiac. Please email bug@strangequery.com with the program, its input and \
+     `cargo cardiac --version` (cargo-cardiac ",
+    env!("CARGO_PKG_VERSION"),
+    ")"
+);
 
 /// Where the codes are explained on the web: an index, and a page for each, PAGE/CODE/.
 pub const PAGE: &str = "https://lab.strangequery.com/rust-cardiac/messages/";
@@ -263,7 +278,7 @@ codes! {
 
 The message says what the compiler was doing. Your program may be fine Rust that rustc accepts; the compiler took a wrong turn on the way to CARDIAC.
 
-Please report it in [the issues](https://github.com/StrangeQuery/rust-cardiac/issues), with the smallest program that shows it and the command you ran. Until it is fixed, writing the same thing another way (a loop instead of an iterator, a local instead of a field) often gets past it.
+Please email it to [bug@strangequery.com](mailto:bug@strangequery.com), with the smallest program that shows it, its input, the command you ran and `cargo cardiac --version`. Until it is fixed, writing the same thing another way (a loop instead of an iterator, a local instead of a field) often gets past it.
 "#
 
     RCE0002 Error "Rust the compiler doesn't model" {
@@ -1119,6 +1134,17 @@ mod tests {
         assert_eq!(find("rce0002").map(|c| c.id), Some("RCE0002"));
         assert_eq!(Diag::tool("no driver").to_string(), "error: no driver");
         assert_eq!(e.codes().iter().map(|c| c.id).collect::<Vec<_>>(), ["RCE0002", "RCI0003"]);
+    }
+
+    #[test]
+    fn only_an_internal_error_asks_for_a_bug_report() {
+        assert!(internal("no label 7").is_bug());
+        assert!(Diag::tool("x").with_note(internal("y")).is_bug());
+        assert!(!unsupported_statement("_1 = foo").is_bug());
+        assert!(!Diag::tool("no driver").is_bug());
+        assert!(!opt_level_zero().is_bug());
+        assert!(BUG_REPORT.starts_with("note: this is a bug in cargo-cardiac. Please email bug@strangequery.com"));
+        assert!(BUG_REPORT.ends_with(&format!("(cargo-cardiac {})", env!("CARGO_PKG_VERSION"))));
     }
 
     #[test]

@@ -7,7 +7,7 @@
 //! doesn't compile is a rustc error too, so that rustc fails, and cargo's build with it.
 use std::path::Path;
 
-use cargo_cardiac::codes::Diag;
+use cargo_cardiac::codes::{self, Diag};
 use cargo_cardiac::compile::crates::Crate;
 use cargo_cardiac::compile::program::{self, Mir, OptLevel};
 use cargo_cardiac::driver::{Mode, Outcome, Program, Report, Settings};
@@ -20,7 +20,7 @@ use crate::{check, convert, facts, instances};
 /// Compile `program`, the crate rustc has analysed, as `settings` ask; with `oracle`, check each crate's IR too.
 pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) {
     let outcome = rustc_public::rustc_internal::run(tcx, || made(tcx, settings, program, oracle))
-        .unwrap_or_else(|e| Outcome::Failed(Diag::tool(format!("{}: rustc_public: {e:?}", program.file))));
+        .unwrap_or_else(|e| Outcome::Failed(codes::internal(format!("rustc_public: {e:?}")).at(&program.file)));
     let report = Report {
         program: program.name.clone(),
         outcome,
@@ -35,8 +35,8 @@ pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: 
 /// What the program is made into, or why it can't be.
 fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) -> Outcome {
     let file = &program.file;
-    // the driver's own failures, not the program's: no code
-    let at = |e: String| Diag::tool(format!("{file}: {e}"));
+    // the driver's own failures, not the program's: internal errors, which ask for a bug report
+    let at = |e: String| codes::internal(e).at(file);
     let local: Vec<DefId> = rustc_public::all_local_items()
         .into_iter()
         .map(|item| rustc_public::rustc_internal::internal(tcx, item.def_id()))
@@ -175,11 +175,10 @@ pub fn quietly<T>(f: impl FnOnce() -> T) -> Option<T> {
     r
 }
 
-/// `f`, or None if it panics, the panic said as Rust says one (`thread 'rustc' panicked at ...`), not as rustc
-/// says its own (an internal compiler error, and a file of it): a panic of the CARDIAC compiler's is its bug, not
-/// rustc's.
+/// `f`, or None if it panics, the panic said as Rust says one (`thread 'rustc' panicked at ...`), without the
+/// driver's bug report (`main`): the caller fails with an internal error, which `cargo cardiac` follows with it.
 fn loudly<T>(f: impl FnOnce() -> T) -> Option<T> {
-    // taking rustc's hook leaves Rust's own in its place
+    // taking the driver's hook leaves Rust's own in its place
     let hook = std::panic::take_hook();
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).ok();
     std::panic::set_hook(hook);

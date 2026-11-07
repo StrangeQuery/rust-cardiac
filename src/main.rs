@@ -232,6 +232,8 @@ impl Message<'_> {
             Message::Compiled(b) => b.line(),
             Message::Note { deck, resource, file } => codes::resource_empty(deck, resource, file.display()).to_string(),
             Message::Advice { file, said } => (*said).clone().at(file).to_string(),
+            // an internal error asks for a bug report, as rustc's do
+            Message::Failed(e) if e.is_bug() => format!("{e}\n{}", codes::BUG_REPORT),
             Message::Failed(e) => e.to_string(),
             Message::Error { why, usage: false } => format!("error: {why}"),
             Message::Error { why, usage: true } => format!("error: {why}\n\n{}", usage()),
@@ -277,7 +279,14 @@ impl Message<'_> {
                 m["file"] = (*file).into();
                 m
             }
-            Message::Failed(e) => e.json(),
+            Message::Failed(e) => {
+                let mut m = e.json();
+                if e.is_bug() {
+                    let note = codes::BUG_REPORT.trim_start_matches("note: ");
+                    m["bug_report"] = note.into();
+                }
+                m
+            }
             Message::Error { why, .. } => json!({"reason": "error", "message": why}),
         }
     }
@@ -963,7 +972,17 @@ fn update_note() {
     cargo_cardiac::update::note(verbosity() < 0 || json());
 }
 
+/// A panic of `cargo cardiac`'s own is said as Rust says one, then asks for a bug report, as rustc's do.
+fn bug_report_on_panic() {
+    let said = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        said(info);
+        eprintln!("{}", codes::BUG_REPORT);
+    }));
+}
+
 fn main() -> ExitCode {
+    bug_report_on_panic();
     let a = args();
     match a.command.as_str() {
         "new" => return new(&a.rest),
