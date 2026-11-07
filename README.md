@@ -434,6 +434,12 @@ is lowered as rustc wrote it.
 Cells, for the programs in `tests/programs`. "Literal lowering" is MIR at opt-level 0, overflow checks on, with the
 optimizer off; `cargo cardiac build` is opt-level 2, overflow checks off.
 
+## If you think you found a bug
+
+Email [bug@strangequery.com](mailto:bug@strangequery.com). Send the program, the input you gave it, what it printed
+and what you expected, and the version from `cargo cardiac --version`. The best "expected" is what the same program
+prints with `cargo run`.
+
 ## Developing rust-cardiac
 
 [CONTRIBUTING.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/CONTRIBUTING.md) says how to build and test the compiler, and how to send us a pull request.
