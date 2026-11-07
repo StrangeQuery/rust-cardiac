@@ -453,14 +453,14 @@ let fits = p <= 255;
     RCE0012 Error "A wrapping product past the accumulator" {
         wrapping_mul_wide(src: impl Display) "a wrapping * of two values that can pass what the accumulator holds is not supported: {src}";
     }
-    r#"A wrapping multiplication (`wrapping_mul`, or `*` without overflow checks) of two values whose product can pass what CARDIAC's accumulator holds.
+    r#"A wrapping multiplication (`wrapping_mul`, or `*` without overflow checks) of two `u8`s or `i8`s whose product could pass what CARDIAC's accumulator holds. The compiler no longer says this: such a multiplication compiles.
 
-The accumulator holds four digits. To wrap a product as Rust does, the compiler needs it whole; two values that can each be large make a product it can't hold.
+CARDIAC has no multiply: a product is a loop of adds, and where it passes a card the machine's own rule says what is left, as for a sum. A cell keeps the last three digits and the sign (999 + 1 stores 000), and the `u8` or `i8` then wraps those as Rust wraps any value. A product from -999 to 999 wraps just as Rust's does; past that, the value is CARDIAC's, not Rust's.
 
-Keep one factor small and known, or multiply with overflow checks on, where a product past a card panics as Rust's would.
+With overflow checks on, a product past the type's range panics, as Rust's does.
 
 ```rust
-let y = x.wrapping_mul(3); // a constant factor: adds
+let y = a.wrapping_mul(b); // 200 × 200 = 40000 is stored as 000: 0, where Rust has 64
 ```
 "#
 

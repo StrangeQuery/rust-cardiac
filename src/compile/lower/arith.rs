@@ -571,7 +571,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// a * b by the shared routine.
-    fn mul_call(&mut self, a: &Value, b: &Value, checked: bool, comment: &str) -> Result<(), Fail> {
+    pub(super) fn mul_call(&mut self, a: &Value, b: &Value, checked: bool, comment: &str) -> Result<(), Fail> {
         self.use_mul();
         if checked {
             self.sh.pool.mul_checked = true;

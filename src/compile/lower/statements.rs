@@ -232,12 +232,29 @@ impl<'a> Lowering<'a> {
                 let b = self.mat(b);
                 let plain = crate::compile::ranges::unwrapped(*op);
                 let ty = self.place_ty(dest);
-                // a product the accumulator holds (9999 at most): a u8's or an i8's by a constant to 39
-                let held = |o: &ir::Operand| o.int().is_some_and(|(k, _)| (-39..=39).contains(&k));
-                if plain == BinOp::Mul && !(held(x) || held(y)) {
-                    fail!(wrapping_mul_wide(src))
+                if let (BinOp::Mul, Some(p), Some(q)) = (plain, a.k(), b.k()) {
+                    // both known: the product wrapped as Rust wraps it, as rustc would have folded it
+                    let v = if ty == Some(Ty::Int(IntTy::I8)) {
+                        (p * q + 128).rem_euclid(256) - 128
+                    } else {
+                        (p * q).rem_euclid(256)
+                    };
+                    let v = self.konst(v);
+                    self.emit_c(Op::Cla, v, src);
+                    return self.store(&dst, "");
                 }
-                self.arith_acc(plain, a, b, None, src)?;
+                // a u8's or an i8's product by a constant to 39 is whole in the accumulator (9999 at most), and wraps
+                // as Rust's does. Any other is the routine's, which stores its partial products: past a card the
+                // product is what CARDIAC keeps of it, as 999 + 1 stores 000, its last three digits with its sign,
+                // and the wrap takes those (by a constant, more of it would be left in the accumulator)
+                let held = |v: &Value| v.k().is_some_and(|k| (-39..=39).contains(&k));
+                if plain == BinOp::Mul && !(held(&a) || held(&b)) {
+                    // the constant second: it is how many adds
+                    let (a, b) = if a.k().is_some() { (b, a) } else { (a, b) };
+                    self.mul_call(&a, &b, false, src)?;
+                } else {
+                    self.arith_acc(plain, a, b, None, src)?;
+                }
                 if ty == Some(Ty::Int(IntTy::I8)) {
                     self.wrap_i8();
                 } else if ty == Some(Ty::Int(IntTy::Usize)) {
