@@ -27,10 +27,8 @@
 //! To build for CARDIAC, install the cargo subcommands with `cargo install cargo-cardiac`, then
 //! `cargo cardiac new countdown` makes a package like the one above.
 //!
-//! What Rust works on CARDIAC, what it costs and what is refused is in the
-//! [rust-cardiac reference guide](https://lab.strangequery.com/rust-cardiac/manual/), which starts with rust-cardiac
-//! at a glance. The compiler's messages are explained at
-//! [lab.strangequery.com/rust-cardiac/messages](https://lab.strangequery.com/rust-cardiac/messages/).
+//! The rest is at [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/): getting started,
+//! what Rust works on CARDIAC, the compiler's messages, and the tools for running and debugging a program.
 //!
 //! Each function's documentation says what it is on CARDIAC, what it costs there and what it does with `cargo run`.
 #![cfg_attr(cardiac, no_std)]
