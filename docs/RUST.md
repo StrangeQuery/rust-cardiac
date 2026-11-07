@@ -26,7 +26,9 @@ overflow`). The ones a `for` loop's own test proves cost nothing.
 **One limit is CARDIAC's, not Rust's:** a cell holds -999..=999. An `i16` past that panics on CARDIAC with overflow
 checks on, where native Rust carries on to 32767; with them off, CARDIAC keeps the low three digits (1100 is 100)
 where Rust would keep the whole value. A program whose values fit on a card prints the same both ways. A `u8`
-wraps as Rust's does (`0u8 - 1` is 255). A `u16` holds its value and is never below 0, and an `isize` or an `i32` is
+wraps as Rust's does (`0u8 - 1` is 255). Without overflow checks, a `u8` or `i8` product that passes a card is what CARDIAC keeps of it, as
+for an `i16`: the last three digits with the sign (40000 keeps 000), which the type then wraps. A product from -999
+to 999 wraps as Rust's does. A `u16` holds its value and is never below 0, and an `isize` or an `i32` is
 held as an `i16` is. A `usize` past a card, as `-1i16 as usize` makes one (usize::MAX), or
 without overflow checks `0usize - 1`, is held as the negative number it is short of 2^64 by: it compares above
 every other `usize`, casts back to `i16`, or to `u8`, as in Rust, can be added to and subtracted from, and as an
