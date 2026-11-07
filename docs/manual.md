@@ -9,37 +9,6 @@ Every entry was checked by building a small program four ways (opt-level 1 and 2
 and off) and running it both on CARDIAC and natively with `cargo run`. "Works" means the two print the same. A
 refusal is a compile error, never a wrong answer.
 
-## Contents
-
-1. [Lexical structure](manual/lexical-structure.md): literals.
-2. [Macros](manual/macros.md): `macro_rules!`, the standard macros, and why `println!` is refused.
-3. [Items](manual/items.md): functions and recursion, structs, enums, unions, constants and statics, traits, and
-   external blocks.
-4. [Attributes](manual/attributes.md): derives, inlining, `repr`, `cfg` and tests.
-5. [Statements and expressions](manual/statements-and-expressions.md): operators and what they cost, control flow,
-   loops, indexing and closures.
-6. [Patterns](manual/patterns.md).
-7. [Types](manual/types.md): the integer types and the card's limit, arrays, slices, structs, enums, references,
-   function pointers, trait objects, and the heap.
-8. [Memory](manual/memory.md): the 96 cells, phases, and the stack.
-9. [Panic](manual/panic.md): bounds and overflow checks, and what a panic prints.
-10. [Unsafety](manual/unsafety.md): `assume()`, unchecked operations and raw pointers.
-11. [Constant evaluation](manual/constant-evaluation.md): constants past a card.
-12. [The runtime](manual/runtime.md): `inp()`, `out()` and the other built-ins of the `cardiac` crate.
-
-Appendix: [The core library](manual/library.md): integer methods, `Option` and `Result`, iterators, arrays and
-slices, and strings.
-
-## How it fits together
-
-rustc does the whole front end: parsing, type checking, trait resolution, the borrow checker and constant
-evaluation. A program rustc rejects never reaches CARDIAC, and its errors are Rust's own. cargo-cardiac compiles
-the MIR that rustc writes for the program that's left. So anything rustc folds away first, such as a `const fn`, a
-closure called where it's made or a small generic function it inlines, costs nothing and needs no support.
-
-One limit is CARDIAC's, not Rust's: a cell holds -999 to 999. A program whose values fit on a card prints the same
-on CARDIAC as natively. What happens past a card is in [Types](manual/types.md#integer-types).
-
 ## rust-cardiac at a glance
 
 Everything in the manual, area by area: what works well, what costs more than it looks, and what is refused. Each
@@ -447,6 +416,37 @@ arithmetic does, and `checked_add` is `None` past 999.
 - `overlay()`, for a program in phases.
 - `load_resource("NAME")`, for data loaded with the deck.
 - `digit()`, `skip_cards(n)` and `add_times(c, n)`.
+
+## Contents
+
+1. [Lexical structure](manual/lexical-structure.md): literals.
+2. [Macros](manual/macros.md): `macro_rules!`, the standard macros, and why `println!` is refused.
+3. [Items](manual/items.md): functions and recursion, structs, enums, unions, constants and statics, traits, and
+   external blocks.
+4. [Attributes](manual/attributes.md): derives, inlining, `repr`, `cfg` and tests.
+5. [Statements and expressions](manual/statements-and-expressions.md): operators and what they cost, control flow,
+   loops, indexing and closures.
+6. [Patterns](manual/patterns.md).
+7. [Types](manual/types.md): the integer types and the card's limit, arrays, slices, structs, enums, references,
+   function pointers, trait objects, and the heap.
+8. [Memory](manual/memory.md): the 96 cells, phases, and the stack.
+9. [Panic](manual/panic.md): bounds and overflow checks, and what a panic prints.
+10. [Unsafety](manual/unsafety.md): `assume()`, unchecked operations and raw pointers.
+11. [Constant evaluation](manual/constant-evaluation.md): constants past a card.
+12. [The runtime](manual/runtime.md): `inp()`, `out()` and the other built-ins of the `cardiac` crate.
+
+Appendix: [The core library](manual/library.md): integer methods, `Option` and `Result`, iterators, arrays and
+slices, and strings.
+
+## How it fits together
+
+rustc does the whole front end: parsing, type checking, trait resolution, the borrow checker and constant
+evaluation. A program rustc rejects never reaches CARDIAC, and its errors are Rust's own. cargo-cardiac compiles
+the MIR that rustc writes for the program that's left. So anything rustc folds away first, such as a `const fn`, a
+closure called where it's made or a small generic function it inlines, costs nothing and needs no support.
+
+One limit is CARDIAC's, not Rust's: a cell holds -999 to 999. A program whose values fit on a card prints the same
+on CARDIAC as natively. What happens past a card is in [Types](manual/types.md#integer-types).
 
 ## How this was checked
 
