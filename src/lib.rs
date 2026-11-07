@@ -1,9 +1,13 @@
-//! cargo-cardiac: Rust for CARDIAC. The compiler (`compile`) takes the MIR that rustc writes and lowers it to CARDIAC
-//! assembly, which its own assembler (`asm`) turns into cells; `cargo cardiac build` drives it. CARDIAC's side is
-//! heartburn's: the machine (`cardiac`), decks (`tape`, with the deck of a compiled program added
-//! here) and listings in Brian Stuart's six columns (`listing`), re-exported under the names they have there. Panic
-//! maps, which say why a compiled program panicked, are written here (`panics`) and read by heartburn's burn, which
-//! `cargo cardiac run` runs.
+//! cargo-cardiac compiles ordinary Rust programs for CARDIAC. Install it with `cargo install cargo-cardiac`, then
+//! `cargo cardiac new countdown` makes a program and `cargo cardiac run` builds and runs it. This crate is the library
+//! behind the `cargo cardiac` command. A program uses the [`cardiac` crate](https://docs.rs/cardiac), and everything
+//! else is at [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/).
+//!
+//! Inside, the compiler (`compile`) takes the MIR that rustc writes and lowers it to CARDIAC assembly, which its own
+//! assembler (`asm`) turns into cells; `cargo cardiac build` drives it. CARDIAC's side is heartburn's: the machine
+//! (`cardiac`), decks (`tape`, with the deck of a compiled program added here) and listings in Brian Stuart's six
+//! columns (`listing`), re-exported under the names they have there. Panic maps, which say why a compiled program
+//! panicked, are written here (`panics`) and read by heartburn's burn, which `cargo cardiac run` runs.
 //! `cargo` reads a Cargo package for `cargo cardiac`, from what `cargo metadata` prints.
 pub use heartburn::{cardiac, listing};
 pub mod asm;
