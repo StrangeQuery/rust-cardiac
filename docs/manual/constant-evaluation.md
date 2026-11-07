@@ -4,6 +4,11 @@
 
 rustc does all constant evaluation. Anything it folds away first, such as a `const fn`, costs nothing on CARDIAC.
 
+## What's different on CARDIAC
+
+- A constant past a card is refused, even in a branch no run takes.
+- `i16::MAX` and `i16::MIN` can't be used as values, though comparing with them works.
+
 ## Constants past a card
 
 A constant has to fit on a card, -999 to 999, or the build refuses it with RCE0009. That covers a literal like

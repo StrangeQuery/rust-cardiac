@@ -2,6 +2,12 @@
 
 [The manual](../manual.md) › Macros
 
+## What's different on CARDIAC
+
+- `println!`, `print!`, `format_args!` and `write!` are refused, because CARDIAC prints only numbers. Use `out()`.
+- `format!` and `vec!` are refused, because there is no heap.
+- A panic's message keeps its literal text but not the values a formatted message would print.
+
 ## Macros by example
 
 `macro_rules!` works. A macro is expanded by rustc before cargo-cardiac sees the program, so it costs only what

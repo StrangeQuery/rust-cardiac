@@ -2,6 +2,11 @@
 
 [The manual](../manual.md) › Unsafety
 
+## What's different on CARDIAC
+
+- `assume()` matters more than in Rust: every check the compiler can drop saves cells out of 96.
+- Everything else on this page works as in Rust.
+
 ## assume
 
 `unsafe { assume(cond) }`, from the `cardiac` crate, is Rust's `assert_unchecked`. It lets the compiler leave out a

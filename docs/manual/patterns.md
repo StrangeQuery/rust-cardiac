@@ -2,6 +2,14 @@
 
 [The manual](../manual.md) › Patterns
 
+## What's different on CARDIAC
+
+- A `match` tests its arms one after another, so put the most common arm first.
+- Ranges are cheaper to test than equalities.
+- Otherwise patterns work as in Rust.
+
+## Where patterns work
+
 Patterns work in `match`, `if let`, `while let`, `let else` and `let`. They can match integers, `bool`s, `char`s,
 enums, structs, tuples and arrays, with ranges, guards, `@` bindings, `|` alternatives and nested patterns.
 

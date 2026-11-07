@@ -2,6 +2,12 @@
 
 [The manual](../manual.md) › Attributes
 
+## What's different on CARDIAC
+
+- `#[inline(never)]` matters more than in Rust, because every copy of a helper comes out of 96 cells.
+- `#[derive(Debug)]` works only on a value that is never formatted, since nothing can be printed but numbers.
+- Everything else on this page works as in Rust.
+
 ## Derive
 
 `Clone`, `Copy`, `Default`, `PartialEq`, `Eq`, `PartialOrd`, `Ord` and `Hash` work. `Debug` works on a value that

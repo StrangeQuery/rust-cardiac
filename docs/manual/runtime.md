@@ -5,6 +5,16 @@
 A program uses the `cardiac` crate (`use cardiac::*;`) for CARDIAC's card reader and teletype and a few built-ins.
 Each built-in's full documentation is on [docs.rs](https://docs.rs/cardiac).
 
+## What's different on CARDIAC
+
+- The card reader and the teletype are the whole outside world, and both carry only numbers.
+- The `cardiac` crate adds built-ins for things CARDIAC does its own way, such as `digit()`, `skip_cards()` and
+  `add_times()`.
+- With `cargo run`, the same program reads standard input and prints to standard output, so the two builds can be
+  compared.
+
+## The built-ins
+
 | Built-in | On CARDIAC | With `cargo run` |
 |----------|------------|------------------|
 | `inp() -> i16` | INP: reads the next card | the next number on standard input |

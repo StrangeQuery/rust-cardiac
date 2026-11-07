@@ -6,6 +6,13 @@ The Rust Reference leaves the library to its own documentation. This page says w
 CARDIAC. Where rustc calls a library method rather than inlining it, the compiler writes the code rustc would have
 inlined.
 
+## What's different on CARDIAC
+
+- No card holds `i16::MAX` or `i16::MIN`, so `checked_add` is `None` past 999 and the saturating methods panic past a
+  card.
+- The bit methods walk the cell's bits one at a time, so they cost cells and time.
+- `i16::midpoint`, `swap_bytes` and `i16::from_str_radix` are refused, and some iterator adaptors aren't done yet.
+
 ## Integer methods
 
 **Works well:** `abs`, `wrapping_abs`, `unsigned_abs`, `abs_diff`, `signum`, `is_negative`, `is_positive`; `min`,

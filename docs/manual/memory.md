@@ -2,6 +2,12 @@
 
 [The manual](../manual.md) › Memory
 
+## What's different on CARDIAC
+
+- The program and its data share 96 cells. There is no separate memory for either.
+- There is no heap, and a stack only when recursion needs one.
+- A program too big for 96 cells can run in phases, each loading its code over the last one's.
+
 ## Cells
 
 CARDIAC has 100 cells. The program and its data share 96 of them, cells 03 to 98, per phase. Every value's cell is

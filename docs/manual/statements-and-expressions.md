@@ -2,6 +2,15 @@
 
 [The manual](../manual.md) › Statements and expressions
 
+## What's different on CARDIAC
+
+- CARDIAC can only add and subtract. `*`, `/` and `%` of two variables are routines that loop. By a constant, or by a
+  power of ten, they are cheap.
+- CARDIAC works in decimal, so `&`, `|`, `^` and shifts by a variable are slow routines over the bits. The build warns
+  about them (RCW0001).
+- CARDIAC's only test is "jump if negative", so `x == k` costs about twice what `x < k` does.
+- There is no indexed addressing. Reading `t[i]` builds an instruction and runs it.
+
 ## Statements
 
 `let`, `let else`, shadowing and block expressions work.

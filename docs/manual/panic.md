@@ -2,6 +2,12 @@
 
 [The manual](../manual.md) › Panic
 
+## What's different on CARDIAC
+
+- A panic outputs -999 and halts. With the panic map, burn says why, as Rust does.
+- Overflow means leaving -999 to 999, the range of a card, not the range of the type.
+- Overflow checks cost cells on every checked operation, so build with `--release` once the program is right.
+
 ## What a panic does
 
 A failed check outputs -999 and halts. With the panic map beside the deck, burn then says why, as a Rust panic

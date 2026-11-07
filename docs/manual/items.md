@@ -2,6 +2,14 @@
 
 [The manual](../manual.md) › Items
 
+## What's different on CARDIAC
+
+- Recursion other than a call at the end of the function needs a stack of its own, about 30 cells for each place the
+  function calls itself. Fibonacci's two calls don't fit in 96 cells.
+- An inlined helper is copied into every caller, and each copy costs cells. `#[inline(never)]` keeps one.
+- An array passed by value is copied at every call. A struct behind a `&mut` passes an address for each of its cells.
+- An `extern "C"` block is refused: there is nothing on the other side of the call.
+
 ## Functions
 
 Functions take parameters and return a result. Small helpers that rustc inlines cost nothing extra.

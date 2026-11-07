@@ -2,6 +2,15 @@
 
 [The manual](../manual.md) › Types
 
+## What's different on CARDIAC
+
+- A cell holds -999 to 999. Past that, a value panics with overflow checks on, or keeps its last three digits with them
+  off.
+- No integer type is wider than a card. `i32` and `isize` are held as an `i16` is, and `i64`, `u32`, `u64`, `i128` and
+  `u128` are refused.
+- There are no floats and no heap: `f32`, `f64`, `Box`, `Vec` and `String` are refused.
+- An enum with data costs a tag cell, unless its payload leaves a value free for `None`.
+
 ## Integer types
 
 A CARDIAC cell holds a sign and three decimal digits, -999 to 999. That is the one limit that is CARDIAC's rather

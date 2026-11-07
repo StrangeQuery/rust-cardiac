@@ -2,6 +2,12 @@
 
 [The manual](../manual.md) › Lexical structure
 
+## What's different on CARDIAC
+
+- Every integer literal has to fit on a card, -999 to 999. `1010` is refused, though it is a fine `i16` in Rust.
+- A `char` is one cell holding its code point, so ASCII and Latin-1 characters fit.
+- A string literal takes a cell a byte, and it can't be printed: CARDIAC prints only numbers.
+
 ## Literals
 
 **Integer literals** work in decimal, hexadecimal, octal and binary, with `_` and a type suffix. A literal with no
