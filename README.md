@@ -35,6 +35,10 @@ open in Cardigan, panic maps, running a deck from your own Rust program, and wha
 
 ## What's new
 
+**0.2.2.** Three wrong answers fixed, all with values past a card. A `u8` or `i8` multiply past a card now
+compiles without overflow checks. An internal compiler error asks for a bug report. New:
+[the rust-cardiac reference guide](https://lab.strangequery.com/rust-cardiac/manual/).
+
 **0.2.1.** New crate descriptions.
 
 **0.2.0.** Two wrong answers in 0.1.3 are fixed. A value borrowed for a call could share a cell with another value
