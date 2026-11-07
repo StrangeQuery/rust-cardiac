@@ -20,7 +20,7 @@ pub const TOOL: &str = "cardiac";
 
 /// The version of the `cardiac` crate that `cargo cardiac new` makes a program depend on: the one released with
 /// this cargo-cardiac.
-pub const CARDIAC: &str = "0.2.2";
+pub const CARDIAC: &str = "0.2.3";
 
 /// The notional target triple for CARDIAC: the machine, no vendor, no operating system. It isn't one rustc knows (an
 /// official target needs a backend in rustc itself), so there is no `--target` to give: `cargo cardiac` is what

@@ -1,6 +1,6 @@
 [package]
 name = "cargo-cardiac"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 # the compiler reads the MIR text that rustc 1.97 prints, so that is the rustc it needs, to build and to run
 rust-version = "1.97"
