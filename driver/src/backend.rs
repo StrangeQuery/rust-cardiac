@@ -20,14 +20,17 @@ use crate::{check, convert, facts, instances};
 /// Compile `program`, the crate rustc has analysed, as `settings` ask; with `oracle`, check each crate's IR too.
 pub fn compile(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<&str>) {
     let outcome = rustc_public::rustc_internal::run(tcx, || made(tcx, settings, program, oracle))
-        .unwrap_or_else(|e| Outcome::Failed(codes::internal(format!("rustc_public: {e:?}")).at(&program.file)));
+        .unwrap_or_else(|e| {
+            let e = codes::internal(format!("rustc_public: {e:?}")).at(&program.file);
+            Outcome::Failed(e, None)
+        });
     let report = Report {
         program: program.name.clone(),
         outcome,
     };
     // the report first, then the error it carries: `cargo cardiac` knows the error when it comes
     eprintln!("{}", report.line());
-    if let Outcome::Failed(e) = &report.outcome {
+    if let Outcome::Failed(e, _) = &report.outcome {
         tcx.dcx().err(e.to_string());
     }
 }
@@ -42,21 +45,19 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         .map(|item| rustc_public::rustc_internal::internal(tcx, item.def_id()))
         .collect();
     let Some(instances) = quietly(|| instances::find(tcx, &local)) else {
-        return Outcome::Failed(at(
-            "the CARDIAC driver couldn't find the program's generic functions' instances".into(),
-        ));
+        let e = at("the CARDIAC driver couldn't find the program's generic functions' instances".into());
+        return Outcome::Failed(e, None);
     };
     let Some((mut own, renamed)) = quietly(|| convert::items_reached(tcx, &local, None, &instances.called)) else {
-        return Outcome::Failed(at("the CARDIAC driver couldn't build the IR from rustc's MIR".into()));
+        return Outcome::Failed(at("the CARDIAC driver couldn't build the IR from rustc's MIR".into()), None);
     };
     if let Some(to) = oracle {
         check::write_report(to, &check::report(tcx, &own, &renamed, &check::label(tcx)));
     }
     // the instances after the program's items, which the oracle has checked against rustc's text
     let Some(made) = quietly(|| convert::bodies(tcx, &instances.bodies)) else {
-        return Outcome::Failed(at(
-            "the CARDIAC driver couldn't build the IR of a generic function's instance".into(),
-        ));
+        let e = at("the CARDIAC driver couldn't build the IR of a generic function's instance".into());
+        return Outcome::Failed(e, None);
     };
     own.items.extend(made.items);
     instances.rename_calls(&mut own);
@@ -69,7 +70,7 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
     if settings.mode == Mode::Test {
         // beside the program before anything else, so it is there when linking fails
         if let Err(e) = program::keep_mir(&program.source, &own) {
-            return Outcome::Failed(Diag::tool(e));
+            return Outcome::Failed(Diag::tool(e), None);
         }
     }
     // the crates it uses, those rustc loaded for it, in the order `cargo cardiac` gives; of each, an impl's function
@@ -102,10 +103,11 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
         defs.retain(|&d| !in_impl(d) || reached.contains(&d));
         let name = tcx.crate_name(krate).to_string();
         let Some((file, _)) = quietly(|| convert::items(tcx, &defs, Some(&name))) else {
-            return Outcome::Failed(at(format!(
+            let e = at(format!(
                 "the CARDIAC driver couldn't build the IR of crate {} from its metadata",
                 dep.name
-            )));
+            ));
+            return Outcome::Failed(e, None);
         };
         if let Some(to) = oracle {
             let label = format!("{} > {}", check::label(tcx), dep.name);
@@ -128,19 +130,23 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
     let debug_assertions = tcx.sess.opts.debug_assertions;
     let mut mir = match Mir::link(file, own, &crates, opt_level, debug_assertions, enums, structs) {
         Ok(m) => m,
-        Err(e) => return Outcome::Failed(e),
+        Err(e) => return Outcome::Failed(e, None),
     };
     mir.auto_overlay = program.auto_overlay;
     let compiled = loudly(|| match settings.mode {
-        Mode::Build => program::build(
-            file,
-            &program.source,
-            &program.name,
-            &mir,
-            &program.resources,
-            &program.emit,
-        )
-        .map(Outcome::Built),
+        Mode::Build => Ok(
+            match program::build(
+                file,
+                &program.source,
+                &program.name,
+                &mir,
+                &program.resources,
+                &program.emit,
+            ) {
+                Ok(b) => Outcome::Built(b),
+                Err(n) => Outcome::Failed(n.error, n.sections),
+            },
+        ),
         Mode::Test => program::compile_test(file, &program.source, &mir).map(|_| Outcome::Tested {
             asm: Path::new(file).with_extension("asm").display().to_string(),
             opt_level,
@@ -148,8 +154,8 @@ fn made(tcx: TyCtxt<'_>, settings: &Settings, program: &Program, oracle: Option<
     });
     match compiled {
         Some(Ok(o)) => o,
-        Some(Err(e)) => Outcome::Failed(e),
-        None => Outcome::Failed(at("the CARDIAC compiler panicked".into())),
+        Some(Err(e)) => Outcome::Failed(e, None),
+        None => Outcome::Failed(at("the CARDIAC compiler panicked".into()), None),
     }
 }
 

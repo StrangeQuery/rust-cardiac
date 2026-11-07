@@ -36,7 +36,7 @@ use std::sync::OnceLock;
 use serde_json::{json, Value};
 
 use crate::codes::Diag;
-use crate::compile::program::{Built, Emit, OptLevel, Rustc, CFG};
+use crate::compile::program::{Built, Emit, OptLevel, Rustc, Sections, CFG};
 
 /// The nightly the driver is built with: the last of 1.97's, whose MIR is the same as 1.97's.
 pub const TOOLCHAIN: &str = "nightly-2026-05-22";
@@ -399,8 +399,9 @@ pub enum Outcome {
     Built(Built),
     /// `test`: the listing's file, as it is shown, and the opt-level, for a hint if the run fails.
     Tested { asm: String, opt_level: OptLevel },
-    /// It doesn't compile for CARDIAC: the error, as `cargo cardiac` says it.
-    Failed(Diag),
+    /// It doesn't compile for CARDIAC: the error, as `cargo cardiac` says it; and where the cells go, when it
+    /// compiled but is too big for CARDIAC's memory (`program::NotBuilt`).
+    Failed(Diag, Option<Sections>),
 }
 
 /// The driver's line about one program (`{"$message_type": "cardiac", "program": NAME, ...}`).
@@ -417,7 +418,12 @@ impl Report {
         match &self.outcome {
             Outcome::Built(b) => v["built"] = b.json(),
             Outcome::Tested { asm, opt_level } => v["tested"] = json!({"asm": asm, "opt_level": opt_level.to_string()}),
-            Outcome::Failed(e) => v["error"] = e.json(),
+            Outcome::Failed(e, sections) => {
+                v["error"] = e.json();
+                if let Some(s) = sections {
+                    v["sections"] = s.json();
+                }
+            }
         }
         v.to_string()
     }
@@ -428,7 +434,11 @@ impl Report {
             return None;
         }
         let outcome = if v["error"].is_object() {
-            Outcome::Failed(Diag::from_json(&v["error"])?)
+            let sections = match &v["sections"] {
+                Value::Null => None,
+                s => Some(Sections::from_json(s)?),
+            };
+            Outcome::Failed(Diag::from_json(&v["error"])?, sections)
         } else if v["built"].is_object() {
             Outcome::Built(Built::from_json(&v["built"])?)
         } else {
@@ -447,9 +457,10 @@ impl Report {
 
 /// What rustc says while the driver compiles: the driver's reports, kept by program, and rustc's diagnostics,
 /// rendered on standard error as cargo renders them, but for those that are the driver's errors, which `cargo
-/// cardiac` says itself.
+/// cardiac` says itself; with `quiet` (-q), only its errors.
 #[derive(Default)]
 pub struct Listener {
+    quiet: bool,
     pub reports: HashMap<String, Report>,
     /// the driver's errors not yet seen as diagnostics
     pending: Vec<String>,
@@ -458,10 +469,24 @@ pub struct Listener {
 }
 
 impl Listener {
+    /// One that renders rustc's diagnostics, or with `quiet` only its errors.
+    pub fn new(quiet: bool) -> Listener {
+        Listener {
+            quiet,
+            ..Listener::default()
+        }
+    }
+
+    /// Whether a diagnostic of rustc's isn't rendered: with -q, all but the errors (warnings, and rustc's notes of
+    /// its own).
+    fn leaves_out(&self, m: &Value) -> bool {
+        self.quiet && matches!(m["level"].as_str(), Some("warning" | "note" | "help" | "failure-note"))
+    }
+
     /// One message from rustc's standard error.
     pub fn take(&mut self, m: &Value) {
         if let Some(r) = Report::of(m) {
-            if let Outcome::Failed(e) = &r.outcome {
+            if let Outcome::Failed(e, _) = &r.outcome {
                 self.pending.push(e.to_string());
             }
             self.reports.insert(r.program.clone(), r);
@@ -476,6 +501,9 @@ impl Listener {
             return;
         }
         let error = m["level"] == "error";
+        if self.leaves_out(m) {
+            return;
+        }
         // rustc's last word on a failure that was only the driver's
         if error && text.starts_with("aborting due to") && self.errors == 0 {
             return;
@@ -499,8 +527,9 @@ fn json_errors(cmd: &mut Command) {
 
 /// Compile a single file, which uses no other crate, with these flags: rustc compiles it as a library, so nothing
 /// calls its `fn main` (not a warning worth printing), and the driver makes what `settings` asks of it. Its report,
-/// or None if rustc stopped first (an error of Rust's, rendered already).
-pub fn single(file: &str, rustc: &Rustc, settings: &Settings) -> Result<Option<Report>, String> {
+/// or None if rustc stopped first (an error of Rust's, rendered already). With `quiet` (-q), only rustc's errors
+/// are rendered.
+pub fn single(file: &str, rustc: &Rustc, settings: &Settings, quiet: bool) -> Result<Option<Report>, String> {
     let driver = find()?;
     let mut cmd = driver.rustc();
     cmd.args([
@@ -522,7 +551,7 @@ pub fn single(file: &str, rustc: &Rustc, settings: &Settings) -> Result<Option<R
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("{}: {e}", driver.exe.display()))?;
-    let mut listener = Listener::default();
+    let mut listener = Listener::new(quiet);
     for line in BufReader::new(child.stderr.take().unwrap()).lines() {
         let line = line.map_err(|e| format!("{}: {e}", driver.exe.display()))?;
         match serde_json::from_str::<Value>(&line) {
@@ -533,4 +562,41 @@ pub fn single(file: &str, rustc: &Rustc, settings: &Settings) -> Result<Option<R
     }
     child.wait().map_err(|e| format!("{}: {e}", driver.exe.display()))?;
     Ok(listener.reports.into_values().next())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failure_carries_where_the_cells_go() {
+        let sections = Sections {
+            code: vec![("main".into(), 90), ("rt_div".into(), 12)],
+            variables: 7,
+            constants: 2,
+        };
+        let r = Report {
+            program: "big".into(),
+            outcome: Outcome::Failed(crate::codes::too_big(111).at("src/main.rs"), Some(sections)),
+        };
+        let line: Value = serde_json::from_str(&r.line()).unwrap();
+        assert_eq!(Report::of(&line), Some(r));
+        let r = Report {
+            program: "bad".into(),
+            outcome: Outcome::Failed(crate::codes::runs_past_98().at("src/main.rs"), None),
+        };
+        let line: Value = serde_json::from_str(&r.line()).unwrap();
+        assert_eq!(Report::of(&line), Some(r));
+    }
+
+    #[test]
+    fn quiet_renders_only_rustcs_errors() {
+        let (quiet, said) = (Listener::new(true), Listener::new(false));
+        for level in ["warning", "note", "help", "failure-note"] {
+            let m = json!({"$message_type": "diagnostic", "level": level, "message": "unused variable"});
+            assert!(quiet.leaves_out(&m) && !said.leaves_out(&m), "{level}");
+        }
+        let m = json!({"$message_type": "diagnostic", "level": "error", "message": "mismatched types"});
+        assert!(!quiet.leaves_out(&m));
+    }
 }

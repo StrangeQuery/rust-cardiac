@@ -383,8 +383,9 @@ also says how hard the compiler's own passes work: none at 0, all of them from 1
 Brian Stuart's six columns, which carc assembles), `map` (`NAME.map`) and `asm` (the compiler's own assembly,
 `NAME.asm`). A listing and the assembly name each cell after the variable it holds, where the source has one (`n`,
 or `main_n` when another function has an `n` too), and say each line as the Rust it came from (`height = cell / 10`).
-The default is `deck,map`. `-q` says only errors, `-v` also says where the cells go, and
-`--message-format=json` says it all as JSON Lines on standard error, as cargo does.
+The default is `deck,map`. `-q` says only errors, with no notes or warnings (rustc's included), and `-v` also says
+where the cells go, by function, even when the program is too big to build. `--message-format=json` says it all as
+JSON Lines on standard error, as cargo does.
 
 Each message about a program has a code, as rustc's errors do: `error[RCE0013]` for an error, `warning[RCW0001]`
 for a warning and `note[RCI0001]` for a note. The message is one line; `cargo cardiac help CODE` says what it
