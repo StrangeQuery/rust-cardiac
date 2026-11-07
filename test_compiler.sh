@@ -155,6 +155,17 @@ exit 134" ] && echo "MATCH  precond: aborted, exit 134" || { echo "DIFFER precon
   out=$(./target/release/cargo-cardiac test $checked tests/programs/limit_value.rs 2>&1)
   case "$out" in *"constant out of range: i16::MAX (32767) is past what a card holds"*) echo "MATCH  limit_value: rejected";;
     *) echo "DIFFER limit_value: $out"; exit 1;; esac
+  # the same divided by 1000, which is 0 for anything a card holds: refused all the same, with overflow checks or
+  # without, though nothing reads the difference
+  for checks in on off; do
+    out=$(./target/release/cargo-cardiac test -C opt-level=$opt -C overflow-checks=$checks tests/programs/limit_quotient.rs 2>&1)
+    case "$out" in *"constant out of range: i16::MAX (32767) is past what a card holds"*) echo "MATCH  limit_quotient, checks $checks: rejected";;
+      *) echo "DIFFER limit_quotient, checks $checks: $out"; exit 1;; esac
+    out=$(./target/release/cargo-cardiac test -C opt-level=$opt -C overflow-checks=$checks tests/programs/const_quotient.rs 2>&1)
+    case "$out" in *"constant out of range: 1500 is past what a card holds (-999 to 999): "*"would overflow a card, in main: \`_"*"(const 1500_i16, copy _1)"*)
+        echo "MATCH  const_quotient, checks $checks: rejected";;
+      *) echo "DIFFER const_quotient, checks $checks: $out"; exit 1;; esac
+  done
   if [ $opt = 2 ]; then
     out=$(./target/release/cargo-cardiac test $checked tests/programs/midpoint.rs 2>&1)
     case "$out" in *"core::num::<impl i16>::midpoint, inlined in main, works in i32 so that it can't overflow"*) echo "MATCH  midpoint: rejected";;

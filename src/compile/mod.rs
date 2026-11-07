@@ -597,6 +597,72 @@ fn settled_by_the_card(blocks: &mut [ir::Block], types: &HashMap<ir::Local, ir::
     }
 }
 
+/// A constant past a card, refused before the passes run, as lowering refuses one it meets (`operand`): a pass
+/// that drops code nothing reads would otherwise drop the constant with it, and the program would compile to a
+/// different answer. `(i16::MAX - a) / 1000` is 0 on a card, where no value reaches 1000, so the difference is
+/// never read, and goes; natively it is 32. (The constants the card settles are gone by now: a comparison with
+/// `i16::MIN` or `i16::MAX`, one just past a card, a divisor past one, and what only a failing check read.) An
+/// assert's message arguments are only printed, natively.
+fn refuse_past_card(blocks: &mut [ir::Block], func: &str) -> Result<(), Fail> {
+    use ir::visit_mut::{walk_terminator, VisitMut};
+    struct Refuse(Option<Fail>);
+    impl VisitMut for Refuse {
+        fn visit_terminator(&mut self, t: &mut ir::Terminator) {
+            if let ir::Terminator::Assert { cond, .. } = t {
+                self.visit_operand(cond);
+            } else {
+                walk_terminator(self, t);
+            }
+        }
+        fn visit_operand(&mut self, o: &mut ir::Operand) {
+            if self.0.is_some() {
+                return;
+            }
+            match o {
+                ir::Operand::Constant(ir::Const::Int { value, ty }) => {
+                    let Some([lo, hi]) = ranges::type_range(&ir::Ty::Int(*ty)) else {
+                        return;
+                    };
+                    if *value < lo as i128 || *value > hi as i128 {
+                        self.0 = Some(crate::codes::constant_past_card(*value, lo, hi));
+                    }
+                }
+                ir::Operand::Constant(ir::Const::Path(p))
+                    if p.is_path(&["i16", "MIN"]) || p.is_path(&["i16", "MAX"]) =>
+                {
+                    let v = if p.name() == "MIN" { -32768 } else { 32767 };
+                    self.0 = Some(crate::codes::limit_past_card(p.name(), v));
+                }
+                _ => {}
+            }
+        }
+    }
+    // with the line, as lowering says it
+    let at = |e: Fail, line: String| {
+        let line = line.trim_end_matches(';');
+        if e.message.contains(line) {
+            e
+        } else {
+            e.and(&format!(", in {func}: `{line}`"))
+        }
+    };
+    for b in blocks.iter_mut() {
+        for s in b.statements.iter_mut() {
+            let mut r = Refuse(None);
+            r.visit_statement(s);
+            if let Some(e) = r.0 {
+                return Err(at(e, s.to_string()));
+            }
+        }
+        let mut r = Refuse(None);
+        r.visit_terminator(&mut b.terminator);
+        if let Some(e) = r.0 {
+            return Err(at(e, b.terminator.to_string()));
+        }
+    }
+    Ok(())
+}
+
 /// Each local's type, for the passes to look up.
 fn local_types(locals: &Ordered<ir::Local, ir::Ty>) -> HashMap<ir::Local, ir::Ty> {
     locals.iter().map(|(l, t)| (*l, t.clone())).collect()
@@ -966,6 +1032,7 @@ fn compile(
         card_bounds(&mut blocks);
         settled_by_the_card(&mut blocks, &local_types(&locals));
         blocks::settled_checks(&mut blocks, &results);
+        refuse_past_card(&mut blocks, &n)?;
         if optimize {
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);
         }
