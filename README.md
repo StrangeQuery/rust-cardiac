@@ -107,7 +107,7 @@ Notice the use of `out()` instead of `println!`. CARDIAC has limited I/O. `print
 
 When you run the program natively, `out()` literally is `println!`. In the `cardiac` crate ([`cardiac/src/lib.rs`](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/cardiac/src/lib.rs)), native `out()` calls `println!("{v}")`, after checking that the value fits on a card, -999 to 999. Similarly, `inp()` stands in for reading a line from stdin and parsing it as a number. Natively that's `std::io::stdin().lock().read_line(...)` plus a parse, and it stops the program when the input runs out, as an empty card reader would.
 
-[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the list of what is and isn't supported. `println!` and `format!` are refused: `out()` prints a value. `assert_eq!`, `assert_ne!` and panics with a message work, and say what Rust's would, without the values a formatted message prints.
+[The rust-cardiac manual](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/manual.md) has the list of what is and isn't supported. `println!` and `format!` are refused: `out()` prints a value. `assert_eq!`, `assert_ne!` and panics with a message work, and say what Rust's would, without the values a formatted message prints.
 
 ## Building and running Hello
 In a checkout of this repository, in `examples/`, run it natively, then on CARDIAC:
@@ -230,7 +230,7 @@ rustc does all of the front end: parsing, type checking, the borrow checker. A p
 Anything else that is refused is work not done yet. The build stops with an error, and `cargo cardiac help CODE`
 says what its code means and what to write instead.
 
-[docs/RUST.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/RUST.md) has the whole list, each entry checked by running it both ways, with what each costs
+[The rust-cardiac manual](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/docs/manual.md) has the whole list, each entry checked by running it both ways, with what each costs
 and what to write instead. [tests/features/SUPPORT.md](https://github.com/StrangeQuery/rust-cardiac/blob/HEAD/tests/features/SUPPORT.md)
 is the table behind it: one small program for each piece of Rust, in the Rust Reference's order, built four ways
 and run on CARDIAC and natively.

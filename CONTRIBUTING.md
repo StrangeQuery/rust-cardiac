@@ -90,8 +90,9 @@ Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR
 - `tests/features/` is the feature tests and their harness. `tests/features/SUPPORT.md` is the table they make,
   and `NEVER.md` beside it explains the rows CARDIAC can never support. The top of `tests/features/src/main.rs`
   says how a row is written.
-- `docs/RUST.md` lists the Rust that compiles for CARDIAC, the Rust that compiles but costs more than it looks, and
-  the Rust that's refused.
+- `docs/manual.md` is the user manual, with a chapter for each part of the language in `docs/manual/`, in the
+  Rust Reference's order. Its index lists the Rust that compiles for CARDIAC, the Rust that compiles but costs
+  more than it looks, and the Rust that's refused.
 - `docs/DECISIONS.md` is the decision log: what we chose, why, and what it cost, newest first.
 
 ## Sending a change
@@ -101,8 +102,8 @@ Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR
    CARDIAC is the most important kind of bug, and we fix those before we work on making programs smaller.
 2. **Fork the repository and make a branch.** Format with `cargo fmt`. `rustfmt.toml` sets lines of 120 characters.
 3. **Add a test.** For a bug, put a program in `tests/programs` that fails before your change and passes after it.
-   For a new piece of Rust that now compiles, do the same, add it to `docs/RUST.md`, and add a row for it in
-   `tests/features` if it doesn't have one.
+   For a new piece of Rust that now compiles, do the same, add it to its chapter of the manual and to the index in
+   `docs/manual.md`, and add a row for it in `tests/features` if it doesn't have one.
 4. **Run the tests above.** All of them must pass. Run `fuzz.sh` too if you changed code generation or a pass.
 5. **Write the decision down.** If your change decides something, such as how a type is laid out or what a pass
    may assume, add an entry to the top of `docs/DECISIONS.md`. Copy the shape of the entries already there: the

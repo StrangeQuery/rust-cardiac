@@ -290,7 +290,7 @@ Please email it to [bug@strangequery.com](mailto:bug@strangequery.com), with the
 
 cargo-cardiac compiles rustc's MIR, the program after rustc has checked it and simplified it. It knows the statements and terminators that programs for CARDIAC need: arithmetic on cards, arrays, structs, enums, calls. The message quotes the MIR line it stopped at, which names what it is in Rust's terms (a call to `core::...` is a method of the standard library).
 
-What to write instead depends on the line. Often it is a library method that hasn't been written for CARDIAC: write the loop or the test it stands for. The list of what compiles is in the repository's `docs/RUST.md`.
+What to write instead depends on the line. Often it is a library method that hasn't been written for CARDIAC: write the loop or the test it stands for. What compiles is in the rust-cardiac manual, the repository's `docs/manual.md`.
 
 ```rust
 // in place of a library method the compiler doesn't have, the arithmetic it does
@@ -814,7 +814,7 @@ fn main() {
 
 CARDIAC has 100 cells. Cells 00 to 02 and 99 belong to the machine and the loader, which leaves 96 for the program's code and data.
 
-Make it smaller, or split it into phases: `overlay()` in `main` where it can be cut, or auto-overlay on to have the compiler cut it. Things that cost many cells are listed in `docs/RUST.md` (multiplying or dividing two variables, the bit routines, overflow checks); `cargo cardiac build -v` says where the cells go.
+Make it smaller, or split it into phases: `overlay()` in `main` where it can be cut, or auto-overlay on to have the compiler cut it. Things that cost many cells are listed in the rust-cardiac manual (`docs/manual.md`) (multiplying or dividing two variables, the bit routines, overflow checks); `cargo cardiac build -v` says where the cells go.
 
 ```toml
 [package.metadata.cardiac]
