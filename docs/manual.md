@@ -1,4 +1,4 @@
-# The rust-cardiac manual
+# rust-cardiac
 
 This is the manual for writing Rust for CARDIAC with cargo-cardiac. It says what compiles, what it costs in
 CARDIAC's 96 cells, and what is refused and why. Its chapters follow the
