@@ -1,6 +1,6 @@
 # Panic
 
-[The manual](../manual.md) › Panic
+[The rust-cardiac manual](../manual.md) › Panic
 
 ## What's different on CARDIAC
 

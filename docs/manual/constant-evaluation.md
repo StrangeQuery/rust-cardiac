@@ -1,6 +1,6 @@
 # Constant evaluation
 
-[The manual](../manual.md) › Constant evaluation
+[The rust-cardiac manual](../manual.md) › Constant evaluation
 
 rustc does all constant evaluation. Anything it folds away first, such as a `const fn`, costs nothing on CARDIAC.
 

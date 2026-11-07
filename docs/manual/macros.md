@@ -1,6 +1,6 @@
 # Macros
 
-[The manual](../manual.md) › Macros
+[The rust-cardiac manual](../manual.md) › Macros
 
 ## What's different on CARDIAC
 

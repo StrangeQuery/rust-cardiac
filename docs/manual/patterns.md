@@ -1,6 +1,6 @@
 # Patterns
 
-[The manual](../manual.md) › Patterns
+[The rust-cardiac manual](../manual.md) › Patterns
 
 ## What's different on CARDIAC
 

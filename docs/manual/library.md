@@ -1,6 +1,6 @@
 # The core library
 
-[The manual](../manual.md) › The core library
+[The rust-cardiac manual](../manual.md) › The core library
 
 The Rust Reference leaves the library to its own documentation. This page says which parts of `core` work on
 CARDIAC. Where rustc calls a library method rather than inlining it, the compiler writes the code rustc would have

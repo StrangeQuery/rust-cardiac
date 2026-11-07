@@ -1,6 +1,6 @@
 # Items
 
-[The manual](../manual.md) › Items
+[The rust-cardiac manual](../manual.md) › Items
 
 ## What's different on CARDIAC
 

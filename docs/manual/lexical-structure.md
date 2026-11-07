@@ -1,6 +1,6 @@
 # Lexical structure
 
-[The manual](../manual.md) › Lexical structure
+[The rust-cardiac manual](../manual.md) › Lexical structure
 
 ## What's different on CARDIAC
 

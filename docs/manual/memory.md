@@ -1,6 +1,6 @@
 # Memory
 
-[The manual](../manual.md) › Memory
+[The rust-cardiac manual](../manual.md) › Memory
 
 ## What's different on CARDIAC
 

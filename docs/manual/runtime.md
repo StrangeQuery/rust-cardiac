@@ -1,6 +1,6 @@
 # The runtime
 
-[The manual](../manual.md) › The runtime
+[The rust-cardiac manual](../manual.md) › The runtime
 
 A program uses the `cardiac` crate (`use cardiac::*;`) for CARDIAC's card reader and teletype and a few built-ins.
 Each built-in's full documentation is on [docs.rs](https://docs.rs/cardiac).

@@ -1,6 +1,6 @@
 # Attributes
 
-[The manual](../manual.md) › Attributes
+[The rust-cardiac manual](../manual.md) › Attributes
 
 ## What's different on CARDIAC
 

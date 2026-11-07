@@ -1,6 +1,6 @@
 # Unsafety
 
-[The manual](../manual.md) › Unsafety
+[The rust-cardiac manual](../manual.md) › Unsafety
 
 ## What's different on CARDIAC
 

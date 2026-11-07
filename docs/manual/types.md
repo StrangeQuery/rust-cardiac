@@ -1,6 +1,6 @@
 # Types
 
-[The manual](../manual.md) › Types
+[The rust-cardiac manual](../manual.md) › Types
 
 ## What's different on CARDIAC
 

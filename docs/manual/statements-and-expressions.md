@@ -1,6 +1,6 @@
 # Statements and expressions
 
-[The manual](../manual.md) › Statements and expressions
+[The rust-cardiac manual](../manual.md) › Statements and expressions
 
 ## What's different on CARDIAC
 
