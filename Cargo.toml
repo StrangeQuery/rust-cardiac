@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 # the compiler reads the MIR text that rustc 1.97 prints, so that is the rustc it needs, to build and to run
 rust-version = "1.97"
-description = "Rust on CARDIAC, the classic 1968 cardboard computer from Bell Labs."
+description = "Cargo subcommands for building, running and debugging Rust on CARDIAC."
 license = "MIT"
 repository.workspace = true
 homepage.workspace = true

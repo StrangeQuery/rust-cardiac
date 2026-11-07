@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 # the [lints] table
 rust-version = "1.74"
-description = "A Rust library for writing CARDIAC programs."
+description = "Rust on CARDIAC, the classic 1968 cardboard computer from Bell Labs."
 license = "MIT"
 repository.workspace = true
 homepage.workspace = true
