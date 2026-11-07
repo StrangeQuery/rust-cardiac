@@ -388,7 +388,14 @@ impl<'a> Lowering<'a> {
             Loc::At(c) if self.carry.as_ref() == Some(c) => {
                 self.carried = Some(c.clone()); // left there for the next statement
             }
-            Loc::At(c) => self.emit_c(Op::Sto, c.clone(), comment),
+            Loc::At(c) => {
+                self.emit_c(Op::Sto, c.clone(), comment);
+                if self.wide {
+                    if let Some(l) = self.code.last_mut() {
+                        l.wide = true;
+                    }
+                }
+            }
             Loc::Computed(d) => {
                 let v = self.temp();
                 self.emit_c(Op::Sto, v.clone(), comment);

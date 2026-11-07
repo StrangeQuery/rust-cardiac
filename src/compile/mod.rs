@@ -934,6 +934,8 @@ fn compile(
         merged: Vec<(ir::Local, ir::Local)>,
         params: Vec<ir::Local>,
         results: HashSet<ir::Local>,
+        /// what the range pass found stays on a card (see `ranges::past_a_card`)
+        on_card: HashSet<ir::Statement>,
     }
     let mut ready: Vec<Ready> = vec![];
     let mut cut_points = vec![];
@@ -970,6 +972,7 @@ fn compile(
         promises(&mut blocks, optimize, &promisers);
         // the locals that came to share another's cell, for the names the listing gives them
         let mut merged: Vec<(ir::Local, ir::Local)> = vec![];
+        let mut on_card: HashSet<ir::Statement> = HashSet::new();
         if optimize {
             // what nothing reads goes first: a variable that only grows needs no range, and an op whose value is
             // never read is left only for its panic, which the range pass may rule out
@@ -977,7 +980,7 @@ fn compile(
             blocks::dead_code(&mut blocks, &results);
             blocks::bools_on_edges(&mut blocks, true);
             blocks::thread_constants(&mut blocks);
-            ranges::range_pass(&mut blocks, &local_types(&locals))?;
+            on_card = ranges::range_pass(&mut blocks, &local_types(&locals))?.1;
             blocks::dead_code(&mut blocks, &results);
             blocks::dead_stores(&mut blocks, &results);
             blocks::merge_blocks(&mut blocks);
@@ -1087,6 +1090,7 @@ fn compile(
             merged,
             params,
             results,
+            on_card,
         });
     }
     // callees first, so a parameter can be passed on through more than one call
@@ -1111,9 +1115,16 @@ fn compile(
     for r in ready {
         let shown = source_names.of_function(&r.name);
         let huge = ranges::huge_usizes(&r.blocks, &local_types(&r.locals), &r.results, None);
+        // (with no peephole, every load is there anyway)
+        let past = if optimize {
+            ranges::past_a_card(&r.blocks, &local_types(&r.locals), &r.on_card)
+        } else {
+            HashSet::new()
+        };
         let mut l = Lowering::new(&r.name, r.locals, &mut sh, &callees, optimize, r.pooled)?;
         l.names = r.names;
         l.huge = huge;
+        l.past = past;
         l.results = r.results;
         let (mut code, cells) = l.lower(r.blocks)?;
         names::comments(&mut code, &shown);

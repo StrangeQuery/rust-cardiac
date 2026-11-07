@@ -370,7 +370,8 @@ fn drop_needless(lines: &mut Vec<Line>) -> bool {
     changed
 }
 
-/// 2. STO x or CLA x, then any TACs (which leave the accumulator alone), then CLA x: it already holds x
+/// 2. STO x or CLA x, then any TACs (which leave the accumulator alone), then CLA x: it already holds x (not after
+///    a store of a value that may be past a card, `Line::wide`: the cell keeps less of it)
 fn already_held(before: &[Line], ins: Instr) -> bool {
     if !ins.is(Op::Cla) {
         return false;
@@ -387,7 +388,7 @@ fn already_held(before: &[Line], ins: Instr) -> bool {
         if q.is_any(&[Op::Tac, Op::Out]) || (q.is(Op::Sto) && q.arg != ins.arg) {
             continue;
         }
-        return q.is_any(&[Op::Sto, Op::Cla]) && q.arg == ins.arg;
+        return q.is_any(&[Op::Sto, Op::Cla]) && q.arg == ins.arg && !o.wide;
     }
     false
 }
@@ -501,7 +502,8 @@ fn window_edit(lines: &[Line], i: usize) -> Option<Edit> {
     }
     let ops: Vec<Option<Op>> = nx.iter().map(|(_, q)| q.op).collect();
     // 8. STO t, CLA a, ADD t  ->  ADD a  (t a scratch cell read nowhere else)
-    if q0.is(Op::Sto) && is_scratch(q0.arg) && ops.starts_with(&[Some(Op::Cla), Some(Op::Add)]) {
+    let wide = lines[i].wide; // the accumulator holds more than the cell stored keeps
+    if q0.is(Op::Sto) && !wide && is_scratch(q0.arg) && ops.starts_with(&[Some(Op::Cla), Some(Op::Add)]) {
         let ((cla, a), (add, t)) = (nx[0], nx[1]);
         if t.arg == q0.arg && a.arg != q0.arg && !scratch_live(&lines[add + 1..], q0.arg) {
             return Some(Edit::Fold(a.arg.clone(), cla, add));
@@ -512,7 +514,7 @@ fn window_edit(lines: &[Line], i: usize) -> Option<Edit> {
         return Some(Edit::Delete(vec![i]));
     }
     // 10. after TAC (not taken) the accumulator still holds a op b: no need to work it out again
-    if q0.is_any(&[Op::Sto, Op::Cla]) && nx.len() >= 4 {
+    if q0.is_any(&[Op::Sto, Op::Cla]) && !wide && nx.len() >= 4 {
         let [(_, arith), (_, tac), (cla, again), (redo, arith2)] = [nx[0], nx[1], nx[2], nx[3]];
         if arith.is_any(&[Op::Add, Op::Sub])
             && tac.is(Op::Tac)
@@ -654,7 +656,7 @@ fn load_unused(after: &[Line]) -> bool {
 }
 
 /// 13. a block entered only by one TAC, right after STO x or CLA x, that starts CLA x: the accumulator holds x
-///     already (nothing falls into the block: what comes before it is a JMP or HRS)
+///     already (nothing falls into the block: what comes before it is a JMP or HRS; and the STO is not `wide`)
 fn drop_branch_reloads(lines: &mut [Line]) -> bool {
     let mut changed = false;
     for i in 0..lines.len() {
@@ -679,7 +681,8 @@ fn branch_reload(lines: &[Line], i: usize, label: &str) -> Option<usize> {
     if !instr(&lines[r]).is_some_and(|t| t.is(Op::Tac) && label_of(t.arg) == Some(label)) {
         return None;
     }
-    let held = instr(&lines[r.checked_sub(1)?]).filter(|b| b.is_any(&[Op::Sto, Op::Cla]))?;
+    let before_tac = &lines[r.checked_sub(1)?];
+    let held = instr(before_tac).filter(|b| b.is_any(&[Op::Sto, Op::Cla]) && !before_tac.wide)?;
     let before = lines[..i].iter().rev().find(|l| !is_blank(l));
     if !before.and_then(instr).is_some_and(|p| p.is_any(&[Op::Jmp, Op::Hrs])) {
         return None;
@@ -732,7 +735,8 @@ fn join_reload(lines: &[Line], i: usize, label: &str) -> Option<usize> {
 }
 
 /// Does the accumulator hold x after these lines: the last STO x or CLA x, with only TACs, OUTs, stores elsewhere
-/// and comments after it? A label or anything else between says no.
+/// and comments after it? A label or anything else between says no, and so does a store of a value that may be past
+/// a card (`Line::wide`).
 fn holds(before: &[Line], x: &Arg) -> bool {
     for o in before.iter().rev() {
         let Some(q) = instr(o) else {
@@ -744,7 +748,7 @@ fn holds(before: &[Line], x: &Arg) -> bool {
         if q.is_any(&[Op::Tac, Op::Out]) || (q.is(Op::Sto) && q.arg != x) {
             continue;
         }
-        return q.is_any(&[Op::Sto, Op::Cla]) && q.arg == x;
+        return q.is_any(&[Op::Sto, Op::Cla]) && q.arg == x && !o.wide;
     }
     false
 }

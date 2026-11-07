@@ -4,6 +4,24 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-07 · A value past a card read again after its store is what the cell keeps
+
+- **Decision.** Without overflow checks, a sum, difference or product that may pass a card leaves the whole value
+  in the accumulator when it is stored, and the cell keeps the last three digits. Its store is marked, and the
+  peephole rules that drop a `CLA x` because the accumulator already holds x (2, 8, 10, 13 and 14) don't count a
+  marked store: a read after it loads the cell. A store is marked when the range analysis, run again on the code
+  as it is lowered, can't show the result stays on a card (an op the range pass showed stays on a card, written
+  once, keeps that), and the value is read in more than one place. The range pass also takes a value past a card
+  for what its cell keeps after the statement that follows it, not the whole result.
+- **Why.** `let p = a.wrapping_mul(40)` with a = 30 printed 200 and then `p > 500` was true: the comparison read
+  the 1200 the store had left in the accumulator. And with a known from 25 to 30, the range pass took p for 1000
+  to 1200 and decided `p > 500` with no test, so p = 40 was more than 500. One value now reads one way. A value read
+  in one place only still may be read exact there, as a carried one is: no reading of it disagrees with another,
+  and `(month - 1) as usize` for month = -999 still panics, as natively.
+- **Cost.** One `CLA` for each marked store a read follows; nothing where the analysis shows the value stays on a
+  card. Of the examples, voxel and the ray tracer's hop cost 2 and 3 cells, guess, powers, floor, span and hit 1.
+  The analysis runs once more per function.
+
 ## 2026-11-06 · A multiply by a negative constant takes the product away from 0
 
 - **Decision.** `x * -k`, for a constant k that isn't the routine's, is x taken away k times from 0 (with the decimal

@@ -177,6 +177,7 @@ impl<'a> Lowering<'a> {
             Rvalue::Lin(lin) => {
                 // added up in the accumulator (see lin_fold)
                 let dst = self.place_any(dest)?;
+                self.wide = self.past.contains(&self.at);
                 let mut terms = vec![];
                 for (k, o) in lin {
                     let v = self.operand(o)?;
@@ -220,6 +221,8 @@ impl<'a> Lowering<'a> {
                 // (+ and - load the first as it is, through its address; the multiply routine takes a cell)
                 let a = if *op == BinOp::Mul { self.mat(a) } else { a };
                 self.arith_acc(*op, a, b, None, src)?;
+                // past a card the cell keeps the last three digits, and the accumulator all of it
+                self.wide = self.past.contains(&self.at);
                 self.store(&dst, "")
             }
             Rvalue::BinaryOp(op @ (BinOp::AddWrapping | BinOp::SubWrapping | BinOp::MulWrapping), x, y) => {

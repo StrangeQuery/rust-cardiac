@@ -183,6 +183,15 @@ exit 101" ] && echo "MATCH  ${r%%:*}: panicked, ${r#*:}" || { echo "DIFFER ${r%%
   # on) would panic at: what a release build of each prints, the panic last
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/u8_wrap.rs)
   [ "$out" = "2,203,15,59,4,44,255,200,0,10,-999" ] && echo "MATCH  u8_wrap: $out" || { echo "DIFFER u8_wrap: $out"; exit 1; }
+  # without overflow checks a result past a card is what its cell keeps (1200 is 200), and a test or a sum that
+  # reads it again after it is stored sees that, not the whole result left in the accumulator; nor does the range
+  # pass take the whole result for what the cell holds
+  out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_reread.rs)
+  [ "$out" = "200,0,400,0,100,0,-100,0,300,0,-300,0" ] && echo "MATCH  past_card_reread: $out" || { echo "DIFFER past_card_reread: $out"; exit 1; }
+  out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_reread2.rs)
+  [ "$out" = "200,2,201,200,0" ] && echo "MATCH  past_card_reread2: $out" || { echo "DIFFER past_card_reread2: $out"; exit 1; }
+  out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_known.rs)
+  [ "$out" = "200,0,40,0" ] && echo "MATCH  past_card_known: $out" || { echo "DIFFER past_card_known: $out"; exit 1; }
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/usize_below.rs)
   [ "$out" = "1,11,-1,-999" ] && echo "MATCH  usize_below: $out" || { echo "DIFFER usize_below: $out"; exit 1; }
 done

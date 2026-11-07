@@ -118,6 +118,10 @@ pub struct Line {
     /// for the panic map (`panics`). Never printed, and no part of what the line is: two lines that differ only
     /// here are the same line.
     pub panic: Option<String>,
+    /// On a STO: the accumulator may hold a value past a card (a sum or product without overflow checks), so the
+    /// cell keeps less of it than the accumulator holds, and the accumulator is no stand-in for the cell after it.
+    /// Never printed, as `panic`.
+    pub wide: bool,
 }
 
 impl PartialEq for Line {
@@ -149,6 +153,7 @@ impl Line {
             kind,
             comment: None,
             panic: None,
+            wide: false,
         }
     }
 
@@ -166,6 +171,7 @@ impl Line {
             kind: Kind::Instr(op, arg),
             comment: Some(text.to_string()),
             panic: None,
+            wide: false,
         }
     }
 
@@ -288,6 +294,7 @@ fn statement(body: &str, label: Option<&str>) -> Option<Line> {
         kind,
         comment,
         panic: None,
+        wide: false,
     })
 }
 
@@ -320,6 +327,7 @@ pub fn parse_line(text: &str) -> Option<Line> {
         kind: Kind::Label(name.to_string()),
         comment: comment(rest)?,
         panic: None,
+        wide: false,
     })
 }
 

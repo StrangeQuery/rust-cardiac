@@ -95,6 +95,20 @@ fn arange(op: BinOp, ra: Range, rb: Range) -> Option<Range> {
     Some([if ra[0] < 0 { -(k - 1) } else { 0 }, if ra[1] > 0 { k - 1 } else { 0 }])
 }
 
+/// What a cell keeps of a value in `r`: past a card, its last three digits with its sign (1200 is kept as 200).
+fn stored(r: Range) -> Range {
+    let lo = if r[0] < -999 { -999 } else if r[1] > 999 { r[0].min(0) } else { r[0] };
+    let hi = if r[1] > 999 { 999 } else if r[0] < -999 { r[1].max(0) } else { r[1] };
+    [lo, hi]
+}
+
+/// What a local holds after a plain op whose exact result is in `r`, as the next statement reads it: the result
+/// itself, carried there in the accumulator (see `carries` in lowering), or what its cell keeps of it.
+fn kept(r: Range) -> Range {
+    let s = stored(r);
+    [r[0].min(s[0]), r[1].max(s[1])]
+}
+
 /// What a comparison `x op v` says about x when it holds, and when it does not.
 fn held(op: BinOp, v: i64) -> Option<Range> {
     Some(match op {
@@ -232,6 +246,9 @@ struct Pass<'a> {
     /// The usize locals a difference that can go below 0 is stored into (see `range_pass`).
     below: HashSet<Local>,
     dropped: usize,
+    /// In the last visit: each plain sum, difference and product, and each linear combination, by block and
+    /// statement, and whether its result may be past a card (see `past_a_card`).
+    judged: Option<Vec<(BasicBlock, usize, Statement, bool)>>,
 }
 
 /// What a comparison into a bool remembers: the operator and both sides.
@@ -270,6 +287,14 @@ impl Pass<'_> {
             .or_else(|| self.of_type(Key::Local(x)))
     }
 
+    /// The range of a linear combination, `Lin(+3*copy _1, -2*copy _2)`.
+    fn lin(&self, facts: &Facts, terms: &[(i64, Operand)]) -> Option<Range> {
+        terms.iter().try_fold([0, 0], |sum, (k, o)| {
+            let r = self.val(facts, o)?;
+            Some(add(sum, arange(BinOp::Mul, r, [*k, *k])?))
+        })
+    }
+
     /// One block, from what holds on the way in: what holds on the way to each successor. With `rewrite`, the
     /// checks the ranges prove are dropped.
     fn visit(&mut self, b: &mut Block, mut facts: Facts, rewrite: bool) -> Edges {
@@ -284,10 +309,41 @@ impl Pass<'_> {
                 bools.retain(|_, (_, a, c)| !names(a, x) && !names(c, x));
                 alias.retain(|_, y| *y != x);
             };
+        // a plain op's result past a card, as the statement after it may read it, and as its cell keeps it once
+        // that statement is done: the local, the two ranges, and whether that statement has begun
+        let mut fresh: Option<(Local, Range, Range, bool)> = None;
+        let settle = |facts: &mut Facts, (x, read, kept, _): (Local, Range, Range, bool)| {
+            if facts.get(&Key::Local(x)) == Some(&read) {
+                facts.insert(Key::Local(x), kept);
+            }
+        };
         let mut i = 0;
         while i < b.statements.len() {
             let last = i + 1 == b.statements.len();
             let s = b.statements[i].clone();
+            if s != Statement::Nop {
+                match fresh {
+                    Some(f) if f.3 => {
+                        settle(&mut facts, f);
+                        fresh = None;
+                    }
+                    Some(ref mut f) => f.3 = true,
+                    None => {}
+                }
+            }
+            if let (true, Statement::Assign(_, rv)) = (self.judged.is_some(), &s) {
+                let r = match rv {
+                    Rvalue::BinaryOp(op @ (BinOp::Add | BinOp::Sub | BinOp::Mul), a, c) => Some(
+                        self.val(&facts, a).zip(self.val(&facts, c)).and_then(|(ra, rb)| arange(*op, ra, rb)),
+                    ),
+                    Rvalue::Lin(terms) => Some(self.lin(&facts, terms)),
+                    _ => None,
+                };
+                if let Some(r) = r {
+                    let past = !r.is_some_and(|r| r[0] >= -999 && r[1] <= 999);
+                    self.judged.as_mut().unwrap().push((b.name, i, s.clone(), past));
+                }
+            }
             if let Some((x, Rvalue::Use(o))) = assigned_local(&s) {
                 if o.int().is_some() || o.local().is_some_and(|l| l != Local::UNIT) {
                     let r = self.val(&facts, o);
@@ -460,9 +516,26 @@ impl Pass<'_> {
                 if let (Some(ra), Some(rb)) = (ra, rb) {
                     if let Some(r) = arange(op, ra, rb) {
                         if !self.taken.contains(&x) {
-                            facts.insert(Key::Local(x), r);
+                            if let Some(f) = fresh.take().filter(|f| f.3 && f.0 != x) {
+                                settle(&mut facts, f); // this statement read it
+                            }
+                            facts.insert(Key::Local(x), kept(r));
+                            fresh = Some((x, kept(r), stored(r), false));
                         }
                     }
+                }
+                i += 1;
+                continue;
+            }
+            if let Some((x, Rvalue::Lin(terms))) = assigned_local(&s) {
+                let r = self.lin(&facts, terms);
+                kill(x, &mut facts, &mut bools, &mut alias);
+                if let (Some(r), false) = (r, self.taken.contains(&x)) {
+                    if let Some(f) = fresh.take().filter(|f| f.3 && f.0 != x) {
+                        settle(&mut facts, f);
+                    }
+                    facts.insert(Key::Local(x), kept(r));
+                    fresh = Some((x, kept(r), stored(r), false));
                 }
                 i += 1;
                 continue;
@@ -538,6 +611,9 @@ impl Pass<'_> {
                 kill(x, &mut facts, &mut bools, &mut alias);
             }
             i += 1;
+        }
+        if let Some(f) = fresh {
+            settle(&mut facts, f);
         }
         // what the terminator tells each successor
         // an assert of something known true always passes
@@ -831,8 +907,90 @@ fn unread_pairs(blocks: &[Block], locals: &HashMap<Local, Ty>, taken: &HashSet<L
     unread
 }
 
-/// Run the range pass over a function's blocks, dropping the checks it proves. Returns how many it dropped.
-pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<usize, Fail> {
+/// Run the range pass over a function's blocks, dropping the checks it proves. Returns how many it dropped, and the
+/// plain sums, differences and products (and linear combinations) it finds stay on a card, each written once in
+/// the function: `past_a_card` takes their word, as by lowering the facts that showed it may be gone (an
+/// `assert_unchecked` promise, say).
+pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<(usize, HashSet<Statement>), Fail> {
+    let (dropped, judged) = analyse(blocks, locals, false)?;
+    Ok((dropped, on_a_card(&judged)))
+}
+
+/// The statements judged to stay on a card, of those written once.
+fn on_a_card(judged: &[(BasicBlock, usize, Statement, bool)]) -> HashSet<Statement> {
+    let mut times: HashMap<&Statement, usize> = HashMap::new();
+    for (_, _, s, _) in judged {
+        *times.entry(s).or_default() += 1;
+    }
+    judged
+        .iter()
+        .filter(|(_, _, s, past)| !past && times[s] == 1)
+        .map(|(_, _, s, _)| s.clone())
+        .collect()
+}
+
+/// The plain sums, differences and products, and the linear combinations, in a function's blocks as they are
+/// lowered, whose result may be past a card and is read more than once, by block and statement index: the
+/// accumulator holds more of it than its cell keeps, and can't stand in for the cell after the store (see
+/// `Line::wide`), or one reading would see 1200 and another 200. A local read in one place only is read once for
+/// each value it is given, and may be read exact there, as a carried one is (see `carries` in lowering). The range
+/// pass's analysis, read only; a function it can't settle has every one.
+pub fn past_a_card(
+    blocks: &[Block],
+    locals: &HashMap<Local, Ty>,
+    on_card: &HashSet<Statement>,
+) -> HashSet<(BasicBlock, usize)> {
+    let mut copy = blocks.to_vec();
+    let past: HashSet<(BasicBlock, usize)> = match analyse(&mut copy, locals, true) {
+        Ok((_, judged)) => {
+            // (one the range pass found stays on a card, written once then and once now)
+            let now = on_a_card(&judged.iter().map(|(b, i, s, _)| (*b, *i, s.clone(), false)).collect::<Vec<_>>());
+            judged
+                .into_iter()
+                .filter(|(_, _, s, past)| *past && !(on_card.contains(s) && now.contains(s)))
+                .map(|(b, i, _, _)| (b, i))
+                .collect()
+        }
+        Err(_) => blocks
+            .iter()
+            .flat_map(|b| (0..b.statements.len()).map(move |i| (b.name, i)))
+            .collect(),
+    };
+    // how many times each local is read: every time it is named, less each time it is assigned as a whole
+    let mut reads: HashMap<Local, i64> = HashMap::new();
+    for b in blocks {
+        for l in b.lines() {
+            l.visit_locals(&mut |x| *reads.entry(x).or_default() += 1);
+        }
+        for s in &b.statements {
+            if let Some((x, _)) = assigned_local(s) {
+                *reads.entry(x).or_default() -= 1;
+            }
+        }
+        if let Terminator::Call { dest, .. } = &b.terminator {
+            if let Some(x) = dest.as_local() {
+                *reads.entry(x).or_default() -= 1;
+            }
+        }
+    }
+    let read_once = |&(name, i): &(BasicBlock, usize)| -> bool {
+        let x = blocks
+            .iter()
+            .find(|b| b.name == name)
+            .and_then(|b| b.statements.get(i))
+            .and_then(assigned_local)
+            .map(|(x, _)| x);
+        x.is_some_and(|x| reads.get(&x).is_some_and(|&n| n <= 1))
+    };
+    past.into_iter().filter(|p| !read_once(p)).collect()
+}
+
+/// The range pass, or with `record` only what `past_a_card` finds, changing nothing.
+fn analyse(
+    blocks: &mut [Block],
+    locals: &HashMap<Local, Ty>,
+    record: bool,
+) -> Result<(usize, Vec<(BasicBlock, usize, Statement, bool)>), Fail> {
     let taken = taken_locals(blocks);
     let preds = predecessors(blocks);
     let unread = unread_pairs(blocks, locals, &taken);
@@ -843,6 +1001,7 @@ pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<u
         huge: HashSet::new(),
         below: HashSet::new(),
         dropped: 0,
+        judged: None,
     };
     let mut out: HashMap<BasicBlock, Edges> = HashMap::new(); // block -> what holds on the way to each successor
                                                               // the program's own constants, each with its neighbours: where a growing range is widened to
@@ -1047,11 +1206,12 @@ pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<u
         }
         wraps.extend(pass.below.iter().copied());
     }
+    pass.judged = Some(vec![]);
     for b in blocks.iter_mut() {
         let f = last_in.get(&b.name).cloned().flatten().unwrap_or_default();
-        pass.visit(b, f, true);
+        pass.visit(b, f, !record);
     }
-    Ok(pass.dropped)
+    Ok((pass.dropped, pass.judged.unwrap_or_default()))
 }
 
 /// The plain op a wrapping one does when nothing wraps.
@@ -1229,6 +1389,6 @@ mod tests {
         );
         let locals: HashMap<Local, Ty> = body.decls.iter().map(|d| (d.local, d.ty.clone())).collect();
         let mut blocks = body.blocks;
-        assert_eq!(range_pass(&mut blocks, &locals), Ok(0));
+        assert_eq!(range_pass(&mut blocks, &locals).map(|r| r.0), Ok(0));
     }
 }

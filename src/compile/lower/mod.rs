@@ -278,6 +278,13 @@ pub struct Lowering<'a> {
     carry: Option<Cell>,
     /// the cell whose value is in the accumulator now, not stored
     carried: Option<Cell>,
+    /// the statement being lowered leaves a value in the accumulator that may be past a card: its store is marked
+    /// (see `Line::wide`)
+    wide: bool,
+    /// the plain sums, differences and products whose result may be past a card (see `ranges::past_a_card`), and
+    /// the block and index of the statement being lowered
+    pub past: HashSet<(BasicBlock, usize)>,
+    at: (BasicBlock, usize),
     /// the switch being lowered is on a bool or a u8, wherever it is read from: never negative (see `signed`)
     unsigned_switch: bool,
     /// the arrays the loader fills, by the resource each one is
@@ -323,6 +330,9 @@ impl<'a> Lowering<'a> {
             seen: HashSet::new(),
             carry: None,
             carried: None,
+            wide: false,
+            past: HashSet::new(),
+            at: (BasicBlock(0), 0),
             unsigned_switch: false,
             resources: HashMap::new(),
             names: Ordered::new(),
@@ -701,7 +711,9 @@ impl<'a> Lowering<'a> {
                 .iter()
                 .filter(|s| **s != Statement::Nop)
                 .collect();
+            let at: Vec<usize> = (0..end).filter(|&k| block.statements[k] != Statement::Nop).collect();
             for (i, s) in body.iter().enumerate() {
+                self.at = (name, at[i]);
                 let after = body
                     .get(i + 1)
                     .copied()
@@ -714,6 +726,7 @@ impl<'a> Lowering<'a> {
                 self.guard_huge(s);
                 self.statement(s).map_err(|e| self.at(e, &source(s)))?;
                 self.carry = None;
+                self.wide = false;
             }
             self.init_block = false;
             if fusable {
