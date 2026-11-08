@@ -4,7 +4,8 @@
 
 ## What's different on CARDIAC
 
-- A cell holds -999 to 999. Past that, a value panics with overflow checks on, or keeps its last three digits with them
+- A cell holds -999 to 999, and so does every integer type CARDIAC takes. The accumulator has a fourth digit, but a
+  program can't use it: past a card, a value panics with overflow checks on, or keeps its last three digits with them
   off.
 - No integer type is wider than a card. `i32` and `isize` are held as an `i16` is, and `i64`, `u32`, `u64`, `i128` and
   `u128` are refused.
@@ -18,12 +19,12 @@ than Rust's.
 
 | Type | On CARDIAC |
 |------|------------|
-| `i16` | The card's own number. |
+| `i16` | -999 to 999, the card's own number. |
 | `i8` | -128 to 127, wrapping as Rust's does. |
 | `u8` | 0 to 255, wrapping as Rust's does (`0u8 - 1` is 255). |
-| `u16` | Holds its value, and is never below 0. |
+| `u16` | 0 to 999. |
 | `usize` | For indexes and counters. |
-| `isize`, `i32` | Held as an `i16` is, so their values have to stay on a card. |
+| `isize`, `i32` | -999 to 999, held as an `i16` is. |
 
 **Past a card.** With overflow checks on, an `i16` past -999..=999 panics on CARDIAC, where native Rust carries on
 to 32767. With them off, CARDIAC keeps the last three digits (1100 is 100) where Rust would keep the whole value. A

@@ -29,11 +29,13 @@ answer, but has a cheaper way when the cells or the time matter. **Refused** sto
 
 **Works well**
 
-- `i16`, the card's own number.
+- `i16`, from -999 to 999, what a cell holds, not Rust's -32768 to 32767. The accumulator has a fourth digit, but a
+  program can't use it: past a card, a value panics with overflow checks on, or keeps its last three digits with them
+  off.
 - `i8`, from -128 to 127, wrapping as Rust's does.
-- `u8` and `u16`.
+- `u8`, and `u16` from 0 to 999.
 - `usize`, for indexes and counters.
-- `isize` and `i32`, whose values stay on a card.
+- `isize` and `i32`, held as an `i16` is: -999 to 999.
 - `bool`, and `char`, a cell holding its code point.
 - An integer literal with no type (`i32` by default), which works as an `i16` would.
 - Literals in hexadecimal, octal and binary, with `_` and a type suffix, and byte literals (`b'A'`).
