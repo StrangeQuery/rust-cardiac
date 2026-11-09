@@ -399,7 +399,9 @@ impl<'a> Lowering<'a> {
                         ..
                     } = term
                     {
-                        if moved(cond, m1) && plain_unwind(unwind) {
+                        // (a copy too, if nothing else reads the bool: rustc's GVN asserts one r < 6 for each b[r][..],
+                        // and all but the first are gone, `blocks::repeated_checks`)
+                        if (moved(cond, m1) || reads(cond, m1) && self.never_carried(m1)) && plain_unwind(unwind) {
                             if check_only {
                                 return Ok(true); // a bounds check: branch straight to success, otherwise panic
                             }

@@ -169,7 +169,8 @@ arithmetic does, and `checked_add` is `None` past 999.
 **Works well**
 
 - Fixed-size arrays of any of the types above, of structs, of tuples and of arrays. `[[i16; 3]; 3]` is one array,
-  row after row.
+  laid out by tens where the program still fits that way: each row starts ten cells after the one before, and the
+  program's other cells go in the holes at the ends of the rows. Otherwise it is row after row.
 - `static` and `static mut`.
 - Tuples, nested too, passed and returned.
 - Structs with named fields, tuple structs, unit structs and generic structs, with methods (`impl`), functional
@@ -181,8 +182,10 @@ arithmetic does, and `checked_add` is `None` past 999.
 
 - An array or pointer read through a variable index: self-modifying code, since CARDIAC has no indexed addressing.
   The instruction is built from the address, stored and run, a few cells and steps each time. An array of arrays
-  costs two to five instructions more an index, as `t[r * W + c]` by hand does. Hoist a repeated `t[i]` into a
-  local.
+  costs a few instructions more an index: by tens the row is one decimal shift (`t[10 * r + c]`), and row after
+  row it is r added W times, as `t[r * W + c]` by hand does. `t[r + 1][c + 2]` is found from `10 * r + c`, with
+  the 12 in the instruction's address, unless r or c may be a usize past a card (`inp() as usize` without overflow
+  checks). Hoist a repeated `t[i]` into a local.
 - Arrays of structs: one array per field, and an element passed whole copies each field. Parallel arrays, one per
   field, are cheaper.
 

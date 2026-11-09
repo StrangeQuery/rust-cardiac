@@ -55,7 +55,7 @@ impl<'a> Lowering<'a> {
         let Loc::At(at) = self.place_any(from)? else {
             return Ok(false);
         };
-        for k in 0..n {
+        for k in self.kept(&to, n) {
             self.emit_c(Op::Cla, Cell::element(&at.sym, k), if k == 0 { src } else { "" });
             self.emit(Op::Sto, Cell::element(&to.sym, k));
         }
@@ -81,15 +81,17 @@ impl<'a> Lowering<'a> {
         // main's entry block runs exactly once, before anything reads this local (or nothing else ever writes it):
         // make it the cell's initial value
         let c = self.cell(x, None);
+        let whole = Cell::from(c.clone());
         match rv {
             Rvalue::Repeat(o, n) => {
                 let v = self.operand(o)?.k();
-                for k in 0..*n as u32 {
+                for k in self.kept(&whole, *n as u32) {
                     self.set_init(Cell::element(&c, k), v);
                 }
             }
             Rvalue::Array(items) => {
-                for (k, it) in items.iter().enumerate() {
+                let kept = self.kept(&whole, items.len() as u32);
+                for (k, it) in items.iter().enumerate().filter(|(k, _)| kept.contains(&(*k as u32))) {
                     let v = self.operand(it)?.k();
                     self.set_init(Cell::element(&c, k as u32), v);
                 }
@@ -375,8 +377,9 @@ impl<'a> Lowering<'a> {
                 let v = self.operand(o)?;
                 let v = self.mat(v);
                 self.load(&v)?;
-                for k in 0..n {
-                    let at = Cell::element(&base.sym, k as u32);
+                let whole = Cell::from(base.sym.clone());
+                for k in self.kept(&whole, n as u32) {
+                    let at = Cell::element(&base.sym, k);
                     self.emit_c(Op::Sto, at, if k > 0 { "" } else { src });
                 }
                 Ok(())
@@ -387,7 +390,11 @@ impl<'a> Lowering<'a> {
                 if self.array_at(&base).map(|a| a.len) != Some(items.len()) {
                     fail!(internal(format!("array literal size mismatch: {src}")))
                 }
+                let whole = Cell::from(base.sym.clone());
                 for (k, it) in items.iter().enumerate() {
+                    if self.hole_at(&whole, k) {
+                        continue;
+                    }
                     let v = self.operand(it)?;
                     let v = self.mat(v);
                     self.load(&v)?;
@@ -599,7 +606,8 @@ impl<'a> Lowering<'a> {
 impl<'a> Lowering<'a> {
     /// Whether an operand reads a whole local that can hold a usize past a card.
     pub(super) fn is_huge(&self, o: &ir::Operand) -> bool {
-        o.local().is_some_and(|l| self.huge.contains(&l))
+        o.local()
+            .is_some_and(|l| self.huge.contains(&l) && !self.on_card_now.contains(&l))
     }
 
     /// A branch to the panic routine when the accumulator is below 0: a usize past a card that goes where only one

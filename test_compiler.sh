@@ -52,6 +52,13 @@ for opt in 1 2; do
       sh native_diff.sh $c tests/programs/checked_limits.rs tests/programs/overflowing_u8.rs || exit 1
     done
   fi
+  # arrays of arrays laid out by tens, with the program's other cells in the holes between the rows, and the ones that
+  # stay row after row; each ends in a panic, an index past a row's end or the last row
+  for c in "$checked" "$unchecked"; do
+    sh native_diff.sh $c tests/programs/grid_bool.rs tests/programs/grid_border.rs tests/programs/grid_column_past.rs \
+      tests/programs/grid_copy.rs tests/programs/grid_offsets.rs tests/programs/grid_one.rs tests/programs/grid_refs.rs \
+      tests/programs/grid_row_past.rs tests/programs/grid_ten.rs tests/programs/grid_wide.rs || exit 1
+  done
   # `?` converting the error with From: rustc's MIR inliner, on at opt-level 1 too, inlines the conversion at both
   sh native_diff.sh $unchecked tests/programs/try_from.rs || exit 1
   # and as `cargo cardiac build` compiles, a release build (no overflow checks): the division routine, every sign
@@ -205,6 +212,16 @@ exit 101" ] && echo "MATCH  ${r%%:*}: panicked, ${r#*:}" || { echo "DIFFER ${r%%
   [ "$out" = "200,0,40,0" ] && echo "MATCH  past_card_known: $out" || { echo "DIFFER past_card_known: $out"; exit 1; }
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/usize_below.rs)
   [ "$out" = "1,11,-1,-999" ] && echo "MATCH  usize_below: $out" || { echo "DIFFER usize_below: $out"; exit 1; }
+done
+# The Minesweeper count of the tables-by-tens tip on its board of 4 rows by 6, four ways (minesweeper_*.rs): none
+# fits in CARDIAC's memory yet, by tens or row after row. Each must take no more cells than it does now, as a
+# release build compiles it; one that fits is to be run against native Rust for every square instead.
+for want in minesweeper_edges:146 minesweeper_border:149 minesweeper_neighbours:175 minesweeper_number:144; do
+  n=${want%%:*}
+  said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
+  got=$(echo "$said" | sed -n 's/.*: \([0-9]*\) cells, more than.*/\1/p')
+  if [ -n "$got" ] && [ "$got" -le "${want#*:}" ]; then echo "MATCH  $n: $got cells, no more than ${want#*:}"
+  else echo "DIFFER $n: $said, not ${want#*:} cells or fewer, too big"; exit 1; fi
 done
 # what skip_cards() and add_times() cost: one call each, for n = 0, 1, 9, 10, 37 and the largest n, the
 # result and the instructions the whole run takes (the loader's and main's are the same for every n). add_times is

@@ -412,9 +412,9 @@ impl<'a> Lowering<'a> {
             let p = self.place(dest)?;
             let result = Sym::local(&callee, Local(0));
             match self.array_at(&p).map(|a| a.len as u32) {
-                // an array: each element
+                // an array: each element (not a grid's holes)
                 Some(n) => {
-                    for k in 0..n {
+                    for k in self.kept(&p, n) {
                         self.emit(Op::Cla, Cell::element(&result, k));
                         self.emit(Op::Sto, Cell::element(&p.sym, k));
                     }
@@ -460,7 +460,8 @@ impl<'a> Lowering<'a> {
                 else {
                     fail!(array_by_value(callee))
                 };
-                for k in 0..widths[i] as u32 {
+                let whole = Cell::from(from.clone());
+                for k in self.kept(&whole, widths[i] as u32) {
                     self.emit_c(Op::Cla, Cell::element(&from, k), if k == 0 { &c } else { "" });
                     self.emit(Op::Sto, Cell::element(&to, k));
                 }

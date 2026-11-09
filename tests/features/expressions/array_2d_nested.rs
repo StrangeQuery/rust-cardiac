@@ -1,7 +1,7 @@
 //! feature: An array of arrays, `t[r][c]`
 //! section: Array and array index expressions
 //! disposition: demand
-//! note: One flat array indexed `r * W + c` already works; an array of arrays is the same thing with the arithmetic written by the compiler.
+//! note: It is one array, laid out by tens where the program fits: each row ten cells after the one before, and the program's other cells in the holes at the ends of the rows.
 //! input: 1 2
 #![no_std]
 #[inline(never)]

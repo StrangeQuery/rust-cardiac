@@ -6,29 +6,29 @@
     "section": "Array types",
     "disposition": "demand",
     "notes": [
-      "It is one array indexed `row * width + column`, which the compiler could build itself."
+      "It is one array, laid out by tens where the program fits: `t[r][c]` is `t[10 * r + c]`, the row one shift."
     ],
     "input": "1 2 3 4 1 0",
     "runs": {
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "3",
-        "cells": 54
+        "cells": 53
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "3",
-        "cells": 54
+        "cells": 53
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "3",
-        "cells": 54
+        "cells": 53
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "3",
-        "cells": 54
+        "cells": 53
       }
     }
   },
@@ -247,22 +247,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "11",
-        "cells": 67
+        "cells": 60
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "11",
-        "cells": 78
+        "cells": 71
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "11",
-        "cells": 67
+        "cells": 60
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "11",
-        "cells": 78
+        "cells": 71
       }
     }
   },
@@ -280,22 +280,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "3,4",
-        "cells": 51
+        "cells": 43
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "3,4",
-        "cells": 51
+        "cells": 43
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "3,4",
-        "cells": 51
+        "cells": 43
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "3,4",
-        "cells": 51
+        "cells": 43
       }
     }
   },
@@ -2153,7 +2153,7 @@
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "6,8,10",
-        "cells": 82
+        "cells": 77
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
@@ -2163,7 +2163,7 @@
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "6,8,10",
-        "cells": 82
+        "cells": 77
       }
     }
   },

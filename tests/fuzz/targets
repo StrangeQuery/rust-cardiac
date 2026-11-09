@@ -18,3 +18,4 @@ branches      tests/fuzz/programs/branches.rs -99..99 1..999
 tables        tests/fuzz/programs/tables.rs   -2..5 -2..5
 sums          tests/fuzz/programs/sums.rs     1-8x-300..300
 early         tests/fuzz/programs/early.rs    -999..999
+grids         tests/fuzz/programs/grids.rs    -2..5 -2..5

@@ -99,7 +99,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| An array of arrays `[[i16; 2]; 2]` | Supported | 54 / 54 |  | It is one array indexed `row * width + column`, which the compiler could build itself. | [array_arrays.rs](types/array_arrays.rs) |
+| An array of arrays `[[i16; 2]; 2]` | Supported | 53 / 53 |  | It is one array, laid out by tens where the program fits: `t[r][c]` is `t[10 * r + c]`, the row one shift. | [array_arrays.rs](types/array_arrays.rs) |
 | An array of `bool` | Supported | 53 / 53 |  |  | [array_bool.rs](types/array_bool.rs) |
 | An array of `char` | Supported | 57 / 57 |  |  | [array_char.rs](types/array_char.rs) |
 | An array of `i16` | Supported | 42 / 42 |  |  | [array_i16.rs](types/array_i16.rs) |
@@ -107,8 +107,8 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | An array of `i8` | Supported | 57 / 57 |  |  | [array_i8.rs](types/array_i8.rs) |
 | `.len()` of an array passed by reference | Supported | 55 / 69 |  |  | [array_len.rs](types/array_len.rs) |
 | An array made with `[x; N]` from an input | Supported | 19 / 27 |  |  | [array_repeat.rs](types/array_repeat.rs) |
-| An array of structs | Supported | 67 / 78 |  |  | [array_structs.rs](types/array_structs.rs) |
-| An array of tuples `[(i16, i16); 3]` | Supported | 51 / 51 |  | The compiler could keep one array per tuple field, as it does for an array of structs. | [array_tuples.rs](types/array_tuples.rs) |
+| An array of structs | Supported | 60 / 71 |  |  | [array_structs.rs](types/array_structs.rs) |
+| An array of tuples `[(i16, i16); 3]` | Supported | 43 / 43 |  | The compiler could keep one array per tuple field, as it does for an array of structs. | [array_tuples.rs](types/array_tuples.rs) |
 | An array of `u8` | Supported | 62 / 62 |  |  | [array_u8.rs](types/array_u8.rs) |
 | An array of `usize` | Supported | 46 / 46 |  | A `usize` element is a cell, as an `i16` one is. | [array_usize.rs](types/array_usize.rs) |
 | A zero-length array `[i16; 0]` | Supported | 21 / 32 |  |  | [array_zero.rs](types/array_zero.rs) |
@@ -117,7 +117,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| A mutable slice `&mut [i16]` written by a function | Supported | 72 / 82 |  |  | [slice_mut.rs](types/slice_mut.rs) |
+| A mutable slice `&mut [i16]` written by a function | Supported | 72 / 77 |  |  | [slice_mut.rs](types/slice_mut.rs) |
 | A slice `&[i16]` passed to a function and read in a loop | Supported | 52 / 65 |  | A slice is an address and a length, two cells, read the way arrays by reference already are. | [slice_param.rs](types/slice_param.rs) |
 | A sub-slice `&t[1..3]`, indexed | Supported | 32 / 32 |  |  | [slice_range.rs](types/slice_range.rs) |
 
@@ -376,12 +376,12 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | A 2-D grid in one flat array, `t[r * W + c]` | Supported | 65 / 78 |  |  | [array_2d_flat.rs](expressions/array_2d_flat.rs) |
-| An array of arrays, `t[r][c]` | Supported | 83 / 96 |  | One flat array indexed `r * W + c` already works; an array of arrays is the same thing with the arithmetic written by the compiler. | [array_2d_nested.rs](expressions/array_2d_nested.rs) |
+| An array of arrays, `t[r][c]` | Supported | 72 / 82 |  | It is one array, laid out by tens where the program fits: each row ten cells after the one before, and the program's other cells in the holes at the ends of the rows. | [array_2d_nested.rs](expressions/array_2d_nested.rs) |
 | `t[i + 1]` and `t[n - i]`: an index computed in place | Supported | 51 / 62 |  |  | [array_index_expr.rs](expressions/array_index_expr.rs) |
 | `t[i]` read and written with `i` from a card | Supported | 33 / 33 |  |  | [array_index_var.rs](expressions/array_index_var.rs) |
 | `t.len()` | Supported | 8 / 19 |  |  | [array_len.rs](expressions/array_len.rs) |
 | An array literal `[a, b, c]` with values read at run time | Supported | 35 / 43 |  |  | [array_literal.rs](expressions/array_literal.rs) |
-| An array of structs, `t[i].f` | Supported | 72 / 80 |  |  | [array_of_struct.rs](expressions/array_of_struct.rs) |
+| An array of structs, `t[i].f` | Supported | 65 / 75 |  |  | [array_of_struct.rs](expressions/array_of_struct.rs) |
 | An index past the end panics | Supported | 20 / 20 |  |  | [array_out_of_bounds.rs](expressions/array_out_of_bounds.rs) |
 | A repeat expression `[v; N]` | Supported | 38 / 69 |  |  | [array_repeat.rs](expressions/array_repeat.rs) |
 
@@ -434,7 +434,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| An array field, `s.t[i]` | Supported | 45 / 54 |  |  | [field_array.rs](expressions/field_array.rs) |
+| An array field, `s.t[i]` | Supported | 37 / 46 |  |  | [field_array.rs](expressions/field_array.rs) |
 | Nested field access, `a.b.c`, read and written | Supported | 13 / 25 |  |  | [field_nested.rs](expressions/field_nested.rs) |
 | A field read through `&mut` without `*`, `r.f` | Supported | 69 / 84 |  |  | [field_through_ref.rs](expressions/field_through_ref.rs) |
 

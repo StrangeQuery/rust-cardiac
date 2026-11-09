@@ -4,6 +4,90 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-09 · An array of arrays is laid out by tens where it fits, with the program's other cells in its holes
+
+- **Decision.** `nested::arrays_of_arrays` lays a `[[T; W]; H]` of scalars out by tens when W is 2 to 9 and H is
+  more than 1: row r starts 10r cells after row 0, so `t[r][c]` is `t[10 * r + c]`, and 10r is one shift. The
+  array is `(H - 1) * 10 + W` cells, the last row no longer than it is. The cells between one row's end and the
+  next row's start are holes: the lowering builds, copies, passes and returns a grid without them, and gives them
+  no initial value, so nothing in the program reads or writes them. Then `holes::fill`, on the finished listing,
+  moves the program's other cells into them, as the tables-by-tens tip keeps its variables in columns 7 and 8: an
+  array whole into a run of holes as long as it is, and a cell of its own (not one whose address is taken, nor one
+  reached as `name+N`) into any hole left. When an index is another local plus a constant, `t[r + 1][c + 2]`, the
+  element is found from `10 * r + c`, worked out once for all the neighbours, with the 12 in the instruction's
+  address (`folded`), as the tip's offsets 0, 1, 2, 10, 12, 20, 21 and 22 are. A plain `r + 1` is folded only
+  where r can never be a usize past a card, since `usize::MAX + 1` wraps to 0 and `10 * r` can't stand for that; a
+  checked one always is. The program is compiled by tens first. That is kept when it fits in one phase, or in no
+  more phases than row after row takes; otherwise the program is compiled row after row, as before. A grid 10 wide
+  is by tens already, one 11 wide or more can't be, and one 1 wide is a list whose index is its row.
+- **Why.** On CARDIAC the row and column of a table laid out by tens are the digits of the address. The row costs
+  one `SFT 10` where row after row it is r added W times, and the holes need cost no memory when the program has
+  cells to put in them. Rust can't see the gap between rows: there is no `size_of` or raw pointer arithmetic on a
+  grid, and every index is checked against its own row's length first, so an index past a row's end still panics.
+  A border is what the program declares: every declared row and column of one keeps its cells and its values, and
+  the holes are never read as one.
+- **Also.** A grid literal with the same row in it twice, as GVN leaves a bordered board's two rows of zeros
+  (`[copy _2, move _3, .., copy _2]`), was refused (#2); its row is now written out each time.
+- **Cost.** Cells and the program's own instructions (not the loader's), opt-level 2, without overflow checks and
+  then with them, before and after. Padded alone is by tens with nothing moved into the holes.
+
+  | Program | Before | After | Padded alone |
+  |---|---|---|---|
+  | array_2d_nested | 83/55, 96/68 | 72/45, 82/56 | 82, 93 |
+  | array_arrays | 54/84, 54/84 | 53/83, 53/83 | 61, 61 |
+  | grid_bool | 75/90, 93/112 | 75/82, 87/102 | 83, 99 |
+  | grid_border | 84/226, 107 (no fit) | 73/171, 95/266 | 83, 105 |
+  | grid_column_past | 64/308, 64/308 | 64/284, 64/284 | 74, 74 |
+  | grid_offsets | 70/73, 91/107 | 73/65, 91/103 | 84, 103 |
+  | grid_refs | 85/72, 98 (no fit) | 83/70, 96/87 | 90, 103 |
+  | grid_row_past | 72/346, 72/346 | 79/330, 79/330 | 91, 91 |
+  | grid_copy | 92/260, 92/260 | 92/260, 92/260 (row after row) | 119, 119 |
+
+  Filling the holes saves 7 to 12 cells on each of these against padding alone. A grid with few other cells to put
+  in its holes is bigger by tens than row after row (grid_row_past, 7 cells, for 16 fewer instructions), and kept
+  so while it fits. grid_copy doesn't fit by tens (109 cells) and stays row after row. No program without an array
+  of arrays changes.
+- **The tip's Minesweeper count.** Four Rust versions on the tip's board of 4 rows by 6, each reading a square and
+  printing how many of its neighbours are mines (tests/programs/minesweeper_*.rs). Native Rust gives the same
+  count for every square from all four. None of them fits in CARDIAC's 96 cells yet, by tens or row after row, at
+  any of the four settings, so they can't be run, and test_compiler.sh checks that none grows. Cells at opt-level 2
+  without and with overflow checks (opt-level 1 is the same):
+
+  | Version | Written by hand on the tip's page | Before | After | Row after row now |
+  |---|---|---|---|---|
+  | Packed, the edges tested with `min` and `max` | about 114, doesn't fit | 156, 172 | 146, 163 | 154, 171 |
+  | A border declared, 6 by 8, a 3 by 3 loop | 88 cells, 105 instructions | refused | 149, 172 | 161, 184 |
+  | A border declared, the eight neighbours written out | (the same) | refused | 175, 215 | 193, 221 |
+  | A border declared, the square as one number | 78 cells, 96 instructions | refused | 144, 175 | 156, 187 |
+
+  The page's 82-cell board by tens has no border of its own: it reads the holes as one, which a Rust program can't.
+  The nearest Rust is the declared border, whose board alone is 58 cells by tens, 48 of them after the holes take
+  10 other cells. Its code is what doesn't fit: 87 cells for main in the 3 by 3 version against about 25 by hand.
+  The hand-written loop adds a table of offsets and trusts its input; the compiled one keeps Rust's bounds checks
+  (i < 6 and j < 8 in the inner loop, 8 cells), each `for` over a range is a test of its own (about 7 cells, and 3
+  more where the bound may be a usize past a card, as `inp() as usize` can be). Those are what is left (#5).
+- **Evidence.** The support matrix's array_2d_nested and array_arrays match at every setting. Probes matching
+  native Rust at the four settings, each ending in a bounds failure: a bool grid with an index changed between
+  uses; a row of squares inside a border the program declares, of different values above, at the sides and below,
+  so a sum shows each border cell it reads; a row read past its end, whose next cell by tens is a hole; a u8 grid
+  wrapping; a grid copied whole and changed; constant offsets as the row and column change in a loop, and one from
+  usize::MAX that wraps to 0; grids passed by `&` and `&mut`; and grids 10, 1 and 11 wide.
+
+## 2026-11-09 · A check made again is a goto, and a passed check shows a usize is on a card
+
+- **Decision.** `blocks::repeated_checks`, before the range pass and again after the merges of repeated work: an
+  assert whose only way in comes straight from a block that asserted the same thing, expecting the same, with
+  nothing it reads set in between, is a goto. The same thing is the same bool, or a bool each block works out from
+  the same comparison of the same locals. The lowering fuses a comparison into its assert when the assert copies
+  its bool too, if nothing else reads it. And a usize that may be past a card is not tested for its sign again in
+  a block whose only way in is a passed `x < k` (or one that came from such a block), until something sets x.
+- **Why.** rustc's GVN asserts one `r < 6` for each `b[r][..]` that indexes by the same r, as `assert(copy _20)`
+  in each block, and the lowering stored each such bool through a branch and tested it again: 13 cells a check
+  (#3). After `assert(r < 6)`, r is 0 to 5, but `CLA r / TAC rt_panic` came back before each use (#4).
+- **Cost.** Nothing: fewer cells and instructions. By tens, main of the eight-neighbour Minesweeper count went from
+  154 cells of code to 114.
+- **Evidence.** The test suites, the examples and the support matrix, at every setting.
+
 ## 2026-11-07 · A value past a card read again after its store is what the cell keeps
 
 - **Decision.** Without overflow checks, a sum, difference or product that may pass a card leaves the whole value
