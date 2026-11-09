@@ -66,7 +66,10 @@ the work. For a loop of `inp()`s or of `+= c`, `skip_cards(n)` and `add_times(c,
 
 CARDIAC has no indexed addressing, so an array or pointer read through a variable index is self-modifying code:
 the instruction is built from the address, stored and run, a few cells and steps each time. An array of arrays
-costs two to five instructions more an index, as `t[r * W + c]` by hand does. Hoist a repeated `t[i]` into a local.
+costs a few instructions more an index: laid out by tens, the row is one decimal shift (`t[10 * r + c]`), and row
+after row it is r added W times, as `t[r * W + c]` by hand does. `t[r + 1][c + 2]` is found from `10 * r + c`, with
+the 12 in the instruction's address, unless r or c may be a usize past a card (`inp() as usize` without overflow
+checks). Hoist a repeated `t[i]` into a local.
 
 ## Closures
 

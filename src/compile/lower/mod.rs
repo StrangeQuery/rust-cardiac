@@ -82,6 +82,11 @@ pub struct Shared {
     /// the program's statics, and those a function points into, in the order they are first used
     pub statics: super::front::Statics,
     pub statics_used: Vec<String>,
+    /// the grids laid out by tens (`nested::arrays_of_arrays`), whose holes nothing writes
+    pub grids: super::nested::Holes,
+    /// each such grid's first cell, as the listing labels it, and its holes, counted from there: free cells that
+    /// `holes::fill` gives to the program's other cells
+    pub holes: Vec<(String, Vec<usize>)>,
 }
 
 impl Shared {
@@ -128,10 +133,19 @@ impl Callees {
     }
 }
 
-/// An array local: consecutive cells.
+/// An array local: consecutive cells. A grid laid out by tens has holes between its rows, which nothing writes.
 struct Array {
     len: usize,
     elem: Ty,
+    /// a grid by tens: its width and stride
+    gaps: Option<(usize, usize)>,
+}
+
+impl Array {
+    /// Is element k a hole between two of a grid's rows?
+    fn hole(&self, k: usize) -> bool {
+        self.gaps.is_some_and(|(w, s)| k % s >= w)
+    }
 }
 
 /// A type printed as one word: `i16`, `bool`, `Point`.
@@ -293,6 +307,9 @@ pub struct Lowering<'a> {
     pub names: Ordered<String, Local>,
     /// the usize locals that can hold a value past a card, below 0 (see `ranges::huge_usizes`)
     pub huge: HashSet<Local>,
+    /// of those, the ones a passed check has shown are on a card in the block being lowered, until it sets them
+    /// (see `checked_on_card`)
+    on_card_now: HashSet<Local>,
     /// the function's result cells besides `_0`, which its caller reads after it returns
     pub results: HashSet<Local>,
 }
@@ -337,6 +354,7 @@ impl<'a> Lowering<'a> {
             resources: HashMap::new(),
             names: Ordered::new(),
             huge: HashSet::new(),
+            on_card_now: HashSet::new(),
             results: HashSet::new(),
         };
         for (&local, ty) in locals.iter() {
@@ -392,6 +410,11 @@ impl<'a> Lowering<'a> {
                         Array {
                             len: *n as usize,
                             elem: (**e).clone(),
+                            gaps: l
+                                .sh
+                                .grids
+                                .get(&(func.to_string(), local))
+                                .map(|(w, s)| (*w as usize, *s as usize)),
                         },
                     );
                 }
@@ -566,6 +589,16 @@ impl<'a> Lowering<'a> {
         Sym::Runtime("rt_panic")
     }
 
+    /// Is element k of the array at a cell a hole between a grid's rows, which nothing writes?
+    fn hole_at(&self, c: &Cell, k: usize) -> bool {
+        self.array_at(c).is_some_and(|a| a.hole(k))
+    }
+
+    /// The elements of the n-element array at a cell that hold something: all but a grid's holes.
+    fn kept(&self, c: &Cell, n: u32) -> Vec<u32> {
+        (0..n).filter(|k| !self.hole_at(c, *k as usize)).collect()
+    }
+
     /// The array at a cell, if one starts there.
     fn array_at(&self, c: &Cell) -> Option<&Array> {
         if c.offset.is_some() {
@@ -687,8 +720,10 @@ impl<'a> Lowering<'a> {
             HashSet::new()
         };
         let looping = on_a_loop(&self.blocks);
+        let checked = checked_on_card(&self.blocks);
         for bi in 0..self.blocks.len() {
             let name = self.blocks[bi].name;
+            self.on_card_now = checked.get(&name).cloned().unwrap_or_default();
             self.in_loop = looping.contains(&name);
             self.panic = match &self.blocks[bi].terminator {
                 Terminator::Assert { msg, .. } => Some(check_message(msg)),
@@ -725,6 +760,11 @@ impl<'a> Lowering<'a> {
                 };
                 self.guard_huge(s);
                 self.statement(s).map_err(|e| self.at(e, &source(s)))?;
+                if let Statement::Assign(d, _) = s {
+                    if let Some(x) = d.base_local() {
+                        self.on_card_now.remove(&x);
+                    }
+                }
                 self.carry = None;
                 self.wide = false;
             }
@@ -762,6 +802,12 @@ impl<'a> Lowering<'a> {
             .iter()
             .map(|(b, a)| (b.clone(), a.len, a.elem.clone()))
             .collect();
+        for (b, a) in self.arrays.iter() {
+            let holes: Vec<usize> = (0..a.len).filter(|k| a.hole(*k)).collect();
+            if !holes.is_empty() {
+                self.sh.holes.push((b.to_string(), holes));
+            }
+        }
         if let Some(name) = self
             .resources
             .iter()
@@ -800,6 +846,95 @@ impl<'a> Lowering<'a> {
     fn initial(&self, c: &Cell) -> Arg {
         Arg::Num(self.init.get(c).copied().unwrap_or(0).to_string())
     }
+}
+
+/// The locals each block knows are on a card when it starts: where the only way in is a passed check `x < k` (or
+/// `x <= k`) of a usize against a constant a card holds, `assert(Lt(x, const k))`, or comes from a block that knew
+/// it, with nothing setting x on the way. A usize past a card fails that check (lowering tests its sign first), so
+/// after it x is 0..k, and needs no test for its sign again (`Lowering::is_huge`).
+fn checked_on_card(blocks: &[ir::Block]) -> HashMap<BasicBlock, HashSet<Local>> {
+    let preds = ir::predecessors(blocks);
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let sets = |b: &ir::Block, x: Local| {
+        b.statements
+            .iter()
+            .any(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(x)))
+            || matches!(&b.terminator, Terminator::Call { dest, .. } if dest.base_local() == Some(x))
+    };
+    // what a block's passed check shows: x, where the bool it asserts is `x < k` set in the block, x unset after
+    let shows = |b: &ir::Block| -> Option<Local> {
+        let Terminator::Assert {
+            cond: ir::Operand::Copy(p) | ir::Operand::Move(p),
+            expected: true,
+            ..
+        } = &b.terminator
+        else {
+            return None;
+        };
+        let v = p.as_local()?;
+        let k = b
+            .statements
+            .iter()
+            .rposition(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(v)))?;
+        let Statement::Assign(
+            _,
+            ir::Rvalue::BinaryOp(
+                BinOp::Lt | BinOp::Le,
+                ir::Operand::Copy(x) | ir::Operand::Move(x),
+                ir::Operand::Constant(ir::Const::Int {
+                    value,
+                    ty: IntTy::Usize,
+                }),
+            ),
+        ) = &b.statements[k]
+        else {
+            return None;
+        };
+        let x = x.as_local()?;
+        let unset = !b.statements[k + 1..]
+            .iter()
+            .any(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(x)));
+        (unset && (0..=999).contains(value)).then_some(x)
+    };
+    let mut known: HashMap<BasicBlock, HashSet<Local>> = HashMap::new();
+    // (blocks with one way in, from the block before: in the order a walk from that block meets them)
+    fn entry(
+        i: usize,
+        blocks: &[ir::Block],
+        preds: &HashMap<BasicBlock, Vec<BasicBlock>>,
+        at: &HashMap<BasicBlock, usize>,
+        known: &mut HashMap<BasicBlock, HashSet<Local>>,
+        out: &dyn Fn(usize, HashSet<Local>) -> HashSet<Local>,
+        depth: usize,
+    ) -> HashSet<Local> {
+        let name = blocks[i].name;
+        if let Some(k) = known.get(&name) {
+            return k.clone();
+        }
+        let ins = preds.get(&name).map(Vec::as_slice).unwrap_or_default();
+        let facts = match ins {
+            [p] if i != 0 && depth < 200 => match at.get(p) {
+                Some(&j) if j != i => {
+                    let before = entry(j, blocks, preds, at, known, out, depth + 1);
+                    out(j, before)
+                }
+                _ => HashSet::new(),
+            },
+            _ => HashSet::new(),
+        };
+        known.insert(name, facts.clone());
+        facts
+    }
+    let out = |j: usize, before: HashSet<Local>| -> HashSet<Local> {
+        let b = &blocks[j];
+        let mut facts: HashSet<Local> = before.into_iter().filter(|x| !sets(b, *x)).collect();
+        facts.extend(shows(b));
+        facts
+    };
+    for i in 0..blocks.len() {
+        entry(i, blocks, &preds, &at, &mut known, &out, 0);
+    }
+    known
 }
 
 /// The integer type of an overflow pair `(T, bool)`, which lives in two cells.

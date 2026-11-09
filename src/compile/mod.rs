@@ -31,6 +31,7 @@ pub mod enum_methods;
 pub mod enums;
 pub mod forloops;
 pub mod front;
+pub mod holes;
 pub mod io;
 pub mod iterators;
 pub mod ir;
@@ -93,6 +94,8 @@ pub struct Compiled {
     pub names: names::Names,
     /// the cells each call deeper takes on the stacks of the functions that call themselves (`call_stack`)
     pub stack_cells: usize,
+    /// whether an array of arrays was laid out by tens (`nested`)
+    pub by_tens: bool,
 }
 
 impl Compiled {
@@ -115,10 +118,42 @@ pub fn compile_mir(
     structs: &[structs::StructDef],
     auto_overlay: bool,
 ) -> Result<Compiled, Fail> {
+    // (CARDIAC_LAYOUT=tens or packed, while measured: that layout only, fit or not)
+    match std::env::var("CARDIAC_LAYOUT").as_deref() {
+        Ok("tens") => return compile_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay, true),
+        Ok("packed") => return compile_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay, false),
+        _ => {}
+    }
+    let tens = compile_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay, true);
+    // by tens only where that fits: in one phase, or in no more phases than row after row takes
+    let fits = |c: &Compiled| largest_phase(&c.listing).is_some_and(|n| n <= MEMORY);
+    match &tens {
+        Ok(c) if !c.by_tens || (c.phase_starts.is_empty() && fits(c)) => return tens,
+        _ => {}
+    }
+    let packed = compile_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay, false);
+    match (tens, packed) {
+        (Ok(t), Ok(p)) if fits(&t) && t.phase_starts.len() <= p.phase_starts.len() => Ok(t),
+        // (where neither fits, the smaller, for the cells the error says)
+        (Ok(t), Ok(p)) if !fits(&p) && cells(&t.listing) < cells(&p.listing) => Ok(t),
+        (_, packed) => packed,
+    }
+}
+
+/// Compile a crate's MIR, as `compile_mir`, with its arrays of arrays laid out by tens where `tens` is.
+fn compile_laid_out(
+    mir: &ir::File,
+    optimize: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    auto_overlay: bool,
+    tens: bool,
+) -> Result<Compiled, Fail> {
     if let Some(k) = forced_cuts() {
         // the fuzzer's hook: main cut at those of its places, fit or not, to check that any cut runs as one piece
         // does (a program with an overlay() of its own is compiled as it is)
-        if let Ok(whole) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[])) {
+        if let Ok(whole) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[]), tens) {
             let n = whole.cut_points.len();
             let mut cuts: Vec<phases::Cut> = vec![];
             for c in k.iter().filter(|_| n > 0).map(|k| whole.cut_points[k % n]) {
@@ -126,13 +161,13 @@ pub fn compile_mir(
                     cuts.push(c);
                 }
             }
-            return compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&cuts));
+            return compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&cuts), tens);
         }
     }
     if !auto_overlay {
-        return compile_cut(mir, optimize, debug_assertions, enums, structs, None);
+        return compile_cut(mir, optimize, debug_assertions, enums, structs, None, tens);
     }
-    let whole = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[]))?;
+    let whole = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&[]), tens)?;
     if whole.cut_points.is_empty() || largest_phase(&whole.listing).is_none_or(|n| n <= MEMORY) {
         return Ok(whole);
     }
@@ -147,7 +182,7 @@ pub fn compile_mir(
         for &way in whole.cut_points.iter().filter(|w| !cuts.contains(w)) {
             let mut tried = cuts.clone();
             tried.push(way);
-            let Ok(c) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&tried)) else {
+            let Ok(c) = compile_cut(mir, optimize, debug_assertions, enums, structs, Some(&tried), tens) else {
                 continue;
             };
             let (Some(largest), Ok(r)) = (largest_phase(&c.listing), split_phases(&c.listing)) else {
@@ -201,8 +236,9 @@ fn compile_cut(
     enums: &[enums::EnumDef],
     structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
+    tens: bool,
 ) -> Result<Compiled, Fail> {
-    let shallow = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, 1)?;
+    let shallow = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, 1, tens)?;
     let per_call = shallow.stack_cells as u64;
     let Some(largest) = largest_phase(&shallow.listing).filter(|n| per_call > 0 && *n < MEMORY) else {
         return Ok(shallow);
@@ -210,7 +246,7 @@ fn compile_cut(
     // (a deeper stack's bound is another constant, which may take a cell of its own)
     let mut depth = 1 + (MEMORY - largest) as u64 / per_call;
     while depth > 1 {
-        let deep = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, depth)?;
+        let deep = compile_deep(mir, optimize, debug_assertions, enums, structs, cuts, depth, tens)?;
         if largest_phase(&deep.listing).is_some_and(|n| n <= MEMORY) {
             return Ok(deep);
         }
@@ -228,13 +264,14 @@ fn compile_deep(
     structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
     depth: u64,
+    tens: bool,
 ) -> Result<Compiled, Fail> {
     // parameters passed straight on share the argument's cell (copies::forwarded), kept only when that is no bigger
-    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, structs, cuts, depth)?;
+    let (shared, forwards) = compile_niched(mir, optimize, true, debug_assertions, enums, structs, cuts, depth, tens)?;
     if !forwards {
         return Ok(shared);
     }
-    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, structs, cuts, depth)?.0;
+    let plain = compile_niched(mir, optimize, false, debug_assertions, enums, structs, cuts, depth, tens)?.0;
     Ok(if cells(&shared.listing) <= cells(&plain.listing) {
         shared
     } else {
@@ -747,6 +784,7 @@ fn compile_niched(
     structs: &[structs::StructDef],
     cuts: Option<&[phases::Cut]>,
     depth: u64,
+    tens: bool,
 ) -> Result<(Compiled, bool), Fail> {
     let mut no_niche = HashSet::new();
     loop {
@@ -760,6 +798,7 @@ fn compile_niched(
             &no_niche,
             cuts,
             depth,
+            tens,
         ) {
             Ok(c) => c,
             // (with its guards, say, the program may not fit where it fits without them): again with no niche
@@ -788,6 +827,7 @@ fn compile(
     no_niche: &HashSet<String>,
     cuts: Option<&[phases::Cut]>,
     depth: u64,
+    tens: bool,
 ) -> Result<(Compiled, bool, HashSet<String>), Fail> {
     let (file, mut fns, named, statics, objects, capturing) =
         front::front_end(file.clone(), debug_assertions, enums, structs)?;
@@ -801,7 +841,8 @@ fn compile(
         methods::inline_intrinsics(fns.get_mut(n).unwrap(), |name| names.iter().any(|m| m == name));
     }
     // an array of arrays, one array
-    nested::arrays_of_arrays(&mut fns);
+    let grids = nested::arrays_of_arrays(&mut fns, tens);
+    let by_tens = !grids.is_empty();
     // rustc's u8 + - and * wrap, before the passes write plain ops of their own
     for n in &names {
         let f = fns.get_mut(n).unwrap();
@@ -989,6 +1030,8 @@ fn compile(
         bool_tests: vec![],
         statics,
         statics_used: vec![],
+        grids,
+        holes: vec![],
     };
     struct Ready {
         name: String,
@@ -1032,6 +1075,7 @@ fn compile(
         card_bounds(&mut blocks);
         settled_by_the_card(&mut blocks, &local_types(&locals));
         blocks::settled_checks(&mut blocks, &results);
+        blocks::repeated_checks(&mut blocks);
         refuse_past_card(&mut blocks, &n)?;
         if optimize {
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);
@@ -1067,6 +1111,9 @@ fn compile(
             arith::lin_fold(&mut blocks, &types, &named);
             // again: the range pass turns proven casts into copies
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);
+            // and checks the merges above have made the same as one before them
+            blocks::repeated_checks(&mut blocks);
+            blocks::dead_code(&mut blocks, &results);
             // what a loop works out the same every time round, once before it (CARDIAC_HOIST=1 while measured)
             if hoist::enabled() {
                 let fixed: HashSet<ir::Local> = params.iter().chain(&results).chain([&ir::Local(0)]).copied().collect();
@@ -1235,6 +1282,8 @@ fn compile(
     } else {
         listing
     };
+    // the other cells in the holes of the grids laid out by tens
+    let listing = holes::fill(&listing, &sh.holes);
     let advice = bool_note(&sh.bool_tests, &listing)
         .into_iter()
         .chain(expensive(&sh.pool, &bit_methods))
@@ -1247,6 +1296,7 @@ fn compile(
             cut_points,
             names: source_names,
             stack_cells,
+            by_tens,
         },
         !alias.is_empty(),
         unproved,

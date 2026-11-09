@@ -3,7 +3,7 @@
 //! dropping statements whose result nobody reads.
 use std::collections::{HashMap, HashSet};
 
-use super::ir::{self, BasicBlock, Block, Local, Locals, Rvalue, Statement, Terminator};
+use super::ir::{self, predecessors, BasicBlock, Block, Local, Locals, Rvalue, Statement, Terminator};
 
 /// One line of a block.
 #[derive(Clone, Copy)]
@@ -365,6 +365,113 @@ pub fn dead_code(blocks: &mut [ir::Block], results: &HashSet<ir::Local>) {
         if !changed {
             break;
         }
+    }
+}
+
+/// A comparison, whose value is a bool.
+fn is_comparison(op: ir::BinOp) -> bool {
+    use ir::BinOp::*;
+    matches!(op, Lt | Le | Gt | Ge | Eq | Ne)
+}
+
+/// A check made again: an assert where the only way in comes straight from a block that asserted the same thing,
+/// expecting the same, with nothing it reads set in between. The same thing is the same bool (`assert(copy _20)`,
+/// as GVN leaves one for each `b[r][..]` that indexes by the same r), or a bool each block works out from the same
+/// comparison of the same locals (`_33 < 6` again for `b[r + 1][c]` and `b[r + 1][c + 2]`). Once the first holds,
+/// the second does: it is a goto.
+pub fn repeated_checks(blocks: &mut [ir::Block]) {
+    let preds = predecessors(blocks);
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let borrowed: HashSet<ir::Local> = blocks
+        .iter()
+        .flat_map(|b| &b.statements)
+        .filter_map(|s| match s {
+            Statement::Assign(_, ir::Rvalue::Ref(_, p)) => p.base_local(),
+            _ => None,
+        })
+        .collect();
+    let sets = |s: &Statement, xs: &[ir::Local]| matches!(s, Statement::Assign(d, _) if d.base_local().is_some_and(|v| xs.contains(&v)));
+    // what a block's assert asserts, the locals that must keep their values, and the line it is worked out on
+    // (none: the bool comes from before the block)
+    let asserted = |b: &ir::Block| -> Option<(Rvalue, bool, Vec<ir::Local>, Option<usize>)> {
+        let Terminator::Assert {
+            cond: ir::Operand::Copy(p) | ir::Operand::Move(p),
+            expected,
+            ..
+        } = &b.terminator
+        else {
+            return None;
+        };
+        let v = p.as_local().filter(|v| !borrowed.contains(v))?;
+        let def = b
+            .statements
+            .iter()
+            .rposition(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(v)));
+        let Some(k) = def else {
+            let bool_itself = Rvalue::Use(ir::Operand::Copy(ir::Place::local(v)));
+            return Some((bool_itself, *expected, vec![v], None));
+        };
+        let Statement::Assign(d, Rvalue::BinaryOp(op, x, y)) = &b.statements[k] else {
+            return None;
+        };
+        let plain = |o: &ir::Operand| match o {
+            ir::Operand::Constant(_) => Some(None),
+            ir::Operand::Copy(q) | ir::Operand::Move(q) => q.as_local().filter(|l| !borrowed.contains(l)).map(Some),
+            _ => None,
+        };
+        if d.as_local() != Some(v) || !is_comparison(*op) {
+            return None;
+        }
+        let reads: Vec<ir::Local> = [plain(x)?, plain(y)?].into_iter().flatten().collect();
+        let same = |o: &ir::Operand| match o {
+            ir::Operand::Move(q) => ir::Operand::Copy(q.clone()),
+            o => o.clone(),
+        };
+        Some((Rvalue::BinaryOp(*op, same(x), same(y)), *expected, reads, Some(k)))
+    };
+    let mut settled = vec![];
+    for (i, b) in blocks.iter().enumerate() {
+        let Terminator::Assert { target, .. } = &b.terminator else {
+            continue;
+        };
+        let Some((what, expected, reads, def)) = asserted(b) else {
+            continue;
+        };
+        // nothing it reads set on this block's lines before the assert's own
+        let before = def.unwrap_or(b.statements.len());
+        if b.statements[..before].iter().any(|s| sets(s, &reads)) {
+            continue;
+        }
+        let mut cur = i;
+        // (a bounded walk back along blocks with one way in)
+        for _ in 0..64 {
+            let ins = preds.get(&blocks[cur].name).map(Vec::as_slice).unwrap_or_default();
+            let ([p], true) = (ins, cur != 0) else { break };
+            let Some(&j) = at.get(p) else { break };
+            let earlier = &blocks[j];
+            if let (Terminator::Assert { target: t, .. }, Some((w, e, _, d))) = (&earlier.terminator, asserted(earlier))
+            {
+                let after = d.map_or(0, |k| k + 1);
+                if w == what
+                    && e == expected
+                    && *t == blocks[cur].name
+                    && !earlier.statements[after..].iter().any(|s| sets(s, &reads))
+                {
+                    settled.push((i, *target));
+                    break;
+                }
+            }
+            if earlier.statements.iter().any(|s| sets(s, &reads))
+                || matches!(&earlier.terminator, Terminator::Call { dest, .. } if dest.base_local().is_some_and(|v| reads.contains(&v)))
+                || earlier.terminator.successors().len() != 1
+            {
+                break;
+            }
+            cur = j;
+        }
+    }
+    for (i, target) in settled {
+        blocks[i].terminator = Terminator::Goto(target);
     }
 }
 

@@ -58,7 +58,10 @@ tenths in a cell are a number ten times as big.
 ## Arrays
 
 Fixed-size arrays work, of any of the types on this page, of structs, of tuples and of arrays. An array of arrays
-(`[[i16; 3]; 3]`) is one array, row after row. For what indexing costs, see
+(`[[i16; 3]; 3]`) is one array. Where the program still fits that way, it is laid out by tens: each row starts ten
+cells after the one before, and the program's other cells go in the holes at the ends of the rows. Otherwise it is
+row after row. Either way Rust's bounds checks are kept, so an index past a row's end panics, and nothing reads a
+hole. For what indexing costs, see
 [Statements and expressions](statements-and-expressions.md#index-expressions).
 
 Not done yet: a row of an array of arrays borrowed (`&t[r]`, `t[r].iter()`) or copied out (`let row = t[1]`). Use

@@ -1,7 +1,7 @@
 //! feature: An array of arrays `[[i16; 2]; 2]`
 //! section: Array types
 //! disposition: demand
-//! note: It is one array indexed `row * width + column`, which the compiler could build itself.
+//! note: It is one array, laid out by tens where the program fits: `t[r][c]` is `t[10 * r + c]`, the row one shift.
 //! input: 1 2 3 4 1 0
 #![no_std]
 #[inline(never)]
