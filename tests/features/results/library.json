@@ -142,22 +142,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 50
+        "cells": 46
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 50
+        "cells": 46
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 50
+        "cells": 46
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 50
+        "cells": 46
       }
     }
   },
@@ -304,22 +304,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 89
+        "cells": 84
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 89
+        "cells": 84
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 89
+        "cells": 84
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 89
+        "cells": 84
       }
     }
   },
@@ -337,22 +337,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 88
+        "cells": 83
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 88
+        "cells": 83
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 88
+        "cells": 83
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "1,0",
-        "cells": 88
+        "cells": 83
       }
     }
   },
@@ -403,22 +403,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "4",
-        "cells": 62
+        "cells": 61
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "4",
-        "cells": 62
+        "cells": 61
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "4",
-        "cells": 62
+        "cells": 61
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "4",
-        "cells": 62
+        "cells": 61
       }
     }
   },
@@ -1647,22 +1647,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "3,-1",
-        "cells": 34
+        "cells": 32
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "3,-1",
-        "cells": 34
+        "cells": 32
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "3,-1",
-        "cells": 34
+        "cells": 32
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "3,-1",
-        "cells": 34
+        "cells": 32
       }
     }
   },
@@ -2951,22 +2951,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "10,-99,-3",
-        "cells": 47
+        "cells": 46
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "10,-99,-3",
-        "cells": 58
+        "cells": 57
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "10,-99,-3",
-        "cells": 47
+        "cells": 46
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "10,-99,-3",
-        "cells": 58
+        "cells": 57
       }
     }
   },
@@ -2980,22 +2980,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,7",
-        "cells": 36
+        "cells": 35
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,7",
-        "cells": 36
+        "cells": 35
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,7",
-        "cells": 36
+        "cells": 35
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,7",
-        "cells": 36
+        "cells": 35
       }
     }
   },
@@ -3009,22 +3009,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "1,0,0,1",
-        "cells": 41
+        "cells": 40
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "1,0,0,1",
-        "cells": 41
+        "cells": 40
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "1,0,0,1",
-        "cells": 41
+        "cells": 40
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "1,0,0,1",
-        "cells": 41
+        "cells": 40
       }
     }
   },
@@ -3038,22 +3038,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "6,0",
-        "cells": 38
+        "cells": 37
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "6,0",
-        "cells": 49
+        "cells": 48
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "6,0",
-        "cells": 38
+        "cells": 37
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "6,0",
-        "cells": 49
+        "cells": 48
       }
     }
   },
@@ -3071,22 +3071,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,30",
-        "cells": 35
+        "cells": 34
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,30",
-        "cells": 56
+        "cells": 55
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,30",
-        "cells": 35
+        "cells": 34
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,30",
-        "cells": 56
+        "cells": 55
       }
     }
   },
@@ -3100,22 +3100,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,0,0,3",
-        "cells": 46
+        "cells": 45
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,0,0,3",
-        "cells": 46
+        "cells": 45
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,0,0,3",
-        "cells": 46
+        "cells": 45
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,0,0,3",
-        "cells": 46
+        "cells": 45
       }
     }
   },
@@ -3132,22 +3132,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "-30",
-        "cells": 58
+        "cells": 59
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "-30",
-        "cells": 90
+        "cells": 91
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "-30",
-        "cells": 58
+        "cells": 59
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "-30",
-        "cells": 90
+        "cells": 91
       }
     }
   },
@@ -3161,22 +3161,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,-7",
-        "cells": 35
+        "cells": 34
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,-7",
-        "cells": 35
+        "cells": 34
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,-7",
-        "cells": 35
+        "cells": 34
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,-7",
-        "cells": 35
+        "cells": 34
       }
     }
   },
@@ -3194,22 +3194,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,300",
-        "cells": 36
+        "cells": 35
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,300",
-        "cells": 57
+        "cells": 56
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,300",
-        "cells": 36
+        "cells": 35
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,300",
-        "cells": 57
+        "cells": 56
       }
     }
   },

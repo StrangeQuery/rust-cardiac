@@ -523,6 +523,12 @@ impl<'a> Lowering<'a> {
             }
             self.emit(Op::Sft, shift(1, 0));
             self.times(&a, d0, false, neg)?;
+        } else if n >= 7 {
+            // 7, 8 or 9 times: ten times, less the rest (`SFT 10 / SUB a` for 9). Ten times a card is four digits
+            // at most, which the accumulator holds, so no check is needed before the shift
+            self.times(&a, 1, true, neg)?;
+            self.emit(Op::Sft, shift(1, 0));
+            self.times(&a, 10 - n, false, !neg)?;
         } else {
             self.times(&a, d0, true, neg)?;
         }

@@ -253,6 +253,10 @@ pub fn peephole(lines: &[Line], keep: &[String]) -> Vec<Line> {
         sweep(&mut lines);
         changed |= output_loaded(&mut lines);
         sweep(&mut lines);
+        changed |= input_stored(&mut lines);
+        sweep(&mut lines);
+        changed |= output_at_end(&mut lines);
+        sweep(&mut lines);
         changed |= drop_unused_loads(&mut lines);
         sweep(&mut lines);
         changed |= drop_branch_reloads(&mut lines);
@@ -607,6 +611,95 @@ fn output_loaded(lines: &mut [Line]) -> bool {
         changed = true;
     }
     changed
+}
+
+/// 13. INP a, CLA a, STO b, where a is named nowhere else: INP b, CLA b. The card goes straight into the cell it
+///     is copied to, as `let r = inp() as usize` reads it (the cast is the same cell value on CARDIAC). The load
+///     stays for whatever reads the accumulator next; rule 6 drops it where nothing does.
+fn input_stored(lines: &mut [Line]) -> bool {
+    let mut changed = false;
+    for i in 2..lines.len() {
+        let (Some(a), Some(b), Some(c)) = (instr(&lines[i - 2]), instr(&lines[i - 1]), instr(&lines[i])) else {
+            continue;
+        };
+        if !(a.is(Op::Inp) && b.is(Op::Cla) && c.is(Op::Sto) && a.arg == b.arg && b.arg != c.arg) {
+            continue;
+        }
+        let (Some(t), Some(_)) = (a.arg.symbol(), c.arg.symbol()) else {
+            continue;
+        };
+        if is_cell_number(a.arg) || matches!(a.arg, Arg::Sym(_, Some(_))) || matches!(c.arg, Arg::Sym(_, Some(_))) {
+            continue;
+        }
+        let named = lines.iter().filter(|l| mentions(l, t) && defined(l) != Some(t)).count();
+        if named != 2 || label_of(c.arg).is_some_and(|y| y.ends_with("_exit") || y.ends_with("_entry")) {
+            continue;
+        }
+        let into = c.arg.clone();
+        lines[i - 2].kind = Kind::Instr(Op::Inp, into.clone());
+        lines[i - 1].kind = Kind::Instr(Op::Cla, into);
+        lines[i] = deleted();
+        changed = true;
+    }
+    changed
+}
+
+/// The program's last two instructions after the label `name`: `OUT y`, then HRS 00 (its end), with y.
+fn output_then_end<'a>(lines: &'a [Line], name: &str) -> Option<&'a Arg> {
+    let at = lines.iter().position(|l| code_label(l) == Some(name))?;
+    let mut next = lines[at + 1..].iter().filter(|l| !is_blank(l));
+    let (o, h) = (instr(next.next()?)?, instr(next.next()?)?);
+    (o.is(Op::Out) && ends_program(&h)).then_some(o.arg)
+}
+
+/// 14. CLA x, STO y, JMP L, where L is OUT y and the program's end (HRS 00): OUT x, HRS 00. Nothing runs after the
+///     HRS, so y's value is read only by that OUT. `out(if full { 1 } else { 0 })` compiles to two arms that each
+///     store their value and join to output it; each arm now outputs its own and stops, as a program written by hand
+///     does.
+/// 15. CLA x, STO y, OUT y, HRS 00, one after another: OUT x, HRS 00, for the same reason (the other arm, once
+///     nothing jumps to the label between them).
+fn output_at_end(lines: &mut Vec<Line>) -> bool {
+    let not_linkage = |a: &Arg| !label_of(a).is_some_and(|y| y.ends_with("_exit") || y.ends_with("_entry"));
+    for i in 0..lines.len() {
+        if i + 2 >= lines.len() {
+            break;
+        }
+        let (Some(c), Some(st), Some(third)) = (instr(&lines[i]), instr(&lines[i + 1]), instr(&lines[i + 2])) else {
+            continue;
+        };
+        if !(c.is(Op::Cla) && st.is(Op::Sto) && not_linkage(st.arg) && c.arg != st.arg) {
+            continue;
+        }
+        let x = c.arg.clone();
+        // 14
+        if third.is(Op::Jmp) {
+            let Some(target) = label_of(third.arg) else { continue };
+            if output_then_end(lines, target) != Some(st.arg) {
+                continue;
+            }
+            let comment = lines[i].comment.clone();
+            let mut out = Line::new(Kind::Instr(Op::Out, x));
+            out.comment = comment;
+            lines[i] = out;
+            lines[i + 1] = Line::new(Kind::Instr(Op::Hrs, Arg::Num("0".into())));
+            lines[i + 2] = deleted();
+            return true;
+        }
+        // 15
+        let Some(Some(end)) = lines.get(i + 3).map(instr) else {
+            continue;
+        };
+        if third.is(Op::Out) && third.arg == st.arg && ends_program(&end) {
+            let comment = lines[i].comment.clone();
+            let mut out = Line::new(Kind::Instr(Op::Out, x));
+            out.comment = comment;
+            lines[i] = out;
+            lines[i + 1] = deleted();
+            lines[i + 2] = deleted();
+            return true;
+        }
+    }
+    false
 }
 
 /// Does straight-line code reach HRS before any label, jump or use of one of these constants? Then nothing can read

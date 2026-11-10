@@ -22,8 +22,8 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | `&`, `\|` and `!` on `bool` (not short-circuiting) | Supported | 48 / 50 |  |  | [bool_ops.rs](types/bool_ops.rs) |
-| A `bool` passed to and returned from a function | Supported | 42 / 42 |  |  | [bool_param.rs](types/bool_param.rs) |
-| A `bool` made from a comparison, cast to `i16` | Supported | 26 / 26 |  |  | [bool_value.rs](types/bool_value.rs) |
+| A `bool` passed to and returned from a function | Supported | 40 / 40 |  |  | [bool_param.rs](types/bool_param.rs) |
+| A `bool` made from a comparison, cast to `i16` | Supported | 24 / 24 |  |  | [bool_value.rs](types/bool_value.rs) |
 | `^` on `bool` | Supported | 39 / 41 |  | `a ^ b` on `bool` is `a != b`, which the compiler already does. | [bool_xor.rs](types/bool_xor.rs) |
 
 ### Integer types
@@ -34,29 +34,29 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `u8 as usize` and `usize as u8` | Supported | 41 / 48 |  |  | [cast_u8_usize.rs](types/cast_u8_usize.rs) |
 | An `i32` holding more than a card (50 * 50 = 2500), divided back onto one | Differs from native Rust by design | 37 / 54 | Never | A cell holds -999..=999, so an `i32` past a card cannot be held, even for a moment. The product 2500 is past a card: with overflow checks on CARDIAC panics, and with them off it keeps the low three digits (500), so it prints 50 where Rust prints 250. | [i32_past_card.rs](types/i32_past_card.rs) |
 | `i128`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)` | [int_i128.rs](types/int_i128.rs) |
-| `i16`: declared, added, subtracted, compared and cast back to `i16` | Supported | 38 / 51 |  |  | [int_i16.rs](types/int_i16.rs) |
-| `i32`: declared, added, subtracted, compared and cast back to `i16` | Supported | 38 / 53 |  | The values fit on a card here; an `i32` past a card is its own row. | [int_i32.rs](types/int_i32.rs) |
+| `i16`: declared, added, subtracted, compared and cast back to `i16` | Supported | 33 / 46 |  |  | [int_i16.rs](types/int_i16.rs) |
+| `i32`: declared, added, subtracted, compared and cast back to `i16` | Supported | 34 / 48 |  | The values fit on a card here; an `i32` past a card is its own row. | [int_i32.rs](types/int_i32.rs) |
 | `i64`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type i64 for _1 (this backend has u8, i16, usize and bool)` | [int_i64.rs](types/int_i64.rs) |
-| `i8`: declared, added, subtracted, compared and cast back to `i16` | Supported | 80 / 77 |  | An `i8` holds -128..=127, all on a card; only the overflow check at 127 is new. | [int_i8.rs](types/int_i8.rs) |
+| `i8`: declared, added, subtracted, compared and cast back to `i16` | Supported | 76 / 72 |  | An `i8` holds -128..=127, all on a card; only the overflow check at 127 is new. | [int_i8.rs](types/int_i8.rs) |
 | `u8::MAX`, `i8::MIN` and `i8::MAX` used with an input | Supported | 38 / 51 |  |  | [int_min_max.rs](types/int_min_max.rs) |
 | `u128`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type u128 for _1 (this backend has u8, i16, usize and bool)` | [int_u128.rs](types/int_u128.rs) |
-| `u16`: declared, added, subtracted, compared and cast back to `i16` | Supported | 46 / 54 |  | Every `u16` on a card is fine and one past a card can't be held, as for `i16`. | [int_u16.rs](types/int_u16.rs) |
+| `u16`: declared, added, subtracted, compared and cast back to `i16` | Supported | 42 / 50 |  | Every `u16` on a card is fine and one past a card can't be held, as for `i16`. | [int_u16.rs](types/int_u16.rs) |
 | `u32`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type u32 for _1 (this backend has u8, i16, usize and bool)` | [int_u32.rs](types/int_u32.rs) |
 | `u64`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type u64 for _1 (this backend has u8, i16, usize and bool)` | [int_u64.rs](types/int_u64.rs) |
-| `u8`: declared, added, subtracted, compared and cast back to `i16` | Supported | 84 / 81 |  |  | [int_u8.rs](types/int_u8.rs) |
+| `u8`: declared, added, subtracted, compared and cast back to `i16` | Supported | 80 / 76 |  |  | [int_u8.rs](types/int_u8.rs) |
 
 ### Machine-dependent integer types
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `isize`: declared, added, subtracted, compared and cast back to `i16` | Supported | 38 / 53 |  | An `isize` is 64 bits natively, but one that fits on a card can be held as an `i16` is. | [int_isize.rs](types/int_isize.rs) |
-| `usize`: declared, added, subtracted, compared and cast back to `i16` | Supported | 45 / 62 |  |  | [int_usize.rs](types/int_usize.rs) |
+| `isize`: declared, added, subtracted, compared and cast back to `i16` | Supported | 34 / 48 |  | An `isize` is 64 bits natively, but one that fits on a card can be held as an `i16` is. | [int_isize.rs](types/int_isize.rs) |
+| `usize`: declared, added, subtracted, compared and cast back to `i16` | Supported | 41 / 57 |  |  | [int_usize.rs](types/int_usize.rs) |
 
 ### Integer literals
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| Byte literals (`b'a'`, `b'\n'`), which are `u8` | Supported | 56 / 53 |  |  | [literal_byte.rs](types/literal_byte.rs) |
+| Byte literals (`b'a'`, `b'\n'`), which are `u8` | Supported | 52 / 50 |  |  | [literal_byte.rs](types/literal_byte.rs) |
 | A byte string literal (`b"CARD"`), indexed by an input | Supported | 28 / 30 |  | A byte string literal is a constant `u8` table, which the compiler already has for `const` arrays. | [literal_byte_string.rs](types/literal_byte_string.rs) |
 | Hexadecimal, octal and binary literals (`0x1F`, `0o17`, `0b101`) | Supported | 24 / 41 |  |  | [literal_hex_oct_bin.rs](types/literal_hex_oct_bin.rs) |
 | Integer literals with type suffixes (`5i16`, `3u8`, `2usize`) | Supported | 44 / 50 |  |  | [literal_suffix.rs](types/literal_suffix.rs) |
@@ -74,7 +74,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | `char` literals compared with an input (`'0'..='9'`) | Supported | 40 / 42 |  |  | [char_literal.rs](types/char_literal.rs) |
-| A `char` from a `u8`, compared and cast back | Supported | 50 / 50 |  | An ASCII `char` fits on a card; one past 999 never would. | [char_value.rs](types/char_value.rs) |
+| A `char` from a `u8`, compared and cast back | Supported | 46 / 46 |  | An ASCII `char` fits on a card; one past 999 never would. | [char_value.rs](types/char_value.rs) |
 | `==` of two string literals chosen by inputs | Refused |  | Never | A string compare is a byte loop over every literal it might meet, each a cell a byte: two short literals compared come to about 124 cells, more than CARDIAC has. The compiler says: `RCE0007: call to unknown function compare_bytes` | [str_eq.rs](types/str_eq.rs) |
 | `.len()` of one of two string literals chosen by an input | Supported | 19 / 21 |  | A `&str` is a slice: an address and a length. | [str_len.rs](types/str_len.rs) |
 | A string literal's bytes, indexed by an input | Supported | 37 / 37 |  | A `&str` passed to a function is refused (RCE0019: the length of the slice it is passed isn't known here), though its `.as_bytes()` can be passed. | [str_literal_bytes.rs](types/str_literal_bytes.rs) |
@@ -91,7 +91,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | A nested tuple `((i16, i16), i16)` | Supported | 15 / 28 |  |  | [tuple_nested.rs](types/tuple_nested.rs) |
-| A nested tuple returned from a function | Supported | 36 / 54 |  |  | [tuple_nested_return.rs](types/tuple_nested_return.rs) |
+| A nested tuple returned from a function | Supported | 36 / 53 |  |  | [tuple_nested_return.rs](types/tuple_nested_return.rs) |
 | A tuple of `i16`, `bool` and `u8` | Supported | 21 / 32 |  |  | [tuple_scalars.rs](types/tuple_scalars.rs) |
 | The unit type `()`: a function returning it, a tuple holding it | Supported | 16 / 27 |  |  | [tuple_unit.rs](types/tuple_unit.rs) |
 
@@ -100,24 +100,24 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | An array of arrays `[[i16; 2]; 2]` | Supported | 53 / 53 |  | It is one array, laid out by tens where the program fits: `t[r][c]` is `t[10 * r + c]`, the row one shift. | [array_arrays.rs](types/array_arrays.rs) |
-| An array of `bool` | Supported | 53 / 53 |  |  | [array_bool.rs](types/array_bool.rs) |
-| An array of `char` | Supported | 57 / 57 |  |  | [array_char.rs](types/array_char.rs) |
-| An array of `i16` | Supported | 42 / 42 |  |  | [array_i16.rs](types/array_i16.rs) |
-| An array of `i32` whose values fit on a card | Supported | 44 / 44 |  |  | [array_i32.rs](types/array_i32.rs) |
-| An array of `i8` | Supported | 57 / 57 |  |  | [array_i8.rs](types/array_i8.rs) |
+| An array of `bool` | Supported | 52 / 52 |  |  | [array_bool.rs](types/array_bool.rs) |
+| An array of `char` | Supported | 56 / 56 |  |  | [array_char.rs](types/array_char.rs) |
+| An array of `i16` | Supported | 41 / 41 |  |  | [array_i16.rs](types/array_i16.rs) |
+| An array of `i32` whose values fit on a card | Supported | 43 / 43 |  |  | [array_i32.rs](types/array_i32.rs) |
+| An array of `i8` | Supported | 56 / 56 |  |  | [array_i8.rs](types/array_i8.rs) |
 | `.len()` of an array passed by reference | Supported | 55 / 69 |  |  | [array_len.rs](types/array_len.rs) |
 | An array made with `[x; N]` from an input | Supported | 19 / 27 |  |  | [array_repeat.rs](types/array_repeat.rs) |
-| An array of structs | Supported | 60 / 71 |  |  | [array_structs.rs](types/array_structs.rs) |
+| An array of structs | Supported | 60 / 70 |  |  | [array_structs.rs](types/array_structs.rs) |
 | An array of tuples `[(i16, i16); 3]` | Supported | 43 / 43 |  | The compiler could keep one array per tuple field, as it does for an array of structs. | [array_tuples.rs](types/array_tuples.rs) |
-| An array of `u8` | Supported | 62 / 62 |  |  | [array_u8.rs](types/array_u8.rs) |
-| An array of `usize` | Supported | 46 / 46 |  | A `usize` element is a cell, as an `i16` one is. | [array_usize.rs](types/array_usize.rs) |
+| An array of `u8` | Supported | 61 / 61 |  |  | [array_u8.rs](types/array_u8.rs) |
+| An array of `usize` | Supported | 45 / 45 |  | A `usize` element is a cell, as an `i16` one is. | [array_usize.rs](types/array_usize.rs) |
 | A zero-length array `[i16; 0]` | Supported | 21 / 32 |  |  | [array_zero.rs](types/array_zero.rs) |
 
 ### Slice types
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| A mutable slice `&mut [i16]` written by a function | Supported | 72 / 77 |  |  | [slice_mut.rs](types/slice_mut.rs) |
+| A mutable slice `&mut [i16]` written by a function | Supported | 70 / 75 |  |  | [slice_mut.rs](types/slice_mut.rs) |
 | A slice `&[i16]` passed to a function and read in a loop | Supported | 52 / 65 |  | A slice is an address and a length, two cells, read the way arrays by reference already are. | [slice_param.rs](types/slice_param.rs) |
 | A sub-slice `&t[1..3]`, indexed | Supported | 32 / 32 |  |  | [slice_range.rs](types/slice_range.rs) |
 
@@ -163,8 +163,8 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Pointer arithmetic: `p.add(i)` into an array | Supported | 16 / 16 |  |  | [raw_add.rs](types/raw_add.rs) |
 | A raw pointer `*const i16` read with `unsafe` | Supported | 7 / 18 |  |  | [raw_const.rs](types/raw_const.rs) |
 | A raw pointer `*mut i16` written through in a function | Supported | 24 / 36 |  |  | [raw_mut_fn.rs](types/raw_mut_fn.rs) |
-| A mutable reference `&mut i16` passed to a function | Supported | 32 / 44 |  |  | [ref_mut.rs](types/ref_mut.rs) |
-| A `&mut` to an array element chosen by an input | Supported | 51 / 60 |  |  | [ref_mut_element.rs](types/ref_mut_element.rs) |
+| A mutable reference `&mut i16` passed to a function | Supported | 30 / 42 |  |  | [ref_mut.rs](types/ref_mut.rs) |
+| A `&mut` to an array element chosen by an input | Supported | 49 / 58 |  |  | [ref_mut_element.rs](types/ref_mut_element.rs) |
 | A shared reference `&i16` passed to a function | Supported | 13 / 24 |  |  | [ref_shared.rs](types/ref_shared.rs) |
 | A reference to a reference `&&i16` | Supported | 30 / 41 |  |  | [ref_to_ref.rs](types/ref_to_ref.rs) |
 
@@ -172,7 +172,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| An array of function pointers indexed by an input | Supported | 56 / 64 |  |  | [fnptr_array.rs](types/fnptr_array.rs) |
+| An array of function pointers indexed by an input | Supported | 55 / 63 |  |  | [fnptr_array.rs](types/fnptr_array.rs) |
 | A function pointer `fn(i16) -> i16` chosen at run time | Supported | 46 / 59 |  | An indirect call is a computed jump, which CARDIAC can make with self-modifying code. | [fnptr_choose.rs](types/fnptr_choose.rs) |
 | A function pointer passed as a parameter | Supported | 25 / 39 |  |  | [fnptr_param.rs](types/fnptr_param.rs) |
 
@@ -200,13 +200,13 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `Option<bool>`, whose `None` fills a niche in `bool` | Supported | 44 / 45 |  |  | [option_bool.rs](types/option_bool.rs) |
+| `Option<bool>`, whose `None` fills a niche in `bool` | Supported | 43 / 44 |  |  | [option_bool.rs](types/option_bool.rs) |
 | `Option` of a C-like enum, whose `None` is a spare variant number | Supported | 35 / 36 |  | The refusal is a constant `Some` of a C-like enum, which is just two numbers. | [option_enum.rs](types/option_enum.rs) |
 | `Option<i16>` returned from a function | Supported | 30 / 51 |  |  | [option_i16.rs](types/option_i16.rs) |
 | `Option<NonZeroI16>`, whose `None` is zero | Supported | 16 / 18 |  |  | [option_nonzero.rs](types/option_nonzero.rs) |
 | A nested `Option<Option<i16>>` | Supported | 48 / 50 |  |  | [option_option.rs](types/option_option.rs) |
 | `Option<&i16>`, whose `None` is the null pointer | Supported | 50 / 52 |  |  | [option_ref.rs](types/option_ref.rs) |
-| `Option<u8>` | Supported | 55 / 57 |  |  | [option_u8.rs](types/option_u8.rs) |
+| `Option<u8>` | Supported | 54 / 56 |  |  | [option_u8.rs](types/option_u8.rs) |
 | `Option<()>`, laid out as a `bool` | Supported | 30 / 32 |  | `Option<()>` is a `bool`. | [option_unit.rs](types/option_unit.rs) |
 
 ## Expressions
@@ -215,10 +215,10 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `true`, `false` and a `char` literal cast to a number (`'A' as i16`) | Supported | 46 / 46 |  | A `char` is a number, its code point, and one that fits on a card can be held as a `u8` is. | [lit_bool_char.rs](expressions/lit_bool_char.rs) |
+| `true`, `false` and a `char` literal cast to a number (`'A' as i16`) | Supported | 39 / 39 |  | A `char` is a number, its code point, and one that fits on a card can be held as a `u8` is. | [lit_bool_char.rs](expressions/lit_bool_char.rs) |
 | A byte literal (`b'A'`) | Supported | 19 / 19 |  |  | [lit_byte.rs](expressions/lit_byte.rs) |
 | Integer literals: decimal, `0x`, `0o`, `0b`, with `_` separators and a type suffix | Supported | 31 / 59 |  |  | [lit_int_forms.rs](expressions/lit_int_forms.rs) |
-| A negative literal (`-999`) and the largest a card holds (`999`) | Supported | 28 / 28 |  |  | [lit_negative.rs](expressions/lit_negative.rs) |
+| A negative literal (`-999`) and the largest a card holds (`999`) | Supported | 25 / 25 |  |  | [lit_negative.rs](expressions/lit_negative.rs) |
 
 ### Path expressions
 
@@ -226,7 +226,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 |---|---|---|---|---|---|
 | An associated constant (`Point::ORIGIN_X`) | Supported | 8 / 19 |  |  | [path_assoc_const.rs](expressions/path_assoc_const.rs) |
 | A `const` used in an expression | Supported | 20 / 45 |  |  | [path_const.rs](expressions/path_const.rs) |
-| `i16::MAX` compared with a value (`a < i16::MAX`) | Supported | 13 / 13 |  | 32767 is past what a card holds, but comparing a value with it works; `i16::MAX - a` is refused on purpose (RCE0009). | [path_i16_max.rs](expressions/path_i16_max.rs) |
+| `i16::MAX` compared with a value (`a < i16::MAX`) | Supported | 9 / 9 |  | 32767 is past what a card holds, but comparing a value with it works; `i16::MAX - a` is refused on purpose (RCE0009). | [path_i16_max.rs](expressions/path_i16_max.rs) |
 | Reading a `static` | Supported | 8 / 19 |  |  | [path_static.rs](expressions/path_static.rs) |
 | Indexing a `static` array | Supported | 42 / 52 |  | A `static` is a fixed place in memory, which every CARDIAC variable already is; a `const` table works today. | [path_static_array.rs](expressions/path_static_array.rs) |
 | Reading and writing a `static mut` | Supported | 31 / 44 |  | A `static` is a fixed place in memory, which every CARDIAC variable already is. | [path_static_mut.rs](expressions/path_static_mut.rs) |
@@ -246,9 +246,9 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `&mut t[i]` to an array element, passed to a function | Supported | 49 / 59 |  |  | [borrow_element.rs](expressions/borrow_element.rs) |
-| `&mut s.f` to a struct field, passed to a function | Supported | 39 / 51 |  |  | [borrow_field.rs](expressions/borrow_field.rs) |
-| `&mut x` passed to a function that changes it | Supported | 33 / 45 |  |  | [borrow_mut.rs](expressions/borrow_mut.rs) |
+| `&mut t[i]` to an array element, passed to a function | Supported | 47 / 57 |  |  | [borrow_element.rs](expressions/borrow_element.rs) |
+| `&mut s.f` to a struct field, passed to a function | Supported | 35 / 47 |  |  | [borrow_field.rs](expressions/borrow_field.rs) |
+| `&mut x` passed to a function that changes it | Supported | 31 / 43 |  |  | [borrow_mut.rs](expressions/borrow_mut.rs) |
 | `&x` passed to a function taking `&i16` | Supported | 15 / 26 |  |  | [borrow_shared.rs](expressions/borrow_shared.rs) |
 
 ### Dereference operator
@@ -257,17 +257,17 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 |---|---|---|---|---|---|
 | A reference returned from a function, `pick(c, &a, &b) -> &i16`, then read | Supported | 52 / 52 |  | Wrong answer: reading through the reference the function returns gets the wrong cells (844 and 100 for 40 and 50). | [deref_choose.rs](expressions/deref_choose.rs) |
 | `*r` through a local reference, reading and writing | Supported | 8 / 23 |  |  | [deref_local.rs](expressions/deref_local.rs) |
-| `*p` through a raw pointer to an array element | Supported | 29 / 54 |  |  | [deref_raw.rs](expressions/deref_raw.rs) |
+| `*p` through a raw pointer to an array element | Supported | 29 / 29 |  |  | [deref_raw.rs](expressions/deref_raw.rs) |
 | `**r` through a reference to a reference | Supported | 29 / 40 |  | A reference to a reference is an address held in a cell, which the compiler doesn't follow twice yet. | [deref_ref_ref.rs](expressions/deref_ref_ref.rs) |
 
 ### The question mark operator
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| Several `?` in one function: the first `None` returns | Supported | 52 / 93 |  |  | [try_chain.rs](expressions/try_chain.rs) |
+| Several `?` in one function: the first `None` returns | Supported | 52 / 92 |  |  | [try_chain.rs](expressions/try_chain.rs) |
 | `?` on an `Option` in a function returning `Option` | Supported | 53 / 65 |  |  | [try_option.rs](expressions/try_option.rs) |
 | `?` on a `Result` in a function returning `Result` | Supported | 53 / 81 |  |  | [try_result.rs](expressions/try_result.rs) |
-| `?` converting the error with `From` (`Result<_, u8>` into `Result<_, i16>`) | Supported | 56 / 87 |  | Wrong answer at opt-level 1: the error comes back unconverted (7, not 70), as if `From` weren't called. | [try_result_from.rs](expressions/try_result_from.rs) |
+| `?` converting the error with `From` (`Result<_, u8>` into `Result<_, i16>`) | Supported | 57 / 88 |  | Wrong answer at opt-level 1: the error comes back unconverted (7, not 70), as if `From` weren't called. | [try_result_from.rs](expressions/try_result_from.rs) |
 
 ### Arithmetic operators
 
@@ -282,11 +282,11 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Arithmetic on a variable declared `i32` | Supported | 35 / 56 |  |  | [arith_i32_typed.rs](expressions/arith_i32_typed.rs) |
 | `a / 7`: by a constant other than a power of ten | Supported | 57 / 57 |  |  | [div_const_i16.rs](expressions/div_const_i16.rs) |
 | `a / 10`: by a power of ten | Supported | 13 / 13 |  | A shift. Rounds toward zero: `-7 / 10` is 0. | [div_pow10_i16.rs](expressions/div_pow10_i16.rs) |
-| `a / b` on `u8` | Supported | 66 / 66 |  |  | [div_u8.rs](expressions/div_u8.rs) |
+| `a / b` on `u8` | Supported | 67 / 67 |  |  | [div_u8.rs](expressions/div_u8.rs) |
 | `a / b` on `usize` | Supported | 32 / 32 |  |  | [div_usize.rs](expressions/div_usize.rs) |
 | `a / b` on `i16`, both variables | Supported | 65 / 65 |  | A divide routine, put in once, runs as many steps as the quotient. Rounds toward zero, as Rust does. | [div_var_i16.rs](expressions/div_var_i16.rs) |
 | `a / b` with `b` zero panics | Supported | 55 / 55 |  |  | [div_zero_i16.rs](expressions/div_zero_i16.rs) |
-| `a * 7`: by a constant | Supported | 18 / 29 |  |  | [mul_const_i16.rs](expressions/mul_const_i16.rs) |
+| `a * 7`: by a constant | Supported | 16 / 27 |  |  | [mul_const_i16.rs](expressions/mul_const_i16.rs) |
 | `a * 10`: by a power of ten | Supported | 13 / 34 |  |  | [mul_pow10_i16.rs](expressions/mul_pow10_i16.rs) |
 | `a * b` on `u8` | Supported | 82 / 90 |  |  | [mul_u8.rs](expressions/mul_u8.rs) |
 | `a * b` on `usize` | Supported | 46 / 59 |  |  | [mul_usize.rs](expressions/mul_usize.rs) |
@@ -302,7 +302,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `a - b` on `u8` | Supported | 56 / 53 |  |  | [sub_u8.rs](expressions/sub_u8.rs) |
 | `a - b` on `u8` below 0: panics, or wraps with checks off | Supported | 56 / 53 |  |  | [sub_u8_underflow.rs](expressions/sub_u8_underflow.rs) |
 | `a - b` on `usize` | Supported | 14 / 22 |  |  | [sub_usize.rs](expressions/sub_usize.rs) |
-| `a - b` on `usize` below 0: panics, or wraps with checks off | Supported | 20 / 27 |  |  | [sub_usize_underflow.rs](expressions/sub_usize_underflow.rs) |
+| `a - b` on `usize` below 0: panics, or wraps with checks off | Supported | 17 / 24 |  |  | [sub_usize_underflow.rs](expressions/sub_usize_underflow.rs) |
 
 ### Comparison operators
 
@@ -376,21 +376,21 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | A 2-D grid in one flat array, `t[r * W + c]` | Supported | 65 / 78 |  |  | [array_2d_flat.rs](expressions/array_2d_flat.rs) |
-| An array of arrays, `t[r][c]` | Supported | 72 / 82 |  | It is one array, laid out by tens where the program fits: each row ten cells after the one before, and the program's other cells in the holes at the ends of the rows. | [array_2d_nested.rs](expressions/array_2d_nested.rs) |
-| `t[i + 1]` and `t[n - i]`: an index computed in place | Supported | 51 / 62 |  |  | [array_index_expr.rs](expressions/array_index_expr.rs) |
+| An array of arrays, `t[r][c]` | Supported | 68 / 78 |  | It is one array, laid out by tens where the program fits: each row ten cells after the one before, and the program's other cells in the holes at the ends of the rows. | [array_2d_nested.rs](expressions/array_2d_nested.rs) |
+| `t[i + 1]` and `t[n - i]`: an index computed in place | Supported | 51 / 63 |  |  | [array_index_expr.rs](expressions/array_index_expr.rs) |
 | `t[i]` read and written with `i` from a card | Supported | 33 / 33 |  |  | [array_index_var.rs](expressions/array_index_var.rs) |
 | `t.len()` | Supported | 8 / 19 |  |  | [array_len.rs](expressions/array_len.rs) |
 | An array literal `[a, b, c]` with values read at run time | Supported | 35 / 43 |  |  | [array_literal.rs](expressions/array_literal.rs) |
-| An array of structs, `t[i].f` | Supported | 65 / 75 |  |  | [array_of_struct.rs](expressions/array_of_struct.rs) |
+| An array of structs, `t[i].f` | Supported | 63 / 73 |  |  | [array_of_struct.rs](expressions/array_of_struct.rs) |
 | An index past the end panics | Supported | 20 / 20 |  |  | [array_out_of_bounds.rs](expressions/array_out_of_bounds.rs) |
-| A repeat expression `[v; N]` | Supported | 38 / 69 |  |  | [array_repeat.rs](expressions/array_repeat.rs) |
+| A repeat expression `[v; N]` | Supported | 37 / 68 |  |  | [array_repeat.rs](expressions/array_repeat.rs) |
 
 ### Tuple and tuple indexing expressions
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | A tuple and `.0`, `.1` | Supported | 10 / 21 |  |  | [tuple_index.rs](expressions/tuple_index.rs) |
-| A tuple of `i16`, `bool` and `u8` | Supported | 47 / 58 |  |  | [tuple_mixed.rs](expressions/tuple_mixed.rs) |
+| A tuple of `i16`, `bool` and `u8` | Supported | 43 / 54 |  |  | [tuple_mixed.rs](expressions/tuple_mixed.rs) |
 | A nested tuple, `t.1.0` | Supported | 14 / 25 |  |  | [tuple_nested.rs](expressions/tuple_nested.rs) |
 | A tuple returned from a function and taken apart | Supported | 36 / 57 |  |  | [tuple_return.rs](expressions/tuple_return.rs) |
 | A tuple struct's fields, `p.0`, `p.1` | Supported | 10 / 21 |  |  | [tuple_struct_index.rs](expressions/tuple_struct_index.rs) |
@@ -399,10 +399,10 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| An enum variant built from a call's result, `Shape::Rect(k, inp())`, and returned | Supported | 39 / 64 |  | Wrong answer: the field set from the call's result comes back as 0; built from parameters the same enum is right. | [struct_enum_variant_call.rs](expressions/struct_enum_variant_call.rs) |
+| An enum variant built from a call's result, `Shape::Rect(k, inp())`, and returned | Supported | 39 / 63 |  | Wrong answer: the field set from the call's result comes back as 0; built from parameters the same enum is right. | [struct_enum_variant_call.rs](expressions/struct_enum_variant_call.rs) |
 | A struct literal with named fields | Supported | 15 / 26 |  |  | [struct_named.rs](expressions/struct_named.rs) |
 | A struct literal with a struct field | Supported | 25 / 41 |  |  | [struct_nested.rs](expressions/struct_nested.rs) |
-| Field init shorthand, `P { x, y }` | Supported | 20 / 20 |  |  | [struct_shorthand.rs](expressions/struct_shorthand.rs) |
+| Field init shorthand, `P { x, y }` | Supported | 14 / 14 |  |  | [struct_shorthand.rs](expressions/struct_shorthand.rs) |
 | A tuple struct built with a call, `Pair(a, b)` | Supported | 20 / 20 |  |  | [struct_tuple.rs](expressions/struct_tuple.rs) |
 | A unit struct and its method | Supported | 13 / 24 |  | A unit struct has no fields, so it needs no cells at all. | [struct_unit.rs](expressions/struct_unit.rs) |
 | Functional update, `P { x: 1, ..base }` | Supported | 32 / 32 |  |  | [struct_update.rs](expressions/struct_update.rs) |
@@ -426,7 +426,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Chained methods, `p.moved(1).moved(2).sum()` | Supported | 38 / 73 |  |  | [method_chained.rs](expressions/method_chained.rs) |
 | A trait object, `&dyn Trait`, chosen at run time | Supported | 45 / 56 |  | Dynamic dispatch needs a vtable and an indirect call, which CARDIAC can build as it builds an indexed read. | [method_dyn.rs](expressions/method_dyn.rs) |
 | An inherent method taking `&self` | Supported | 15 / 26 |  |  | [method_inherent.rs](expressions/method_inherent.rs) |
-| A method taking `&mut self` | Supported | 34 / 46 |  |  | [method_mut_self.rs](expressions/method_mut_self.rs) |
+| A method taking `&mut self` | Supported | 30 / 42 |  |  | [method_mut_self.rs](expressions/method_mut_self.rs) |
 | A trait method, two types implementing it | Supported | 56 / 77 |  |  | [method_trait.rs](expressions/method_trait.rs) |
 | A trait's default method calling a required one | Supported | 9 / 20 |  | At opt-level 1 rustc calls the default method with the struct by reference, which inherent methods already handle. | [method_trait_default.rs](expressions/method_trait_default.rs) |
 
@@ -436,7 +436,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 |---|---|---|---|---|---|
 | An array field, `s.t[i]` | Supported | 37 / 46 |  |  | [field_array.rs](expressions/field_array.rs) |
 | Nested field access, `a.b.c`, read and written | Supported | 13 / 25 |  |  | [field_nested.rs](expressions/field_nested.rs) |
-| A field read through `&mut` without `*`, `r.f` | Supported | 69 / 84 |  |  | [field_through_ref.rs](expressions/field_through_ref.rs) |
+| A field read through `&mut` without `*`, `r.f` | Supported | 65 / 80 |  |  | [field_through_ref.rs](expressions/field_through_ref.rs) |
 
 ### Closure expressions
 
@@ -600,7 +600,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Half-open `a..` in a `match` | Supported | 25 / 25 |  |  | [range_from.rs](patterns/range_from.rs) |
 | `a..=b` in a `match` | Supported | 32 / 32 |  |  | [range_inclusive.rs](patterns/range_inclusive.rs) |
 | `..=b` in a `match` | Supported | 24 / 24 |  |  | [range_to_inclusive.rs](patterns/range_to_inclusive.rs) |
-| Ranges on a `u8` (`b'0'..=b'9'`) | Supported | 54 / 54 |  |  | [range_u8.rs](patterns/range_u8.rs) |
+| Ranges on a `u8` (`b'0'..=b'9'`) | Supported | 50 / 50 |  |  | [range_u8.rs](patterns/range_u8.rs) |
 
 ### Reference patterns
 
@@ -625,7 +625,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Tuple struct pattern (`Pair(a, b)`) | Supported | 9 / 20 |  |  | [tuple_struct.rs](patterns/tuple_struct.rs) |
 | Tuple variant patterns (`Shape::Rect(w, h)`) | Supported | 61 / 73 |  | A wrong answer, and not from the pattern: an enum value built in an `#[inline(never)]` function from `inp()` can lose a field (`fn make() -> Option<i16> { Some(inp()) }` gives `Some(0)` for a card of 4); built from parameters it is right. | [tuple_struct_enum.rs](patterns/tuple_struct_enum.rs) |
 | A literal inside a variant (`Some(0)`) | Supported | 32 / 32 |  |  | [tuple_struct_literal.rs](patterns/tuple_struct_literal.rs) |
-| Nested tuple-struct patterns (`Some(Ok(x))`) | Supported | 58 / 80 |  |  | [tuple_struct_nested_option.rs](patterns/tuple_struct_nested_option.rs) |
+| Nested tuple-struct patterns (`Some(Ok(x))`) | Supported | 57 / 79 |  |  | [tuple_struct_nested_option.rs](patterns/tuple_struct_nested_option.rs) |
 
 ### Tuple patterns
 
@@ -666,7 +666,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 |---|---|---|---|---|---|
 | Or-pattern binding the same name (`(x, 0) \| (0, x)`) | Supported | 25 / 25 |  |  | [or_binding.rs](patterns/or_binding.rs) |
 | `1 \| 2 =>` | Supported | 30 / 30 |  |  | [or_ints.rs](patterns/or_ints.rs) |
-| Or-pattern in `let` (`let (Ok(x) \| Err(x)) = r;`) | Supported | 35 / 47 |  |  | [or_let.rs](patterns/or_let.rs) |
+| Or-pattern in `let` (`let (Ok(x) \| Err(x)) = r;`) | Supported | 34 / 46 |  |  | [or_let.rs](patterns/or_let.rs) |
 | Nested or-pattern (`Some(1 \| 2)`) | Supported | 41 / 41 |  |  | [or_nested.rs](patterns/or_nested.rs) |
 
 ## Statements
@@ -763,10 +763,10 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | A function taking and returning `i16`, not inlined | Supported | 26 / 37 |  |  | [fn_param_i16.rs](items/fn_param_i16.rs) |
 | A function taking and returning `u8`, not inlined | Supported | 49 / 46 |  |  | [fn_param_u8.rs](items/fn_param_u8.rs) |
 | A function taking and returning `usize`, not inlined | Supported | 27 / 34 |  |  | [fn_param_usize.rs](items/fn_param_usize.rs) |
-| A function pointer (`fn(i16) -> i16`) chosen at run time | Supported | 43 / 54 |  | A call through a cell holding an address can be built with self-modifying code, as variable indexing is. | [fn_pointer.rs](items/fn_pointer.rs) |
+| A function pointer (`fn(i16) -> i16`) chosen at run time | Supported | 42 / 53 |  | A call through a cell holding an address can be built with self-modifying code, as variable indexing is. | [fn_pointer.rs](items/fn_pointer.rs) |
 | Direct recursion (`fn sum(n) { n + sum(n - 1) }`) | Supported | 96 / 96 |  | CARDIAC has no stack and each function's locals and return address are fixed cells, so a recursive call needs a software stack of its own (an array and self-modifying loads); possible, but slow and costly in cells, and a loop does the same. | [fn_recursion_direct.rs](items/fn_recursion_direct.rs) |
 | Mutual recursion (`is_even` and `is_odd`) | Supported | 37 / 49 |  | As for direct recursion: it needs a software stack, since each function's cells are fixed. | [fn_recursion_mutual.rs](items/fn_recursion_mutual.rs) |
-| Tail recursion (`fn count(n, acc)`) | Supported | 28 / 45 |  | A call in tail position needs no stack: the compiler could turn it into a jump back to the start, as a loop. | [fn_recursion_tail.rs](items/fn_recursion_tail.rs) |
+| Tail recursion (`fn count(n, acc)`) | Supported | 28 / 42 |  | A call in tail position needs no stack: the compiler could turn it into a jump back to the start, as a loop. | [fn_recursion_tail.rs](items/fn_recursion_tail.rs) |
 | A tuple passed as a parameter | Supported | 15 / 26 |  |  | [fn_tuple_param.rs](items/fn_tuple_param.rs) |
 | Several results returned as a tuple | Supported | 87 / 87 |  |  | [fn_tuple_return.rs](items/fn_tuple_return.rs) |
 | A `where` clause on a generic function | Supported | 14 / 27 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [fn_where_clause.rs](items/fn_where_clause.rs) |
@@ -783,7 +783,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | An array of structs | Supported | 43 / 64 |  |  | [struct_array_of.rs](items/struct_array_of.rs) |
-| A generic struct (`struct Pair<T>`) at two types | Supported | 36 / 42 |  |  | [struct_generic.rs](items/struct_generic.rs) |
+| A generic struct (`struct Pair<T>`) at two types | Supported | 31 / 41 |  |  | [struct_generic.rs](items/struct_generic.rs) |
 | A struct with named fields, passed by value | Supported | 35 / 48 |  |  | [struct_named.rs](items/struct_named.rs) |
 | A struct inside a struct | Supported | 25 / 41 |  |  | [struct_nested.rs](items/struct_nested.rs) |
 | A newtype struct (`struct Cents(i16)`) | Supported | 15 / 26 |  |  | [struct_newtype.rs](items/struct_newtype.rs) |
@@ -799,7 +799,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | A C-like enum with given discriminants, cast with `as` | Supported | 26 / 26 |  |  | [enum_clike.rs](items/enum_clike.rs) |
 | An enum whose variants carry data, built from `inp()` in a function that returns it | Supported | 63 / 80 |  | A wrong answer: `Shape::Rect(inp(), inp())` returned from a function loses its second field (prints 3 for 3 - 4); with the fields read into locals first it is right. Even `fn read() -> Shape { Shape::Rect(inp(), inp()) }` alone gives 0, 0. | [enum_data.rs](items/enum_data.rs) |
 | An enum whose variants carry data, built from locals and passed to a function | Supported | 64 / 84 |  |  | [enum_data_locals.rs](items/enum_data_locals.rs) |
-| `==` on an enum with `#[derive(PartialEq)]` | Supported | 77 / 77 |  |  | [enum_derive_partialeq.rs](items/enum_derive_partialeq.rs) |
+| `==` on an enum with `#[derive(PartialEq)]` | Supported | 72 / 72 |  |  | [enum_derive_partialeq.rs](items/enum_derive_partialeq.rs) |
 | A generic enum of your own (`enum Maybe<T>`) | Supported | 37 / 37 |  | Once rustc fills in `T`, the layout is the same as a non-generic enum's, which already works. | [enum_generic.rs](items/enum_generic.rs) |
 | A recursive enum through `Box` | Refused |  | Never | `Box` needs a heap; this row uses a `&'static` link instead, the nearest a `no_std` program gets without an allocator. The compiler says: `RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now` | [enum_recursive_box.rs](items/enum_recursive_box.rs) |
 | A `#[repr(i16)]` C-like enum | Supported | 59 / 71 |  |  | [enum_repr_i16.rs](items/enum_repr_i16.rs) |
@@ -820,7 +820,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | A `const` from a `const fn` | Supported | 22 / 22 |  | rustc has already run the `const fn`; the compiler only has to read the array it made. | [const_from_const_fn.rs](items/const_from_const_fn.rs) |
 | A `const` past a card (`const BIG: i16 = 1500`) | Supported | 8 / 19 |  | Only `BIG / 10` (150) is used, and rustc works it out before the compiler sees it; `BIG` used at run time, as in `BIG / inp()`, is refused on purpose (RCE0009). | [const_past_card.rs](items/const_past_card.rs) |
 | A `const` scalar | Supported | 8 / 19 |  |  | [const_scalar.rs](items/const_scalar.rs) |
-| A `const` struct | Supported | 18 / 18 |  |  | [const_struct.rs](items/const_struct.rs) |
+| A `const` struct | Supported | 17 / 17 |  |  | [const_struct.rs](items/const_struct.rs) |
 
 ### Static items
 
@@ -835,7 +835,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | An associated `const` in a trait | Supported | 17 / 30 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [trait_assoc_const.rs](items/trait_assoc_const.rs) |
-| An associated type in a trait | Supported | 14 / 14 |  |  | [trait_assoc_type.rs](items/trait_assoc_type.rs) |
+| An associated type in a trait | Supported | 11 / 11 |  |  | [trait_assoc_type.rs](items/trait_assoc_type.rs) |
 | A blanket impl (`impl<T: A> B for T`) | Supported | 7 / 18 |  |  | [trait_blanket_impl.rs](items/trait_blanket_impl.rs) |
 | A trait's default method | Supported | 9 / 20 |  |  | [trait_default_method.rs](items/trait_default_method.rs) |
 | `#[derive(Clone, Copy)]` and `.clone()` | Supported | 9 / 21 |  |  | [trait_derive_clone_copy.rs](items/trait_derive_clone_copy.rs) |
@@ -846,8 +846,8 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Operator overloading: `core::ops::Add` on a struct | Supported | 17 / 30 |  |  | [trait_ops_add.rs](items/trait_ops_add.rs) |
 | `AddAssign` on a struct | Supported | 13 / 25 |  |  | [trait_ops_addassign_neg.rs](items/trait_ops_addassign_neg.rs) |
 | `Neg` on a struct | Supported | 14 / 14 |  |  | [trait_ops_neg.rs](items/trait_ops_neg.rs) |
-| `PartialEq` implemented by hand | Supported | 46 / 46 |  |  | [trait_partialeq_by_hand.rs](items/trait_partialeq_by_hand.rs) |
-| `PartialOrd` implemented by hand | Supported | 86 / 85 |  | `partial_cmp` returns `Option<Ordering>`, and rustc turns `<` into a three-way compare the compiler doesn't handle yet. | [trait_partialord_by_hand.rs](items/trait_partialord_by_hand.rs) |
+| `PartialEq` implemented by hand | Supported | 41 / 41 |  |  | [trait_partialeq_by_hand.rs](items/trait_partialeq_by_hand.rs) |
+| `PartialOrd` implemented by hand | Supported | 83 / 85 |  | `partial_cmp` returns `Option<Ordering>`, and rustc turns `<` into a three-way compare the compiler doesn't handle yet. | [trait_partialord_by_hand.rs](items/trait_partialord_by_hand.rs) |
 | A trait's associated function (no `self`): `T::zero()` | Supported | 25 / 36 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [trait_static_method.rs](items/trait_static_method.rs) |
 | A supertrait | Supported | 7 / 40 |  |  | [trait_supertrait.rs](items/trait_supertrait.rs) |
 
@@ -859,7 +859,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | A generic `impl<T>` block | Supported | 11 / 11 |  |  | [impl_generic.rs](items/impl_generic.rs) |
 | A method of a generic `impl<T>` block that stays a call | Supported | 41 / 41 |  | `#[inline(never)]` keeps the method a call at every opt-level, so `Pair<i16>` is a local of its own: each instance of a generic struct is laid out as a plain struct. | [impl_generic_call.rs](items/impl_generic_call.rs) |
 | A generic struct at two types | Supported | 40 / 40 |  | `Pair<i16>` and `Pair<bool>` are two structs, each with its own cells. | [impl_generic_two.rs](items/impl_generic_two.rs) |
-| A method taking `&mut self`, not inlined | Supported | 65 / 80 |  |  | [impl_mut_self.rs](items/impl_mut_self.rs) |
+| A method taking `&mut self`, not inlined | Supported | 61 / 76 |  |  | [impl_mut_self.rs](items/impl_mut_self.rs) |
 | An associated function `new()` and `Self` | Supported | 32 / 43 |  |  | [impl_new.rs](items/impl_new.rs) |
 | A method taking `&self`, not inlined | Supported | 19 / 30 |  |  | [impl_ref_self.rs](items/impl_ref_self.rs) |
 | A method taking `self` by value | Supported | 15 / 26 |  |  | [impl_self_value.rs](items/impl_self_value.rs) |
@@ -886,7 +886,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| An associated `const` in an inherent impl | Supported | 17 / 32 |  |  | [assoc_const_inherent.rs](items/assoc_const_inherent.rs) |
+| An associated `const` in an inherent impl | Supported | 13 / 28 |  |  | [assoc_const_inherent.rs](items/assoc_const_inherent.rs) |
 
 ## Attributes
 
@@ -1037,9 +1037,9 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 |---|---|---|---|---|---|
 | `cfg!(...)` as a condition | Supported | 8 / 19 |  |  | [cfg_macro.rs](macros/cfg_macro.rs) |
 | `compile_error!` stops the build (natively too) | Refused |  | Never | This row can't build anywhere: it shows rustc rejecting the program before the compiler sees it. The compiler says: `error: this row is meant not to build` | [compile_error_macro.rs](macros/compile_error_macro.rs) |
-| `concat!` and `stringify!`, measured with `.len()` | Supported | 10 / 26 |  | The compiler has no string data yet; the length of a literal is a constant it could fold. | [concat_stringify.rs](macros/concat_stringify.rs) |
+| `concat!` and `stringify!`, measured with `.len()` | Supported | 10 / 24 |  | The compiler has no string data yet; the length of a literal is a constant it could fold. | [concat_stringify.rs](macros/concat_stringify.rs) |
 | `option_env!` of an unset variable | Supported | 4 / 4 |  |  | [env_option.rs](macros/env_option.rs) |
-| `file!()` and `module_path!()`, measured with `.len()` | Supported | 11 / 25 |  | The compiler has no string data yet; the length of a literal is a constant it could fold. | [file_macro.rs](macros/file_macro.rs) |
+| `file!()` and `module_path!()`, measured with `.len()` | Supported | 9 / 23 |  | The compiler has no string data yet; the length of a literal is a constant it could fold. | [file_macro.rs](macros/file_macro.rs) |
 | `include!` of a Rust expression | Supported | 8 / 19 |  |  | [include_macro.rs](macros/include_macro.rs) |
 | `line!()` and `column!()` | Supported | 12 / 23 |  | The row prints the distance between two `line!()`s, since the harness's native copy has a longer prelude. | [line_column.rs](macros/line_column.rs) |
 | `matches!(x, pattern if guard)` on an `Option` | Supported | 22 / 22 |  |  | [matches_guard.rs](macros/matches_guard.rs) |
@@ -1084,7 +1084,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | `a.clamp(lo, hi)` on `i16` | Supported | 30 / 30 |  |  | [clamp_i16.rs](integers/clamp_i16.rs) |
-| `a.clamp(lo, hi)` with `lo > hi` panics | Supported | 25 / 25 |  |  | [clamp_panic_i16.rs](integers/clamp_panic_i16.rs) |
+| `a.clamp(lo, hi)` with `lo > hi` panics | Supported | 24 / 24 |  |  | [clamp_panic_i16.rs](integers/clamp_panic_i16.rs) |
 | `a.clamp(2, 200)` on `u8` | Supported | 42 / 42 |  |  | [clamp_u8.rs](integers/clamp_u8.rs) |
 | `core::cmp::min(a, b)` and `core::cmp::max(a, b)` on `i16` | Supported | 31 / 31 |  |  | [cmp_min_max_i16.rs](integers/cmp_min_max_i16.rs) |
 | `a.max(b)` on `i16` | Supported | 21 / 21 |  |  | [max_i16.rs](integers/max_i16.rs) |
@@ -1135,7 +1135,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `a.saturating_add(b)` on `i16`, on a card | Supported | 30 / 30 |  | Rust saturates at 32767, which no card holds, so past a card CARDIAC would print something else; on a card it is a plain add. | [saturating_add_i16.rs](integers/saturating_add_i16.rs) |
 | `a.saturating_add(b)` on `u8` | Supported | 60 / 60 |  | 255 fits on a card, so this is an add and a compare; rustc uses the `saturating_add` intrinsic, which the compiler doesn't know. | [saturating_add_u8.rs](integers/saturating_add_u8.rs) |
 | `a.saturating_mul(b)` on `i16`, on a card | Supported | 51 / 51 |  | As for `saturating_add`. At opt-level 2 the compiler crashes: rustc's inlined version picks between 32767 and -32768, and the compiler panics on a constant no card holds instead of refusing it. | [saturating_mul_i16.rs](integers/saturating_mul_i16.rs) |
-| `a.saturating_mul(b)` on `u8` | Supported | 69 / 69 |  | At opt-level 2 rustc's inlined version doesn't fit in the cells; a multiply and a compare would. | [saturating_mul_u8.rs](integers/saturating_mul_u8.rs) |
+| `a.saturating_mul(b)` on `u8` | Supported | 67 / 67 |  | At opt-level 2 rustc's inlined version doesn't fit in the cells; a multiply and a compare would. | [saturating_mul_u8.rs](integers/saturating_mul_u8.rs) |
 | `a.saturating_sub(b)` on `i16`, on a card | Supported | 30 / 30 |  | As for `saturating_add`: Rust's limit is -32768, which no card holds. | [saturating_sub_i16.rs](integers/saturating_sub_i16.rs) |
 | `a.saturating_sub(b)` on `u8` | Supported | 58 / 58 |  |  | [saturating_sub_u8.rs](integers/saturating_sub_u8.rs) |
 | `a.saturating_sub(b)` on `usize` | Supported | 32 / 32 |  |  | [saturating_sub_usize.rs](integers/saturating_sub_usize.rs) |
@@ -1216,7 +1216,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `i16::BITS`, `u8::BITS` and `usize::BITS` | Supported | 37 / 70 |  |  | [bits.rs](integers/bits.rs) |
+| `i16::BITS`, `u8::BITS` and `usize::BITS` | Supported | 33 / 66 |  |  | [bits.rs](integers/bits.rs) |
 | `i16::MAX` | Refused |  | Never | Refused on purpose (RCE0009), as other constants past a card are; comparing with one works. `i16::MAX` is 32767 in Rust, which no card holds; on CARDIAC an `i16` ends at 999. The compiler says: `RCE0009: constant out of range: i16::MAX (32767) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in ...` | [i16_max.rs](integers/i16_max.rs) |
 | `i16::MIN` | Refused |  | Never | Refused on purpose (RCE0009), as other constants past a card are; comparing with one works. `i16::MIN` is -32768 in Rust, which no card holds; on CARDIAC an `i16` ends at -999. The compiler says: `RCE0009: constant out of range: i16::MIN (-32768) is past what a card holds (-999 to 999): no i16 on a card reaches it, so code that uses it as a value (a saturating method, say) can't be compiled, in...` | [i16_min.rs](integers/i16_min.rs) |
 | `u8::MIN` and `u8::MAX` | Supported | 9 / 20 |  |  | [u8_min_max.rs](integers/u8_min_max.rs) |
@@ -1262,15 +1262,15 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `Result::and_then` | Supported | 47 / 58 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_and_then.rs](library/result_and_then.rs) |
-| `Result::expect` | Supported | 36 / 36 |  |  | [result_expect.rs](library/result_expect.rs) |
-| `Result::is_ok` and `is_err` | Supported | 41 / 41 |  |  | [result_is_ok.rs](library/result_is_ok.rs) |
-| `Result::map` | Supported | 38 / 49 |  |  | [result_map.rs](library/result_map.rs) |
-| `Result::map_err` | Supported | 35 / 56 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_map_err.rs](library/result_map_err.rs) |
-| `Result::ok` and `err` | Supported | 46 / 46 |  |  | [result_ok_err.rs](library/result_ok_err.rs) |
-| `?` converting the error with `From` | Supported | 58 / 90 |  | A wrong answer at opt-level 1: the error comes out unconverted, as if `From::from` weren't called (-3 where Rust prints -30). | [result_question_from.rs](library/result_question_from.rs) |
-| `Result::unwrap_or` | Supported | 35 / 35 |  |  | [result_unwrap_or.rs](library/result_unwrap_or.rs) |
-| `Result::unwrap_or_else` | Supported | 36 / 57 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_unwrap_or_else.rs](library/result_unwrap_or_else.rs) |
+| `Result::and_then` | Supported | 46 / 57 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_and_then.rs](library/result_and_then.rs) |
+| `Result::expect` | Supported | 35 / 35 |  |  | [result_expect.rs](library/result_expect.rs) |
+| `Result::is_ok` and `is_err` | Supported | 40 / 40 |  |  | [result_is_ok.rs](library/result_is_ok.rs) |
+| `Result::map` | Supported | 37 / 48 |  |  | [result_map.rs](library/result_map.rs) |
+| `Result::map_err` | Supported | 34 / 55 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_map_err.rs](library/result_map_err.rs) |
+| `Result::ok` and `err` | Supported | 45 / 45 |  |  | [result_ok_err.rs](library/result_ok_err.rs) |
+| `?` converting the error with `From` | Supported | 59 / 91 |  | A wrong answer at opt-level 1: the error comes out unconverted, as if `From::from` weren't called (-3 where Rust prints -30). | [result_question_from.rs](library/result_question_from.rs) |
+| `Result::unwrap_or` | Supported | 34 / 34 |  |  | [result_unwrap_or.rs](library/result_unwrap_or.rs) |
+| `Result::unwrap_or_else` | Supported | 35 / 56 |  | At opt-level 1 rustc calls it, as it does `map`, whose call the compiler already writes out. | [result_unwrap_or_else.rs](library/result_unwrap_or_else.rs) |
 
 ### Arrays and slices
 
@@ -1280,15 +1280,15 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `array.chunks(2)` | Supported | 74 / 84 |  | Each chunk is a slice in an `Option`, which the compiler doesn't have. | [array_chunks.rs](library/array_chunks.rs) |
 | `array.contains(&x)` | Supported | 45 / 45 |  | On an array of known length it is a short loop the compiler already writes for `for i in 0..N`. | [array_contains.rs](library/array_contains.rs) |
 | `slice.copy_from_slice(...)` | Supported | 68 / 68 |  | Subslices with run-time bounds need slices, which the compiler doesn't have. | [array_copy_from_slice.rs](library/array_copy_from_slice.rs) |
-| `==` between two arrays | Supported | 50 / 50 |  | Element by element, as `a[0] == b[0] && ...`; at opt-level 2 rustc compares the bytes as a `u64`, which the compiler would have to recognise. | [array_eq.rs](library/array_eq.rs) |
+| `==` between two arrays | Supported | 46 / 46 |  | Element by element, as `a[0] == b[0] && ...`; at opt-level 2 rustc compares the bytes as a `u64`, which the compiler would have to recognise. | [array_eq.rs](library/array_eq.rs) |
 | `array.fill(x)` | Supported | 33 / 33 |  | On an array of known length it is a short loop the compiler already writes for `for i in 0..N`. | [array_fill.rs](library/array_fill.rs) |
 | `array.first()` and `last()` | Supported | 20 / 20 |  | They return an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_first_last.rs](library/array_first_last.rs) |
 | `core::array::from_fn` | Supported | 74 / 85 |  |  | [array_from_fn.rs](library/array_from_fn.rs) |
 | `array.get(i)`, which returns an `Option` | Supported | 32 / 32 |  | It returns an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_get.rs](library/array_get.rs) |
-| `array.iter().all(...)` | Supported | 89 / 89 |  | The same loop as `for i in 0..N` with an early return. | [array_iter_all.rs](library/array_iter_all.rs) |
-| `array.iter().any(...)` | Supported | 88 / 88 |  | The same loop as `for i in 0..N` with an early return. | [array_iter_any.rs](library/array_iter_any.rs) |
+| `array.iter().all(...)` | Supported | 84 / 84 |  | The same loop as `for i in 0..N` with an early return. | [array_iter_all.rs](library/array_iter_all.rs) |
+| `array.iter().any(...)` | Supported | 83 / 83 |  | The same loop as `for i in 0..N` with an early return. | [array_iter_any.rs](library/array_iter_any.rs) |
 | `array.iter().filter(...).count()` | Supported | 38 / 38 |  | A `filter` adaptor over a slice iterator. | [array_iter_count.rs](library/array_iter_count.rs) |
-| `array.iter().find(...)` | Supported | 62 / 62 |  | It returns an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_iter_find.rs](library/array_iter_find.rs) |
+| `array.iter().find(...)` | Supported | 61 / 61 |  | It returns an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_iter_find.rs](library/array_iter_find.rs) |
 | `array.iter().fold(...)` | Supported | 41 / 65 |  | The same loop as `for i in 0..N` with the closure's body inside it. | [array_iter_fold.rs](library/array_iter_fold.rs) |
 | `array.iter().max()` | Supported | 54 / 54 |  | It returns an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_iter_max.rs](library/array_iter_max.rs) |
 | `array.iter().min()` | Supported | 53 / 53 |  | It returns an `Option<&i16>`, and an enum's fields must be scalars for now. | [array_iter_min.rs](library/array_iter_min.rs) |
@@ -1317,7 +1317,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `(a..b).fold(...)` | Supported | 31 / 47 |  |  | [iter_range_fold.rs](library/iter_range_fold.rs) |
 | `(a..b).last()` | Supported | 16 / 16 |  | On a range it is `b - 1`, or `None` when the range is empty. | [iter_range_last.rs](library/iter_range_last.rs) |
 | `(a..b).map(...).sum()` | Supported | 32 / 36 |  |  | [iter_range_map_sum.rs](library/iter_range_map_sum.rs) |
-| `(a..b).nth(n)` | Supported | 34 / 34 |  | On a range it is `a + n`, or `None` past the end. | [iter_range_nth.rs](library/iter_range_nth.rs) |
+| `(a..b).nth(n)` | Supported | 32 / 32 |  | On a range it is `a + n`, or `None` past the end. | [iter_range_nth.rs](library/iter_range_nth.rs) |
 | `core::iter::repeat(x).take(n)` | Supported | 34 / 34 |  |  | [iter_repeat.rs](library/iter_repeat.rs) |
 | `t.iter().rev().fold(...)` | Supported | 27 / 52 |  |  | [iter_rev_fold.rs](library/iter_rev_fold.rs) |
 | `(a..b).skip(n)` | Supported | 40 / 40 |  |  | [iter_skip.rs](library/iter_skip.rs) |

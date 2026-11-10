@@ -54,7 +54,8 @@ answer, but has a cheaper way when the cells or the time matter. **Refused** sto
 **Works well**
 
 - `+`, `-`, unary `-`, and comparisons.
-- `*` by a constant (adds and decimal shifts), and `/` and `%` by a power of ten (shifts).
+- `*` by a constant (adds and decimal shifts; 7, 8 and 9 are ten times less the rest), and `/` and `%` by a power of
+  ten (shifts).
 - `!` on integers, and `<<` and `>>` by a constant.
 - `digit(v, k)` for one digit of a number, and `add_times(c, n)` for `n * c` by additions (n 0..=99).
 - `x & m` for a mask m one below a power of two: `x & 3` is `x.rem_euclid(4)`, a subtracting loop.

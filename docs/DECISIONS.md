@@ -4,6 +4,60 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-09 · Checks of one index one after another are one check, and a table of constants has a range
+
+- **Decision.** Several passes, each for code the tables-by-tens tip's programs showed, and each keeping every
+  check that could fail, and failing on the same inputs with the same message:
+  - `blocks::merged_checks`, after the merges of repeated work: where `assert(r < 6)` is followed, through blocks
+    with one way in each, with no call and no other check that could fail first with another message, by checks of
+    `r + 1 < 6` and `r + 2 < 6`, the first becomes `r < 4` and the rest gotos (#7). Once r is on a card, `r + k < N`
+    holds exactly when `r < N - k`, so the program panics on the same inputs; a bounds check of another index may
+    come between, as it fails with the same message, and so may the overflow check of `r + k`, which can't fail once
+    r is below N.
+  - The range pass narrows after a passed check whose bool is copied, `assert(copy _20)`, as after a moved one
+    (#11), and `blocks::repeated_checks` takes an overflow check's flag asserted again (`!copy (_34.1: bool)`) for
+    the check it repeats. And an array set once from constants, and otherwise written only by element with
+    constants, has the range of those constants for every element read (`ranges::constant_tables`, #10), so
+    `b[s] + b[s + 10] + b[s + 20]` on a board of -1, 0 and 1 needs no overflow checks.
+  - `nested::folded` folds `t[r + 1][c + 2]` where a bounds check of r (`r < N`) passed on the way to `r + 1`, though
+    r came from `inp() as usize` without overflow checks (#8), and takes the constant on either side, `9 + s`; and
+    `nested::list_offsets` does the same for a plain array: `t[9 + s]` is `t[s]` with 9 in the instruction's address,
+    `9 + s` worked out only for rustc's check (#14).
+  - `x * 9` is `CLA x / SFT 10 / SUB x`, and 7 and 8 the same way (#12): ten times a card is four digits at most,
+    which the accumulator holds.
+  - Peephole rule 13: `INP a / CLA a / STO b`, a named nowhere else, is `INP b / CLA b`, as `let r = inp() as
+    usize` reads a card (#6). Rules 14 and 15: an arm that stores its value and jumps to `OUT y / HRS 00` outputs
+    its own value and stops (#13).
+- **Why.** The tip's programs written in Rust were two to three times the size of the ones written by hand, and these
+  were the parts of that a compiler can do something about without dropping a check that could fail.
+- **Cost.** Cells at opt-level 2, without overflow checks and then with them (opt-level 1 gives the same), against
+  the tip's programs written by hand, before #1, after #1, and now. Instructions are the program's own, for the
+  page's input, where the program fits.
+
+  | Program | By hand | Before #1 | After #1 | Now |
+  |---|---|---|---|---|
+  | Minesweeper, edges tested with `min`/`max` | about 114, doesn't fit | 156, 172 | 146, 163 | 146, 163 |
+  | Minesweeper, declared border, 3 by 3 loop | 88 cells, 105 instructions | refused | 149, 172 | 147, 172 |
+  | Minesweeper, declared border, eight neighbours | (the same) | refused | 175, 215 | 127, 156 |
+  | Minesweeper, the square as one number | 78 cells, 96 instructions | refused | 144, 175 | 143, 174 |
+  | Tic-tac-toe, C-style, 27 squares | 75 cells, 37 instructions | (not measured) | 122, 165 | 98, 125 |
+  | Tic-tac-toe, a layer to a row | 60 cells, 23 instructions | (not measured) | 87/44, 105 | 82/39, 84/40 |
+  | Tic-tac-toe, the move as one number | 57 cells, 21 instructions | (not measured) | 91/48, 109 | 88/45, 90/46 |
+
+  The two tic-tac-toe versions by tens now fit with overflow checks on as well, and match native Rust on random
+  moves, on the board and off it (tests/fuzz). No Minesweeper version fits yet; the closest, the eight neighbours, is 31 cells over.
+- **What is left.** The rest of the difference from the programs written by hand is Rust's own checks and the
+  code the compiler makes for loops; the layout is the hand-written one. The hand-written programs trust their
+  input and have no checks; each Rust version keeps a bounds check for each index (5 cells), and a test of its sign
+  where it comes from `inp() as usize` (2 more). The eight-neighbour count reads its neighbours one after another,
+  6 cells each, where the page walks a table of offsets in a loop of 13. And a `for` over `r..r + 3`, where r may be
+  a usize past a card, compares two values that may both be past a card on each pass, about 10 cells a loop, and
+  keeps the checks of `i < 6` and `j < 8` inside it. The 3 by 3 version's main is 85 cells against about 25 by
+  hand. (#5)
+- **Evidence.** The test suites, the examples and the support matrix at every setting; the fuzzer's programs,
+  with new ones for the neighbours of a square and for both tic-tac-toe versions that fit, 200 runs each in all
+  eight settings; and 60 generated programs, 40 runs each.
+
 ## 2026-11-09 · An array of arrays is laid out by tens where it fits, with the program's other cells in its holes
 
 - **Decision.** `nested::arrays_of_arrays` lays a `[[T; W]; H]` of scalars out by tens when W is 2 to 9 and H is

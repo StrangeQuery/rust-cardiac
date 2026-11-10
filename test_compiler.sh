@@ -213,15 +213,20 @@ exit 101" ] && echo "MATCH  ${r%%:*}: panicked, ${r#*:}" || { echo "DIFFER ${r%%
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/usize_below.rs)
   [ "$out" = "1,11,-1,-999" ] && echo "MATCH  usize_below: $out" || { echo "DIFFER usize_below: $out"; exit 1; }
 done
-# The Minesweeper count of the tables-by-tens tip on its board of 4 rows by 6, four ways (minesweeper_*.rs): none
-# fits in CARDIAC's memory yet, by tens or row after row. Each must take no more cells than it does now, as a
-# release build compiles it; one that fits is to be run against native Rust for every square instead.
-for want in minesweeper_edges:146 minesweeper_border:149 minesweeper_neighbours:175 minesweeper_number:144; do
-  n=${want%%:*}
-  said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
-  got=$(echo "$said" | sed -n 's/.*: \([0-9]*\) cells, more than.*/\1/p')
-  if [ -n "$got" ] && [ "$got" -le "${want#*:}" ]; then echo "MATCH  $n: $got cells, no more than ${want#*:}"
-  else echo "DIFFER $n: $said, not ${want#*:} cells or fewer, too big"; exit 1; fi
+# The tables-by-tens tip's programs in Rust: its Minesweeper count on a board of 4 rows by 6, four ways
+# (minesweeper_*.rs), none of which fits in CARDIAC's memory yet, and its 3D tic-tac-toe, three ways
+# (tictactoe_*.rs), of which the layer-to-a-row ones fit (tests/fuzz runs them against native Rust on every move).
+# Each must take no more cells than it does now, without overflow checks and with them, at opt-level 2.
+for want in minesweeper_edges:146:163 minesweeper_border:147:172 minesweeper_neighbours:127:156 \
+    minesweeper_number:143:174 tictactoe_packed:98:125 tictactoe_tens:82:84 tictactoe_number:88:90; do
+  n=${want%%:*}; limits=${want#*:}
+  for checks in off on; do
+    if [ $checks = off ]; then most=${limits%%:*}; else most=${limits#*:}; fi
+    said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=$checks tests/programs/$n.rs 2>&1)
+    got=$(echo "$said" | sed -n 's/.* \([0-9]*\) cells.*/\1/p' | head -1)
+    if [ -n "$got" ] && [ "$got" -le "$most" ]; then echo "MATCH  $n, overflow checks $checks: $got cells, no more than $most"
+    else echo "DIFFER $n, overflow checks $checks: $said, not $most cells or fewer"; exit 1; fi
+  done
 done
 # what skip_cards() and add_times() cost: one call each, for n = 0, 1, 9, 10, 37 and the largest n, the
 # result and the instructions the whole run takes (the loader's and main's are the same for every n). add_times is
