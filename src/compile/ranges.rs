@@ -818,10 +818,14 @@ impl Pass<'_> {
                         }
                     } else if let (true, Some(ra), Some(rc)) = (
                         // x op y, two cards: each is bounded by the other's range on each way (`end >= start`, start
-                        // 0 or more, is end 0 or more)
+                        // 0 or more, is end 0 or more); a usize too, where it can't be past a card (`i < r + 3` in a
+                        // loop over a range)
                         [a, c].iter().all(|o| {
-                            o.local()
-                                .is_some_and(|l| matches!(self.locals.get(&l), Some(Ty::Int(IntTy::I16 | IntTy::U8))))
+                            o.local().is_some_and(|l| match self.locals.get(&l) {
+                                Some(Ty::Int(IntTy::I16 | IntTy::U8)) => true,
+                                Some(Ty::Int(IntTy::Usize)) => !self.huge.contains(&l),
+                                _ => false,
+                            })
                         }),
                         self.val(&facts, a),
                         self.val(&facts, c),
@@ -893,7 +897,7 @@ impl Pass<'_> {
 /// The arrays set once, whole, from integer constants (`[0, 1, 4, 9]`, `[0; 8]`), and otherwise only by element to
 /// an integer constant (`b[i] = 1`): not by a call, not a parameter (nothing sets one in the body), and with no
 /// address taken. Every element read is then one of those constants: the range from the least to the greatest.
-fn constant_tables(blocks: &[Block], taken: &HashSet<Local>) -> HashMap<Local, Range> {
+pub fn constant_tables(blocks: &[Block], taken: &HashSet<Local>) -> HashMap<Local, Range> {
     // for each array: its whole sets, and its element sets, each the range of its constants (none: not constants)
     let mut whole: HashMap<Local, Vec<Option<Range>>> = HashMap::new();
     let mut elements: HashMap<Local, Vec<Option<Range>>> = HashMap::new();
@@ -953,7 +957,7 @@ fn constant_tables(blocks: &[Block], taken: &HashSet<Local>) -> HashMap<Local, R
 }
 
 /// The locals whose address is taken as a whole or at an index: `&x`, `&mut x`, `&raw mut x[0 of 1]`.
-fn taken_locals(blocks: &[Block]) -> HashSet<Local> {
+pub fn taken_locals(blocks: &[Block]) -> HashSet<Local> {
     let mut taken = HashSet::new();
     for b in blocks {
         for s in &b.statements {
@@ -1004,8 +1008,12 @@ fn unread_pairs(blocks: &[Block], locals: &HashMap<Local, Ty>, taken: &HashSet<L
 /// plain sums, differences and products (and linear combinations) it finds stay on a card, each written once in
 /// the function: `past_a_card` takes their word, as by lowering the facts that showed it may be gone (an
 /// `assert_unchecked` promise, say).
-pub fn range_pass(blocks: &mut [Block], locals: &HashMap<Local, Ty>) -> Result<(usize, HashSet<Statement>), Fail> {
-    let (dropped, judged) = analyse(blocks, locals, false)?;
+pub fn range_pass(
+    blocks: &mut [Block],
+    locals: &HashMap<Local, Ty>,
+    promised: &HashSet<Local>,
+) -> Result<(usize, HashSet<Statement>), Fail> {
+    let (dropped, judged) = analyse(blocks, locals, promised, false)?;
     Ok((dropped, on_a_card(&judged)))
 }
 
@@ -1032,9 +1040,10 @@ pub fn past_a_card(
     blocks: &[Block],
     locals: &HashMap<Local, Ty>,
     on_card: &HashSet<Statement>,
+    promised: &HashSet<Local>,
 ) -> HashSet<(BasicBlock, usize)> {
     let mut copy = blocks.to_vec();
-    let past: HashSet<(BasicBlock, usize)> = match analyse(&mut copy, locals, true) {
+    let past: HashSet<(BasicBlock, usize)> = match analyse(&mut copy, locals, promised, true) {
         Ok((_, judged)) => {
             // (one the range pass found stays on a card, written once then and once now)
             let now = on_a_card(&judged.iter().map(|(b, i, s, _)| (*b, *i, s.clone(), false)).collect::<Vec<_>>());
@@ -1082,6 +1091,7 @@ pub fn past_a_card(
 fn analyse(
     blocks: &mut [Block],
     locals: &HashMap<Local, Ty>,
+    promised: &HashSet<Local>,
     record: bool,
 ) -> Result<(usize, Vec<(BasicBlock, usize, Statement, bool)>), Fail> {
     let taken = taken_locals(blocks);
@@ -1249,7 +1259,8 @@ fn analyse(
     let mut wraps: HashSet<Local> = HashSet::new();
     let mut last_in: HashMap<BasicBlock, Option<Facts>>;
     loop {
-        pass.huge = huge_usizes(blocks, locals, &HashSet::new(), Some(&wraps));
+        // (a usize a promise keeps on a card is none: `blocks::promised_cards`)
+        pass.huge = huge_usizes(blocks, locals, promised, Some(&wraps));
         out.clear();
         last_in = HashMap::new();
         for iter in 0..40 {
@@ -1483,6 +1494,6 @@ mod tests {
         );
         let locals: HashMap<Local, Ty> = body.decls.iter().map(|d| (d.local, d.ty.clone())).collect();
         let mut blocks = body.blocks;
-        assert_eq!(range_pass(&mut blocks, &locals).map(|r| r.0), Ok(0));
+        assert_eq!(range_pass(&mut blocks, &locals, &HashSet::new()).map(|r| r.0), Ok(0));
     }
 }

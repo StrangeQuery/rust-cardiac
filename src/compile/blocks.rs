@@ -334,14 +334,23 @@ pub fn bools_on_edges(blocks: &mut Vec<ir::Block>, threaded_only: bool) {
 /// Dead statements: a local assigned by statements and read by nothing but its own assignments is not worked out
 /// at all. Runs to a fixed point (removing one can leave another unread); each round counts the uses as they were
 /// when it began. The result, and a struct result's fields, are read by the caller.
+/// The local a place is one field of, `(_26.0: usize)`.
+fn field_of(p: &ir::Place) -> Option<ir::Local> {
+    match p.projection.as_slice() {
+        [ir::Projection::Field(..)] => p.base_local(),
+        _ => None,
+    }
+}
+
 pub fn dead_code(blocks: &mut [ir::Block], results: &HashSet<ir::Local>) {
     loop {
         // the lines that name each local, other than a statement assigning the whole of it
         let mut reading: HashMap<ir::Local, usize> = HashMap::new();
         for b in blocks.iter() {
             for line in b.each_line() {
+                // (a field of one too, `(_26.0: usize) = ...`, as the range pass leaves a checked op it proved)
                 let assigned = match line {
-                    Line::Statement(ir::Statement::Assign(p, _)) => p.as_local(),
+                    Line::Statement(ir::Statement::Assign(p, _)) => p.as_local().or_else(|| field_of(p)),
                     _ => None,
                 };
                 for l in line.locals().into_iter().collect::<HashSet<_>>() {
@@ -355,7 +364,9 @@ pub fn dead_code(blocks: &mut [ir::Block], results: &HashSet<ir::Local>) {
         for b in blocks.iter_mut() {
             b.statements.retain(|s| {
                 let ir::Statement::Assign(p, _) = s else { return true };
-                let Some(l) = p.as_local() else { return true };
+                let Some(l) = p.as_local().or_else(|| field_of(p)) else {
+                    return true;
+                };
                 let dead =
                     l != ir::Local(0) && l != ir::Local::UNIT && !results.contains(&l) && !reading.contains_key(&l);
                 changed |= dead;
@@ -545,6 +556,332 @@ pub fn merged_checks(blocks: &mut [ir::Block]) {
                 blocks[j].terminator = Terminator::Goto(*target);
             }
         }
+    }
+}
+
+/// The usizes a promise keeps on a card: x set once, `assume(x < k)` (k on a card) made on every way from there to
+/// any use of x that could be seen. With a promise of x's one value, x is never a usize past a card where the program
+/// means anything (where it isn't, the program is undefined), so lowering needs no test of its sign. Where x is read
+/// before the promise, only by statements (which compute, and show nothing), the promise covers those too, since x
+/// never changes; a branch, check or call on x, or on what is worked out from it, before the promise is not
+/// covered, as the program could stop there without making it.
+pub fn promised_cards(blocks: &[ir::Block]) -> HashSet<ir::Local> {
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let local = |o: &ir::Operand| match o {
+        ir::Operand::Copy(p) | ir::Operand::Move(p) => p.as_local(),
+        _ => None,
+    };
+    let card =
+        |o: &ir::Operand| matches!(o, ir::Operand::Constant(ir::Const::Int { value, .. }) if (0..=999).contains(value));
+    let mut defs: HashMap<ir::Local, usize> = HashMap::new();
+    for b in blocks {
+        for s in &b.statements {
+            if let Statement::Assign(d, _) = s {
+                *defs.entry(d.base_local().unwrap()).or_default() += 1;
+            }
+        }
+        if let Terminator::Call { dest, .. } = &b.terminator {
+            *defs.entry(dest.base_local().unwrap()).or_default() += 1;
+        }
+    }
+    // each promise: its block, the bool it promises, and how many of the block's lines come before it (an assert
+    // that the promise has become, after them all; or still the `assume` statement rustc wrote, as `nested` sees it)
+    let mut sites: Vec<(usize, &ir::Operand, usize)> = vec![];
+    for (pi, b) in blocks.iter().enumerate() {
+        if let Terminator::Assert {
+            cond,
+            expected: true,
+            msg,
+            ..
+        } = &b.terminator
+        {
+            if msg == "assumed" {
+                sites.push((pi, cond, b.statements.len()));
+            }
+        }
+        for (k, st) in b.statements.iter().enumerate() {
+            if let Statement::Assume(cond) = st {
+                sites.push((pi, cond, k));
+            }
+        }
+    }
+    let mut out = HashSet::new();
+    for (pi, cond, end) in sites {
+        let b = &blocks[pi];
+        let Some(v) = local(cond) else { continue };
+        // the comparison promised: `y < k`, `y <= k`, `k > y` or `k >= y`, y a copy of x or x itself
+        let def_of = |l: ir::Local| {
+            b.statements[..end].iter().rev().find_map(|s| match s {
+                Statement::Assign(d, rv) if d.as_local() == Some(l) => Some(rv),
+                _ => None,
+            })
+        };
+        let bound = |k: &ir::Operand| match k {
+            ir::Operand::Constant(ir::Const::Int { value, .. }) if (0..=999).contains(value) => Some(*value),
+            _ => None,
+        };
+        let (y, k) = match def_of(v) {
+            Some(Rvalue::BinaryOp(ir::BinOp::Lt | ir::BinOp::Le, a, k)) if card(k) => (local(a), bound(k)),
+            Some(Rvalue::BinaryOp(ir::BinOp::Gt | ir::BinOp::Ge, k, a)) if card(k) => (local(a), bound(k)),
+            _ => (None, None),
+        };
+        let (Some(y), Some(k)) = (y, k) else { continue };
+        // y a copy of x, or x itself, or x / d (`n / 10 < 3`: n is below 30, so on a card), where the promised
+        // quotient bound times d stays on a card
+        let x = match def_of(y) {
+            Some(Rvalue::Use(o)) => local(o).unwrap_or(y),
+            Some(Rvalue::BinaryOp(ir::BinOp::Div, a, d)) => match (local(a), bound(d)) {
+                (Some(a), Some(d)) if d >= 1 && (k + 1) * d <= 1000 => a,
+                _ => continue,
+            },
+            _ => y,
+        };
+        if defs.get(&x) != Some(&1) {
+            continue;
+        }
+        // the blocks reached from the entry without passing the promise's block, and what is worked out from x
+        // there: none of it may be read by a terminator
+        let mut seen: HashSet<usize> = HashSet::new();
+        let mut todo = vec![0usize];
+        while let Some(i) = todo.pop() {
+            if i == pi || !seen.insert(i) {
+                continue;
+            }
+            todo.extend(
+                blocks[i]
+                    .terminator
+                    .successors()
+                    .iter()
+                    .filter_map(|n| at.get(n).copied()),
+            );
+        }
+        let mut tainted: HashSet<ir::Local> = HashSet::from([x]);
+        loop {
+            let before = tainted.len();
+            for &i in &seen {
+                for s in &blocks[i].statements {
+                    if let Statement::Assign(d, _) = s {
+                        if tainted.iter().any(|t| s.count(*t) > 0) {
+                            tainted.extend(d.base_local());
+                        }
+                    }
+                }
+            }
+            if tainted.len() == before {
+                break;
+            }
+        }
+        // (another promise reads it as it likes: it is no code, and shows nothing)
+        let shows = |t: &Terminator| !matches!(t, Terminator::Assert { msg, .. } if msg == "assumed");
+        if !seen
+            .iter()
+            .any(|&i| shows(&blocks[i].terminator) && tainted.iter().any(|t| blocks[i].terminator.count(*t) > 0))
+        {
+            out.insert(x);
+        }
+    }
+    out
+}
+
+thread_local! {
+    /// Whether `reroll_reads` is on: only in a compile that didn't fit without it (see `compile_mir`), since the
+    /// loop it makes is smaller but slower.
+    pub static REROLL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// A sum of reads of one array a constant apart, `t1 = copy a[x]; t2 = t1 + a[x + 1]; ...; t8 = t7 + a[x + 22]`, as
+/// the eight neighbours of a square make it: a loop over a table of the offsets, as a program for CARDIAC written by
+/// hand walks one. Only six reads or more (fewer cost less written out), of an array that only ever holds constants
+/// (`ranges::constant_tables`) whose sum can't pass a card, so each partial sum is the same either way; each sum but
+/// the last read once, by the next. The offsets' table is a constant array, so its cells are its initial values.
+pub fn reroll_reads(blocks: &mut Vec<ir::Block>, locals: &mut crate::compile::util::Ordered<ir::Local, ir::Ty>) {
+    use ir::{ArrayLen, BinOp, Const, IntTy, Local, Operand, Place, PlaceBase, Projection, Ty};
+    if !REROLL.with(|r| r.get()) {
+        return;
+    }
+    let tables = super::ranges::constant_tables(blocks, &super::ranges::taken_locals(blocks));
+    let mut next_local = locals.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+    let mut next_block = blocks.iter().map(|b| b.name.0).max().unwrap_or(0).max(850_000) + 1;
+    let mut fresh = |locals: &mut crate::compile::util::Ordered<Local, Ty>, ty: Ty| {
+        let l = Local(next_local);
+        next_local += 1;
+        locals.set(l, ty);
+        l
+    };
+    let reads = |blocks: &[ir::Block], l: Local| -> usize {
+        blocks
+            .iter()
+            .map(|b| b.statements.iter().map(|s| s.count(l)).sum::<usize>() + b.terminator.count(l))
+            .sum()
+    };
+    // an element read `copy a[x]` or `copy a[x+k]`: the array, x and k
+    let element = |o: &Operand| -> Option<(Local, Local, u32)> {
+        let (Operand::Copy(p) | Operand::Move(p)) = o else {
+            return None;
+        };
+        match (p.base_local(), p.projection.as_slice()) {
+            (Some(a), [Projection::Index(x)]) => Some((a, *x, 0)),
+            (Some(a), [Projection::IndexPlus(x, k)]) => Some((a, *x, *k)),
+            _ => None,
+        }
+    };
+    let mut bi = 0;
+    while bi < blocks.len() {
+        let mut found: Option<(usize, usize, Local, Local, Vec<u32>, Local)> = None;
+        // the sum as one linear combination, `Lin(+1*copy a[x], +1*copy _24, ...)`, each term a read or a local set
+        // from one (read nowhere else) earlier in the block: those lines go, and the sum is the line it is on
+        for li in 0..blocks[bi].statements.len() {
+            let Statement::Assign(d, Rvalue::Lin(terms)) = &blocks[bi].statements[li] else {
+                continue;
+            };
+            let Some(last) = d.as_local() else { continue };
+            let mut gone: Vec<usize> = vec![];
+            let mut offsets = vec![];
+            let mut array: Option<(Local, Local)> = None;
+            let mut fine = terms.len() >= 6;
+            for (c, o) in terms {
+                let read = element(o).map(|r| (r, None)).or_else(|| {
+                    let u = o.local()?;
+                    let at = blocks[bi].statements[..li]
+                        .iter()
+                        .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(u)))?;
+                    let Statement::Assign(_, Rvalue::Use(e)) = &blocks[bi].statements[at] else {
+                        return None;
+                    };
+                    (reads(blocks, u) == 2).then_some(())?;
+                    element(e).map(|r| (r, Some(at)))
+                });
+                let Some(((a, x, k), at)) = read.filter(|_| *c == 1) else {
+                    fine = false;
+                    break;
+                };
+                if array.is_some_and(|ax| ax != (a, x)) || x == last {
+                    fine = false;
+                    break;
+                }
+                array = Some((a, x));
+                offsets.push(k);
+                gone.extend(at);
+            }
+            let Some((a, x)) = array.filter(|_| fine) else { continue };
+            // (x unset between the reads that go and the sum)
+            let first = gone.iter().copied().min().unwrap_or(li);
+            let unset = !blocks[bi].statements[first..li]
+                .iter()
+                .any(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(x)));
+            let n = offsets.len() as i64;
+            let Some(r) = tables.get(&a) else { continue };
+            if unset
+                && r[0].abs().max(r[1].abs()).saturating_mul(n) <= 999
+                && matches!(locals.get(&last), Some(Ty::Int(IntTy::I16)))
+            {
+                gone.sort_unstable();
+                for at in gone.iter().rev() {
+                    blocks[bi].statements.remove(*at);
+                }
+                let li = li - gone.len();
+                found = Some((li, li + 1, a, x, offsets, last));
+                break;
+            }
+        }
+        'search: for s0 in 0..blocks[bi].statements.len() {
+            if found.is_some() {
+                break;
+            }
+            let Statement::Assign(d0, Rvalue::Use(o0)) = &blocks[bi].statements[s0] else {
+                continue;
+            };
+            let (Some(t0), Some((a, x, k0))) = (d0.as_local(), element(o0)) else {
+                continue;
+            };
+            let Some(r) = tables.get(&a) else { continue };
+            let mut offsets = vec![k0];
+            let mut last = t0;
+            let mut end = s0 + 1;
+            while let Some(Statement::Assign(d, Rvalue::BinaryOp(BinOp::Add, p, q))) = blocks[bi].statements.get(end) {
+                let (Some(t), Some((a2, x2, k))) = (d.as_local(), element(q)) else {
+                    break;
+                };
+                if p.local() != Some(last) || a2 != a || x2 != x || t == x || reads(blocks, last) != 2 {
+                    break;
+                }
+                offsets.push(k);
+                last = t;
+                end += 1;
+            }
+            let n = offsets.len() as i64;
+            let fits = r[0].abs().max(r[1].abs()).saturating_mul(n) <= 999;
+            if n >= 6 && fits && matches!(locals.get(&last), Some(Ty::Int(IntTy::I16))) {
+                found = Some((s0, end, a, x, offsets, last));
+                break 'search;
+            }
+        }
+        let Some((s0, end, a, x, offsets, last)) = found else {
+            bi += 1;
+            continue;
+        };
+        let n = offsets.len();
+        let usize_ty = Ty::Int(IntTy::Usize);
+        let table = fresh(locals, Ty::Array(Box::new(usize_ty.clone()), ArrayLen::Known(n as u64)));
+        let (acc, q) = (fresh(locals, Ty::Int(IntTy::I16)), fresh(locals, usize_ty.clone()));
+        let (w, idx, e) = (
+            fresh(locals, usize_ty.clone()),
+            fresh(locals, usize_ty.clone()),
+            fresh(locals, Ty::Int(IntTy::I16)),
+        );
+        let more = fresh(locals, Ty::Bool);
+        let (body, after) = (ir::BasicBlock(next_block), ir::BasicBlock(next_block + 1));
+        next_block += 2;
+        let k = |v: i128, ty: IntTy| Operand::Constant(Const::Int { value: v, ty });
+        let copy = |l: Local| Operand::Copy(Place::local(l));
+        let at = |arr: Local, i: Local| Place {
+            base: PlaceBase::Local(arr),
+            projection: vec![Projection::Index(i)],
+        };
+        let b = &mut blocks[bi];
+        let rest: Vec<Statement> = b.statements.split_off(end);
+        b.statements.truncate(s0);
+        b.statements.push(Statement::Assign(
+            Place::local(table),
+            Rvalue::Array(offsets.iter().map(|o| k(*o as i128, IntTy::Usize)).collect()),
+        ));
+        b.statements
+            .push(Statement::Assign(Place::local(acc), Rvalue::Use(k(0, IntTy::I16))));
+        b.statements
+            .push(Statement::Assign(Place::local(q), Rvalue::Use(k(0, IntTy::Usize))));
+        let terminator = std::mem::replace(&mut b.terminator, Terminator::Goto(body));
+        let looped = ir::Block {
+            name: body,
+            statements: vec![
+                Statement::Assign(Place::local(w), Rvalue::Use(Operand::Copy(at(table, q)))),
+                Statement::Assign(Place::local(idx), Rvalue::BinaryOp(BinOp::Add, copy(x), copy(w))),
+                Statement::Assign(Place::local(e), Rvalue::Use(Operand::Copy(at(a, idx)))),
+                Statement::Assign(Place::local(acc), Rvalue::BinaryOp(BinOp::Add, copy(acc), copy(e))),
+                Statement::Assign(
+                    Place::local(q),
+                    Rvalue::BinaryOp(BinOp::Add, copy(q), k(1, IntTy::Usize)),
+                ),
+                Statement::Assign(
+                    Place::local(more),
+                    Rvalue::BinaryOp(BinOp::Lt, copy(q), k(n as i128, IntTy::Usize)),
+                ),
+            ],
+            terminator: Terminator::SwitchInt {
+                discr: Operand::Move(Place::local(more)),
+                arms: vec![(0, after)],
+                otherwise: Some(body),
+            },
+        };
+        let mut tail = vec![Statement::Assign(Place::local(last), Rvalue::Use(copy(acc)))];
+        tail.extend(rest);
+        let done = ir::Block {
+            name: after,
+            statements: tail,
+            terminator,
+        };
+        blocks.insert(bi + 1, looped);
+        blocks.insert(bi + 2, done);
+        bi += 3;
     }
 }
 

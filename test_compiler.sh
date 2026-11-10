@@ -215,10 +215,15 @@ exit 101" ] && echo "MATCH  ${r%%:*}: panicked, ${r#*:}" || { echo "DIFFER ${r%%
 done
 # The tables-by-tens tip's programs in Rust: its Minesweeper count on a board of 4 rows by 6, four ways
 # (minesweeper_*.rs), none of which fits in CARDIAC's memory yet, and its 3D tic-tac-toe, three ways
-# (tictactoe_*.rs), of which the layer-to-a-row ones fit (tests/fuzz runs them against native Rust on every move).
+# (tictactoe_*.rs), of which the layer-to-a-row ones fit (tests/fuzz runs them against native Rust on every move);
+# and each again with its input promised (*_assumed.rs), which tests/fuzz runs on input that keeps the promises
+# where the program fits.
 # Each must take no more cells than it does now, without overflow checks and with them, at opt-level 2.
-for want in minesweeper_edges:146:163 minesweeper_border:147:172 minesweeper_neighbours:127:156 \
-    minesweeper_number:143:174 tictactoe_packed:98:125 tictactoe_tens:82:84 tictactoe_number:88:90; do
+for want in minesweeper_edges:146:155 minesweeper_border:147:172 minesweeper_neighbours:101:155 \
+    minesweeper_number:142:173 tictactoe_packed:98:125 tictactoe_tens:82:84 tictactoe_number:88:90 \
+    minesweeper_edges_assumed:109:129 minesweeper_border_assumed:102:122 minesweeper_neighbours_assumed:89:89 \
+    minesweeper_number_assumed:107:126 tictactoe_packed_assumed:79:79 tictactoe_tens_assumed:69:70 \
+    tictactoe_number_assumed:73:74; do
   n=${want%%:*}; limits=${want#*:}
   for checks in off on; do
     if [ $checks = off ]; then most=${limits%%:*}; else most=${limits#*:}; fi

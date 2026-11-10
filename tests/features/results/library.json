@@ -657,22 +657,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "-1,4,1,3",
-        "cells": 88
+        "cells": 87
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "-1,4,1,3",
-        "cells": 88
+        "cells": 87
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "-1,4,1,3",
-        "cells": 88
+        "cells": 87
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "-1,4,1,3",
-        "cells": 88
+        "cells": 87
       }
     }
   },

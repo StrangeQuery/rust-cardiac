@@ -118,6 +118,32 @@ pub fn compile_mir(
     structs: &[structs::StructDef],
     auto_overlay: bool,
 ) -> Result<Compiled, Fail> {
+    let first = compile_mir_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay);
+    let fits =
+        |r: &Result<Compiled, Fail>| matches!(r, Ok(c) if largest_phase(&c.listing).is_some_and(|n| n <= MEMORY));
+    if fits(&first) || !optimize {
+        return first;
+    }
+    // too big: again with sums of reads a constant apart as loops over tables of their offsets (smaller, slower)
+    blocks::REROLL.with(|r| r.set(true));
+    let second = compile_mir_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay);
+    blocks::REROLL.with(|r| r.set(false));
+    match (&first, &second) {
+        _ if fits(&second) => second,
+        (Ok(a), Ok(b)) if cells(&b.listing) < cells(&a.listing) => second,
+        _ => first,
+    }
+}
+
+/// `compile_mir`, with its arrays of arrays laid out by tens where that fits.
+fn compile_mir_laid_out(
+    mir: &ir::File,
+    optimize: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    auto_overlay: bool,
+) -> Result<Compiled, Fail> {
     // (CARDIAC_LAYOUT=tens or packed, while measured: that layout only, fit or not)
     match std::env::var("CARDIAC_LAYOUT").as_deref() {
         Ok("tens") => return compile_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay, true),
@@ -765,6 +791,36 @@ fn expensive(pool: &lower::Pool, bit_methods: &[&'static str]) -> Option<Fail> {
     (!ops.is_empty()).then(|| crate::codes::expensive(ops.join(", ")))
 }
 
+/// The promised usizes (`blocks::promised_cards`) once locals share cells: each local whose cell holds a promised one,
+/// as long as nothing that shares it can be a usize past a card.
+fn promised_after_sharing(
+    promised: &HashSet<ir::Local>,
+    huge: &HashSet<ir::Local>,
+    merged: &[(ir::Local, ir::Local)],
+) -> HashSet<ir::Local> {
+    // each local's cell: the local it went into, followed to the end
+    let home = |mut x: ir::Local| {
+        while let Some((_, to)) = merged.iter().find(|(from, _)| *from == x) {
+            x = *to;
+        }
+        x
+    };
+    let mut cells: HashMap<ir::Local, Vec<ir::Local>> = HashMap::new();
+    for (from, to) in merged {
+        cells.entry(home(*from)).or_default().push(*from);
+        cells.entry(home(*to)).or_default().push(*to);
+    }
+    let mut out = HashSet::new();
+    for x in promised {
+        let h = home(*x);
+        let members = cells.get(&h).cloned().unwrap_or_else(|| vec![*x]);
+        if members.iter().all(|m| !huge.contains(m)) {
+            out.insert(h);
+        }
+    }
+    out
+}
+
 /// The cells a listing fills: one for each instruction and each data cell.
 pub fn cells(lines: &[Line]) -> usize {
     lines
@@ -1047,6 +1103,8 @@ fn compile(
         results: HashSet<ir::Local>,
         /// what the range pass found stays on a card (see `ranges::past_a_card`)
         on_card: HashSet<ir::Statement>,
+        /// the usizes a promise keeps on a card (see `blocks::promised_cards`)
+        promised: HashSet<ir::Local>,
     }
     let mut ready: Vec<Ready> = vec![];
     let mut cut_points = vec![];
@@ -1083,6 +1141,13 @@ fn compile(
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);
         }
         promises(&mut blocks, optimize, &promisers);
+        // the usizes a promise keeps on a card, which a test of their sign would be for nothing
+        let promised = if optimize {
+            blocks::promised_cards(&blocks)
+        } else {
+            HashSet::new()
+        };
+        let mut huge_before: HashSet<ir::Local> = HashSet::new();
         // the locals that came to share another's cell, for the names the listing gives them
         let mut merged: Vec<(ir::Local, ir::Local)> = vec![];
         let mut on_card: HashSet<ir::Statement> = HashSet::new();
@@ -1093,7 +1158,7 @@ fn compile(
             blocks::dead_code(&mut blocks, &results);
             blocks::bools_on_edges(&mut blocks, true);
             blocks::thread_constants(&mut blocks);
-            on_card = ranges::range_pass(&mut blocks, &local_types(&locals))?.1;
+            on_card = ranges::range_pass(&mut blocks, &local_types(&locals), &promised)?.1;
             blocks::dead_code(&mut blocks, &results);
             blocks::dead_stores(&mut blocks, &results);
             blocks::merge_blocks(&mut blocks);
@@ -1118,6 +1183,10 @@ fn compile(
             // and checks a later one on the same index implies, the first made the strongest
             blocks::merged_checks(&mut blocks);
             blocks::dead_code(&mut blocks, &results);
+            blocks::merge_blocks(&mut blocks);
+            // a sum of reads a constant apart, as a loop over a table of the offsets (only where a program
+            // doesn't fit without it)
+            blocks::reroll_reads(&mut blocks, &mut locals);
             // what a loop works out the same every time round, once before it (CARDIAC_HOIST=1 while measured)
             if hoist::enabled() {
                 let fixed: HashSet<ir::Local> = params.iter().chain(&results).chain([&ir::Local(0)]).copied().collect();
@@ -1128,6 +1197,9 @@ fn compile(
             copies::join_copies(&mut blocks, &local_types(&locals), &keep);
             let into = keep.clone();
             let keep: HashSet<ir::Local> = keep.iter().copied().chain(params.iter().copied()).collect();
+            // (the usizes that can be past a card before cells are shared: a promised one sharing a cell with one of
+            // them is no longer kept on a card by its promise alone)
+            huge_before = ranges::huge_usizes(&blocks, &local_types(&locals), &promised, None);
             merged = copies::share_cells(&mut blocks, &mut locals, &keep, &into, &named);
             // sharing a cell can make a move of one local a read of the other, still to be read; and the merges
             // above can make a test of a comparison read again later
@@ -1198,6 +1270,7 @@ fn compile(
             phases::order_phases(&mut blocks)?;
         }
         let params = sigs.get(&n).map(|s| s.params.clone()).unwrap_or_default();
+        let promised_now = promised_after_sharing(&promised, &huge_before, &merged);
         ready.push(Ready {
             name: n,
             locals,
@@ -1209,6 +1282,7 @@ fn compile(
             params,
             results,
             on_card,
+            promised: promised_now,
         });
     }
     // callees first, so a parameter can be passed on through more than one call
@@ -1232,16 +1306,20 @@ fn compile(
     let source_names = names::Names::of(ready.iter().map(|r| (r.name.as_str(), r.debug.as_slice(), r.merged.as_slice())));
     for r in ready {
         let shown = source_names.of_function(&r.name);
-        let huge = ranges::huge_usizes(&r.blocks, &local_types(&r.locals), &r.results, None);
+        // (a usize a promise keeps on a card is none that can be past one: `promised_after_sharing`)
+        let kept_out: HashSet<ir::Local> = r.results.iter().chain(&r.promised).copied().collect();
+        let huge = ranges::huge_usizes(&r.blocks, &local_types(&r.locals), &kept_out, None);
+        let promised: HashSet<ir::Local> = kept_out.difference(&r.results).copied().collect();
         // (with no peephole, every load is there anyway)
         let past = if optimize {
-            ranges::past_a_card(&r.blocks, &local_types(&r.locals), &r.on_card)
+            ranges::past_a_card(&r.blocks, &local_types(&r.locals), &r.on_card, &promised)
         } else {
             HashSet::new()
         };
         let mut l = Lowering::new(&r.name, r.locals, &mut sh, &callees, optimize, r.pooled)?;
         l.names = r.names;
         l.huge = huge;
+        l.promised = promised;
         l.past = past;
         l.results = r.results;
         let (mut code, cells) = l.lower(r.blocks)?;

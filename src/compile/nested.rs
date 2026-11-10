@@ -434,7 +434,9 @@ fn folded_by(
             *defs.entry(dest.base_local().unwrap()).or_default() += 1;
         }
     }
-    let small = small_usizes(blocks, taken, params);
+    // (and those a promise keeps on a card, which never are past one where the program means anything)
+    let mut small = small_usizes(blocks, taken, params);
+    small.extend(super::blocks::promised_cards(blocks));
     let k_of = |o: &Operand| match o {
         Operand::Constant(Const::Int {
             value,
@@ -450,7 +452,7 @@ fn folded_by(
     // where `v` is set: that line, or none where a way in is not the only one, or `x` is set first
     let walk = |bi: usize, j: usize, v: Local, guard: &[Local]| -> Option<&Rvalue> {
         let (mut bi, mut j) = (bi, j);
-        for _ in 0..16 {
+        for _ in 0..64 {
             for s in blocks[bi].statements[..j].iter().rev() {
                 if let Statement::Assign(d, rv) = s {
                     let l = d.base_local();
@@ -627,10 +629,48 @@ fn checked_before(blocks: &[Block], bi: usize, j: usize, x: Local) -> bool {
     let preds = predecessors(blocks);
     let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
     let sets = |s: &Statement, l: Local| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(l));
-    let (mut bi, mut j) = (bi, j);
-    for _ in 0..16 {
-        if blocks[bi].statements[..j].iter().any(|s| sets(s, x)) {
+    // a promise of x below a constant a card holds, `assume(x < 4)`, at line k of these lines, with x set nowhere
+    // after: as good as a check that passed
+    let promised = |lines: &[Statement], k: usize| {
+        let Statement::Assume(Operand::Copy(c) | Operand::Move(c)) = &lines[k] else {
             return false;
+        };
+        let def = |l: Local, before: usize| {
+            lines[..before]
+                .iter()
+                .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(l)))
+        };
+        let Some(bc) = c.as_local() else { return false };
+        let Some(at) = def(bc, k) else { return false };
+        let y = match &lines[at] {
+            Statement::Assign(
+                _,
+                Rvalue::BinaryOp(
+                    BinOp::Lt | BinOp::Le,
+                    Operand::Copy(y) | Operand::Move(y),
+                    Operand::Constant(Const::Int { value, .. }),
+                ),
+            ) if (0..=999).contains(value) => y.as_local(),
+            _ => None,
+        };
+        let Some(y) = y else { return false };
+        let is_x = y == x
+            || def(y, at).is_some_and(|d| {
+                matches!(&lines[d], Statement::Assign(_, Rvalue::Use(Operand::Copy(z) | Operand::Move(z))) if z.as_local() == Some(x))
+                    && !lines[d + 1..k].iter().any(|s| sets(s, x))
+            });
+        is_x && !lines[k + 1..].iter().any(|s| sets(s, x))
+    };
+    let (mut bi, mut j) = (bi, j);
+    for _ in 0..64 {
+        let lines = &blocks[bi].statements[..j];
+        for k in (0..lines.len()).rev() {
+            if sets(&lines[k], x) {
+                return false;
+            }
+            if promised(lines, k) {
+                return true;
+            }
         }
         let ins = preds.get(&blocks[bi].name).map(Vec::as_slice).unwrap_or_default();
         let ([p], true) = (ins, bi != 0) else { return false };
@@ -689,7 +729,7 @@ fn line_of(blocks: &[Block], bi: usize, j: usize, v: Local) -> Option<(usize, us
     let preds = predecessors(blocks);
     let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
     let (mut bi, mut j) = (bi, j);
-    for _ in 0..16 {
+    for _ in 0..64 {
         if let Some(k) = blocks[bi].statements[..j]
             .iter()
             .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(v)))

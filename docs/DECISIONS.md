@@ -4,6 +4,55 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-09 · A promise of a usize keeps it on a card, and a sum of reads a constant apart can be a loop
+
+- **Decision.** For programs that promise their input with `assume()`, and one change for any program that
+  doesn't fit:
+  - `blocks::promised_cards`: a usize set once and promised below a constant a card holds (`assume(r < 4)`, or
+    `assume(n / 10 < 3)` for n), where nothing on the way to the promise branches, checks or calls on it, is never
+    past a card wherever the program means anything. It is left out of the usizes that can be (#15): its cast from
+    the `i16` that `inp()` gives, and each use, need no test of its sign. Lowering keeps that through the sharing of
+    cells, unless a local that can be past a card comes to share the cell.
+  - The range pass bounds a usize by another usize as it does an `i16` by an `i16`, where neither can be past a card
+    (#16): `i < r + 3` in a loop over `r..r + 3`, with r promised below 4, shows i is at most 5.
+  - `nested::folded` takes a promised usize, and a promise on the way, as it takes a passed check, and walks back
+    through up to 64 blocks rather than 16 (#17, #19).
+  - `blocks::dead_code` drops a write to a field of a local that nothing reads (#18), as the range pass leaves a
+    checked add it proved, `(_26.0: usize) = Add(..)`.
+  - `blocks::reroll_reads` (#20): a sum of six or more reads of one array a constant apart from one index,
+    `b[x] + b[x + 1] + ... + b[x + 22]` (or the same as one linear combination), is a loop over a table of the
+    offsets, as a program written for CARDIAC by hand walks one. Only for an array that only ever holds constants,
+    whose sum can't pass a card, so each partial sum is the same either way. The loop is smaller but slower, so the
+    program is compiled that way only when it doesn't fit otherwise.
+- **Why.** With the promises, each check of an index is one the promise covers, and none of them was dropped. A
+  check that isn't covered by a promise or a proof stays; the compiler knows nothing of borders, which are the
+  program's own. The promise versions behave as native Rust on input that keeps the promises; any other input is
+  undefined, so it isn't fuzzed.
+- **Cost.** Cells at opt-level 2, without overflow checks and then with them; instructions are the program's own,
+  for the page's input, where the program fits. The versions without promises are as before, but for the
+  eight-neighbour count, which the table loop takes down too.
+
+  | Program | By hand (page) | Without promises | With promises |
+  |---|---|---|---|
+  | Minesweeper, edges tested with `min`/`max` | about 114, doesn't fit | 146, 155 | 109, 129 |
+  | Minesweeper, declared border, 3 by 3 loop | 88 cells, 105 instructions | 147, 172 | 102, 122 |
+  | Minesweeper, declared border, eight neighbours | (the same) | 101, 155 | 89/128, 89/128 |
+  | Minesweeper, the square as one number | 78 cells, 96 instructions | 142, 173 | 107, 126 |
+  | Tic-tac-toe, C-style, 27 squares | 75 cells, 37 instructions | 98, 125 | 79/41, 79/41 |
+  | Tic-tac-toe, a layer to a row | 60 cells, 23 instructions | 82/39, 84/40 | 69/32, 70/32 |
+  | Tic-tac-toe, the move as one number | 57 cells, 21 instructions | 88/45, 90/46 | 73/36, 74/36 |
+
+  In the promise versions no bounds check is left at all. The eight-neighbour count fits, at both settings, a
+  cell more than the page's bordered board and 23 instructions more; all three tic-tac-toe versions fit. The
+  versions with loops (edges, the 3 by 3 block, the square as one number) are 6 to 13 cells over without overflow
+  checks: the board is 58 cells by tens (its holes full), which leaves 38 for the code, and the two loops' code
+  is about 44. With overflow checks on, the sum in a loop keeps its checks, as nothing promises or proves it stays
+  on a card.
+- **Evidence.** The promise versions that fit, run by the fuzzer against native Rust in all eight settings on
+  input that keeps the promises (the number versions a row at a time, as a range can't skip the columns past the
+  board), and everything else as before: the test suites, the examples, the support matrix, the fuzzer's programs
+  and 60 generated ones.
+
 ## 2026-11-09 · Checks of one index one after another are one check, and a table of constants has a range
 
 - **Decision.** Several passes, each for code the tables-by-tens tip's programs showed, and each keeping every
