@@ -873,7 +873,35 @@ fn compile_niched(
 
 /// The compile, with or without forwarded parameters; also whether any parameter was forwarded, and the niches
 /// whose guards the range pass didn't prove (`no_niche`: those to lay out with a tag cell).
+#[allow(clippy::too_many_arguments)]
 fn compile(
+    file: &ir::File,
+    optimize: bool,
+    forward: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    no_niche: &HashSet<String>,
+    cuts: Option<&[phases::Cut]>,
+    depth: u64,
+    tens: bool,
+) -> Result<(Compiled, bool, HashSet<String>), Fail> {
+    let once = || compile_once(file, optimize, forward, debug_assertions, enums, structs, no_niche, cuts, depth, tens);
+    match once() {
+        // a result the range pass took whole wasn't carried into the statement after it: again, without that
+        Err(e) if e.message.contains(lower::NOT_CARRIED) && !ranges::NO_EXACT.with(|n| n.get()) => {
+            ranges::NO_EXACT.with(|n| n.set(true));
+            let again = once();
+            ranges::NO_EXACT.with(|n| n.set(false));
+            again
+        }
+        done => done,
+    }
+}
+
+/// `compile`, once.
+#[allow(clippy::too_many_arguments)]
+fn compile_once(
     file: &ir::File,
     optimize: bool,
     forward: bool,
@@ -1101,10 +1129,10 @@ fn compile(
         merged: Vec<(ir::Local, ir::Local)>,
         params: Vec<ir::Local>,
         results: HashSet<ir::Local>,
-        /// what the range pass found stays on a card (see `ranges::past_a_card`)
-        on_card: HashSet<ir::Statement>,
         /// the usizes a promise keeps on a card (see `blocks::promised_cards`)
         promised: HashSet<ir::Local>,
+        /// the results the range pass took whole for the statement after them (`ranges::carried_on`)
+        exact: HashSet<ir::Local>,
     }
     let mut ready: Vec<Ready> = vec![];
     let mut cut_points = vec![];
@@ -1148,9 +1176,10 @@ fn compile(
             HashSet::new()
         };
         let mut huge_before: HashSet<ir::Local> = HashSet::new();
+        // the results the range pass took whole for the statement after, as carried there (`ranges::carried_on`)
+        let mut exact: HashSet<ir::Local> = HashSet::new();
         // the locals that came to share another's cell, for the names the listing gives them
         let mut merged: Vec<(ir::Local, ir::Local)> = vec![];
-        let mut on_card: HashSet<ir::Statement> = HashSet::new();
         if optimize {
             // what nothing reads goes first: a variable that only grows needs no range, and an op whose value is
             // never read is left only for its panic, which the range pass may rule out
@@ -1158,7 +1187,7 @@ fn compile(
             blocks::dead_code(&mut blocks, &results);
             blocks::bools_on_edges(&mut blocks, true);
             blocks::thread_constants(&mut blocks);
-            on_card = ranges::range_pass(&mut blocks, &local_types(&locals), &promised)?.1;
+            exact = ranges::range_pass(&mut blocks, &local_types(&locals), &promised)?.2;
             blocks::dead_code(&mut blocks, &results);
             blocks::dead_stores(&mut blocks, &results);
             blocks::merge_blocks(&mut blocks);
@@ -1285,8 +1314,8 @@ fn compile(
             merged,
             params,
             results,
-            on_card,
             promised: promised_now,
+            exact,
         });
     }
     // callees first, so a parameter can be passed on through more than one call
@@ -1315,15 +1344,15 @@ fn compile(
         let huge = ranges::huge_usizes(&r.blocks, &local_types(&r.locals), &kept_out, None);
         let promised: HashSet<ir::Local> = kept_out.difference(&r.results).copied().collect();
         // (with no peephole, every load is there anyway)
-        let past = if optimize {
-            ranges::past_a_card(&r.blocks, &local_types(&r.locals), &r.on_card, &promised)
-        } else {
-            HashSet::new()
-        };
+        // no store is marked as holding a value past a card (`Line::wide`): the statement after an op reads it from
+        // the accumulator where it can, the whole of it, as native Rust does; the range pass allows for either
+        // (`ranges::kept`)
+        let past: HashSet<(ir::BasicBlock, usize)> = HashSet::new();
         let mut l = Lowering::new(&r.name, r.locals, &mut sh, &callees, optimize, r.pooled)?;
         l.names = r.names;
         l.huge = huge;
         l.promised = promised;
+        l.exact = r.exact;
         l.past = past;
         l.results = r.results;
         let (mut code, cells) = l.lower(r.blocks)?;
@@ -1362,7 +1391,7 @@ fn compile(
         l = stack::share_cells(&l);
         // a local and the argument cell it is passed in, made one cell, leave copies of a cell onto itself: those
         // alone go (the other rules know a scratch cell's uses as they were before cells were shared)
-        l = peephole::drop_self_copies(&l);
+        l = peephole::drop_self_copies(&l, &starts);
         l.push(Line::new(Kind::Blank));
         l
     } else {

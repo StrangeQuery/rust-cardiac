@@ -397,14 +397,33 @@ fn already_held(before: &[Line], ins: Instr) -> bool {
     false
 }
 
-/// Rule 2b alone, after the compiled stack has shared cells; then rule 12, for the load of a copy that went (a
-/// call's result, `CLA f_0` then `STO x`, once x is f_0's cell, read again by nothing before the next load).
-pub fn drop_self_copies(lines: &[Line]) -> Vec<Line> {
+/// Rule 2b alone, after the compiled stack has shared cells, and across a join as rule 14 looks (a block that
+/// starts STO x where every way in leaves x in the accumulator and its cell: an argument cell that became x's,
+/// whose load rule 14 took away); then rule 12, for the load of a copy that went (a call's result, `CLA f_0` then
+/// `STO x`, once x is f_0's cell, read again by nothing before the next load).
+pub fn drop_self_copies(lines: &[Line], keep: &[String]) -> Vec<Line> {
     let mut out: Vec<Line> = Vec::with_capacity(lines.len());
     for l in lines {
         if !instr(l).is_some_and(|ins| already_stored(&out, ins)) {
             out.push(l.clone());
         }
+    }
+    let mut joined = false;
+    for i in 0..out.len() {
+        let Some(label) = code_label(&out[i]).map(str::to_string) else {
+            continue;
+        };
+        let entered = label == "main_bb0" || starts_unit(&label) || numbered_after(&label, &["_ret", "_rr"]);
+        if entered || keep.contains(&label) {
+            continue;
+        }
+        if let Some(k) = join_first(&out, i, &label, Op::Sto) {
+            out[k] = deleted();
+            joined = true;
+        }
+    }
+    if joined {
+        sweep(&mut out);
     }
     if drop_unused_loads(&mut out) {
         sweep(&mut out);
@@ -570,7 +589,8 @@ fn scratch_live(after: &[Line], t: &Arg) -> bool {
     false
 }
 
-/// 11. CLA x, STO y, OUT y, where y is read and written nowhere else: CLA x, OUT x (the accumulator still holds x).
+/// 11. CLA x or STO x, then STO y, OUT y, where y is read and written nowhere else: CLA x or STO x, OUT x (the
+///     accumulator still holds x, and the two cells keep the same of it).
 ///     An address or instruction constant (`a_y: DAT y`, `rd_y: DAT y+100`) reaches y too, so it counts as a use,
 ///     unless the program halts right after the OUT without using it.
 fn output_loaded(lines: &mut [Line]) -> bool {
@@ -590,7 +610,8 @@ fn output_loaded(lines: &mut [Line]) -> bool {
     for i in 2..lines.len() {
         let x = match (instr(&lines[i - 2]), instr(&lines[i - 1]), instr(&lines[i])) {
             (Some(a), Some(b), Some(c))
-                if a.is(Op::Cla)
+                if a.is_any(&[Op::Cla, Op::Sto])
+                    && a.arg != b.arg
                     && b.is(Op::Sto)
                     && c.is(Op::Out)
                     && b.arg == c.arg
@@ -811,8 +832,14 @@ fn drop_join_reloads(lines: &mut [Line], keep: &[String]) -> bool {
 
 /// The CLA that starts the block labelled `label` at line `i`, when rule 14 drops it.
 fn join_reload(lines: &[Line], i: usize, label: &str) -> Option<usize> {
+    join_first(lines, i, label, Op::Cla)
+}
+
+/// The first line of the block labelled `label` at line `i`, when it is `op x` and every way in leaves x in the
+/// accumulator, and so in its cell too (see `holds`).
+fn join_first(lines: &[Line], i: usize, label: &str, op: Op) -> Option<usize> {
     let (k, first) = lines.iter().enumerate().skip(i + 1).find(|(_, l)| !is_blank(l))?;
-    let x = instr(first).filter(|n| n.is(Op::Cla))?.arg;
+    let x = instr(first).filter(|n| n.is(op))?.arg;
     for r in (0..lines.len()).filter(|&r| r != i && mentions(&lines[r], label)) {
         let jumps = instr(&lines[r]).is_some_and(|t| t.is_any(&[Op::Tac, Op::Jmp]) && label_of(t.arg) == Some(label));
         if !jumps || !holds(&lines[..r], x) {

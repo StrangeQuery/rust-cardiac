@@ -201,15 +201,17 @@ exit 101" ] && echo "MATCH  ${r%%:*}: panicked, ${r#*:}" || { echo "DIFFER ${r%%
   # on) would panic at: what a release build of each prints, the panic last
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/u8_wrap.rs)
   [ "$out" = "2,203,15,59,4,44,255,200,0,10,-999" ] && echo "MATCH  u8_wrap: $out" || { echo "DIFFER u8_wrap: $out"; exit 1; }
-  # without overflow checks a result past a card is what its cell keeps (1200 is 200), and a test or a sum that
-  # reads it again after it is stored sees that, not the whole result left in the accumulator; nor does the range
-  # pass take the whole result for what the cell holds
+  # without overflow checks a result past a card is what its cell keeps (1200 is 200), as it is printed; the test
+  # straight after reads the whole result from the accumulator, as native Rust does, and later reads what the cell
+  # keeps; the range pass allows for either
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_reread.rs)
-  [ "$out" = "200,0,400,0,100,0,-100,0,300,0,-300,0" ] && echo "MATCH  past_card_reread: $out" || { echo "DIFFER past_card_reread: $out"; exit 1; }
+  [ "$out" = "200,1,400,0,100,1,-100,1,300,0,-300,0" ] && echo "MATCH  past_card_reread: $out" || { echo "DIFFER past_card_reread: $out"; exit 1; }
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_reread2.rs)
-  [ "$out" = "200,2,201,200,0" ] && echo "MATCH  past_card_reread2: $out" || { echo "DIFFER past_card_reread2: $out"; exit 1; }
+  [ "$out" = "200,1,2,201,200,1" ] && echo "MATCH  past_card_reread2: $out" || { echo "DIFFER past_card_reread2: $out"; exit 1; }
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_known.rs)
-  [ "$out" = "200,0,40,0" ] && echo "MATCH  past_card_known: $out" || { echo "DIFFER past_card_known: $out"; exit 1; }
+  [ "$out" = "200,1,40,1" ] && echo "MATCH  past_card_known: $out" || { echo "DIFFER past_card_known: $out"; exit 1; }
+  out=$(./target/release/cargo-cardiac test $unchecked tests/programs/past_card_carried.rs)
+  [ "$out" = "390,302,214,126" ] && echo "MATCH  past_card_carried: $out" || { echo "DIFFER past_card_carried: $out"; exit 1; }
   out=$(./target/release/cargo-cardiac test $unchecked tests/programs/usize_below.rs)
   [ "$out" = "1,11,-1,-999" ] && echo "MATCH  usize_below: $out" || { echo "DIFFER usize_below: $out"; exit 1; }
 done
@@ -232,6 +234,16 @@ for want in minesweeper_edges:146:155 minesweeper_border:147:172 minesweeper_nei
     if [ -n "$got" ] && [ "$got" -le "$most" ]; then echo "MATCH  $n, overflow checks $checks: $got cells, no more than $most"
     else echo "DIFFER $n, overflow checks $checks: $said, not $most cells or fewer"; exit 1; fi
   done
+done
+# Programs that once fitted in these cells, as a release build compiles them (overflow checks off), and must not
+# grow past them (fit_*.rs): sums that pass a card for a moment, read straight after from the accumulator, and
+# indexes worked out from sums carried into the next operation.
+for want in fit_strips:94 fit_root:95 fit_sphere:94 fit_specks:96 fit_mix:89 fit_rings:61; do
+  n=${want%%:*}; most=${want#*:}
+  said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
+  got=$(echo "$said" | sed -n 's/.* \([0-9]*\) cells.*/\1/p' | head -1)
+  if [ -n "$got" ] && [ "$got" -le "$most" ]; then echo "MATCH  $n: $got cells, no more than $most"
+  else echo "DIFFER $n: $said, not $most cells or fewer"; exit 1; fi
 done
 # what skip_cards() and add_times() cost: one call each, for n = 0, 1, 9, 10, 37 and the largest n, the
 # result and the instructions the whole run takes (the loader's and main's are the same for every n). add_times is

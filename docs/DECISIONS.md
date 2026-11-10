@@ -4,6 +4,50 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-09 · A value past a card is read from the accumulator again where it is still there
+
+Supersedes "A value past a card read again after its store is what the cell keeps" (2026-11-07).
+
+- **Decision.** No store is marked any more, and the peephole rules that drop a `CLA x` because the accumulator
+  already holds x apply after every store, as they did before 2026-11-07: a read straight after a sum, a difference
+  or a product takes all of it, past a card or not, and a read that loads the cell takes the three digits it keeps.
+  The range pass allows for either: a value that may pass a card is taken, for the statement that follows, as
+  anything from what its cell keeps to the whole result, and as what the cell keeps after that. One case it takes
+  exactly: a sum or difference named twice, set and then used at once as one side of the next sum or difference
+  (`wrap(u + 110, 900)`, `u + 110` then `- 900`), is taken whole there, because lowering carries it in the
+  accumulator. Lowering checks that it did; if it didn't, the function is compiled again without the exact case.
+  Two peephole rules reach a little further, for two copies the marked stores happened to let other rules remove
+  (#26): rule 2b, once cells are shared, drops a `STO x` that starts a block when every way in leaves x in the
+  accumulator and its cell, as rule 14 checks for a `CLA x`; and rule 11 folds `STO x, STO y, OUT y` into `STO x,
+  OUT x` as it does `CLA x, STO y, OUT y`. Fixes #24, #25 and #26.
+- **Why.** The 2026-11-07 rule made one value read one way, but the way it chose was the cell's, which is not
+  native Rust's: `wrap(u + 110, 900)` with u = 890 gave 0 where Rust gives 100, because the sum reached 1000, was
+  stored as 000, and was read again. Native Rust never sees a card. Reading the accumulator where it still holds the
+  value gives what Rust gives for every value that passes a card only for a moment and is back on one before it is
+  kept, which is what most such sums are. Only a value kept past a card (stored and read again later, output, or
+  compared after its store) is CARDIAC's own. And the extra loads cost cells: programs that fitted before didn't.
+- **Cost.** None against the compiler before 2026-11-07; against the 2026-11-07 rule, the cells it took come back.
+  Release build, overflow checks off:
+
+  | Program | 2026-11-07 rule | Now |
+  |---|---|---|
+  | voxel | 89 | 87 |
+  | ray tracer's hop | 94 | 91 |
+  | guess | 50 | 49 |
+  | powers (code) | 54 | 53 |
+  | ray tracer's floor (code) | 77 | 76 |
+  | ray tracer's span | 79 | 78 |
+  | ray tracer's hit | 80 | 79 |
+
+  Six programs that pass a card for a moment (tests/programs/fit_*.rs) fitted in 94, 95, 94, 96, 89 and 61 cells
+  before the rule, didn't fit or took more with it, and fit in those cells again; test_compiler.sh holds them to
+  that. The same value can still be read two ways, the whole sum where the accumulator holds it and three digits
+  where a read loads the cell (`past_card_reread.rs`); that is the price of matching Rust where Rust can be matched.
+  The fuzzers now hold to the same line: a generated program is excused a difference only when a value it keeps
+  passes a card (with overflow checks on, when any value does, since CARDIAC stops there), and a written target
+  marked `exact` in tests/fuzz/targets must match native Rust without overflow checks whatever a checked build says.
+  tests/fuzz/programs/wrap.rs is the shape above, and is marked so.
+
 ## 2026-11-09 · A window walked in loops is a walk over a table of offsets, and a number's digits put back are the number
 
 - **Decision.**

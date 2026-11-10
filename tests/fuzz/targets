@@ -1,6 +1,8 @@
 # The fuzzer's programs (fuzz.sh): a name, the program's source, and the inputs each run gets, in order.
 # An input is LO..HI, one number in that range; NxLO..HI is N of them, and N-MxLO..HI between N and M of them.
 # The ranges keep each program's promises (assume): breaking one is undefined, not a miscompile.
+# A line may end with `exact`: no value the program keeps passes a card, so without overflow checks every run must
+# match native Rust, even where a build with them stops at a value past a card for a moment.
 # These are the written programs; `fuzz.sh --generate N` makes programs of its own (tests/fuzz/generate.rs).
 gcd           examples/gcd.rs                 -999..999 -999..999
 sort          examples/sort.rs                10x-999..999
@@ -38,3 +40,4 @@ minesweeper_page0              tests/fuzz/programs/minesweeper_page.rs          
 minesweeper_page1              tests/fuzz/programs/minesweeper_page.rs              10..15
 minesweeper_page2              tests/fuzz/programs/minesweeper_page.rs              20..25
 minesweeper_page3              tests/fuzz/programs/minesweeper_page.rs              30..35
+wrap          tests/fuzz/programs/wrap.rs     0..899 0..299 -150..150 exact
