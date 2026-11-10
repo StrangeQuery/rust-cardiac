@@ -1,0 +1,34 @@
+#![no_std]
+#[inline(never)]
+pub fn out(_v: i16) {}
+#[inline(never)]
+pub fn inp() -> i16 {
+    0
+}
+
+/// The Minesweeper count on the bordered board, the square read as one number, its row then its column (20 for row
+/// 2, column 0), as in the tip's "By tens, one number".
+///
+/// The same program with its input promised (`assert_unchecked`): the input is always a square on the board, so
+/// no bounds check can fail.
+pub fn main() {
+    let b = [
+        [0i16, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+    ];
+    let s = inp() as usize;
+    unsafe { core::hint::assert_unchecked(s < 36) };
+    unsafe { core::hint::assert_unchecked(s % 10 < 6) };
+    let (r, c) = (s / 10, s % 10);
+    let mut n = 0;
+    for i in r..r + 3 {
+        for j in c..c + 3 {
+            n += b[i][j];
+        }
+    }
+    out(n - b[r + 1][c + 1]);
+}

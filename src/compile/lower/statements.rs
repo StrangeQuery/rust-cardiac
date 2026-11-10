@@ -591,8 +591,11 @@ impl<'a> Lowering<'a> {
             self.define(&done);
         } else if to == Some(IntTy::Usize) && (matches!(from, Some(IntTy::I16 | IntTy::I8)) || huge) {
             // a negative i16 is a usize past a card in Rust (-1 is usize::MAX): held below 0 as it is, in a local
-            // that can hold one, else past a card (see ranges::huge_usizes)
-            if !dest.as_local().is_some_and(|l| self.huge.contains(&l)) {
+            // that can hold one, else past a card (see ranges::huge_usizes); none into one a promise keeps on a card
+            if !dest
+                .as_local()
+                .is_some_and(|l| self.huge.contains(&l) || self.promised.contains(&l))
+            {
                 self.past_a_card("as usize: a usize past a card");
             }
         } else if !matches!(to, Some(IntTy::Usize | IntTy::U8 | IntTy::I8 | IntTy::I16)) {

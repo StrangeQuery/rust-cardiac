@@ -307,6 +307,8 @@ pub struct Lowering<'a> {
     pub names: Ordered<String, Local>,
     /// the usize locals that can hold a value past a card, below 0 (see `ranges::huge_usizes`)
     pub huge: HashSet<Local>,
+    /// the usizes a promise keeps on a card (`blocks::promised_cards`): a cast into one needs no test of its sign
+    pub promised: HashSet<Local>,
     /// of those, the ones a passed check has shown are on a card in the block being lowered, until it sets them
     /// (see `checked_on_card`)
     on_card_now: HashSet<Local>,
@@ -354,6 +356,7 @@ impl<'a> Lowering<'a> {
             resources: HashMap::new(),
             names: Ordered::new(),
             huge: HashSet::new(),
+            promised: HashSet::new(),
             on_card_now: HashSet::new(),
             results: HashSet::new(),
         };

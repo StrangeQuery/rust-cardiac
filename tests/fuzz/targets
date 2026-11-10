@@ -22,3 +22,15 @@ grids         tests/fuzz/programs/grids.rs    -2..5 -2..5
 neighbours    tests/fuzz/programs/neighbours.rs -3..6 -3..6
 tictactoe_tens tests/fuzz/programs/tictactoe_tens.rs -1..3 -1..10
 tictactoe_number tests/fuzz/programs/tictactoe_number.rs -5..35
+minesweeper_edges_assumed      tests/fuzz/programs/minesweeper_edges_assumed.rs      0..3 0..5
+minesweeper_border_assumed     tests/fuzz/programs/minesweeper_border_assumed.rs     0..3 0..5
+minesweeper_neighbours_assumed tests/fuzz/programs/minesweeper_neighbours_assumed.rs 0..3 0..5
+minesweeper_number_assumed0    tests/fuzz/programs/minesweeper_number_assumed.rs     0..5
+minesweeper_number_assumed1    tests/fuzz/programs/minesweeper_number_assumed.rs     10..15
+minesweeper_number_assumed2    tests/fuzz/programs/minesweeper_number_assumed.rs     20..25
+minesweeper_number_assumed3    tests/fuzz/programs/minesweeper_number_assumed.rs     30..35
+tictactoe_packed_assumed       tests/fuzz/programs/tictactoe_packed_assumed.rs       0..2 0..2 0..2
+tictactoe_tens_assumed         tests/fuzz/programs/tictactoe_tens_assumed.rs         0..2 1..9
+tictactoe_number_assumed0      tests/fuzz/programs/tictactoe_number_assumed.rs       1..9
+tictactoe_number_assumed1      tests/fuzz/programs/tictactoe_number_assumed.rs       11..19
+tictactoe_number_assumed2      tests/fuzz/programs/tictactoe_number_assumed.rs       21..29

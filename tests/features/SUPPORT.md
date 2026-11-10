@@ -117,8 +117,8 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| A mutable slice `&mut [i16]` written by a function | Supported | 70 / 75 |  |  | [slice_mut.rs](types/slice_mut.rs) |
-| A slice `&[i16]` passed to a function and read in a loop | Supported | 52 / 65 |  | A slice is an address and a length, two cells, read the way arrays by reference already are. | [slice_param.rs](types/slice_param.rs) |
+| A mutable slice `&mut [i16]` written by a function | Supported | 70 / 72 |  |  | [slice_mut.rs](types/slice_mut.rs) |
+| A slice `&[i16]` passed to a function and read in a loop | Supported | 52 / 62 |  | A slice is an address and a length, two cells, read the way arrays by reference already are. | [slice_param.rs](types/slice_param.rs) |
 | A sub-slice `&t[1..3]`, indexed | Supported | 32 / 32 |  |  | [slice_range.rs](types/slice_range.rs) |
 
 ### Struct types
@@ -1296,7 +1296,7 @@ Made with cargo-cardiac v0.1.1-150-g861d383.
 | `array.iter().sum()` | Supported | 39 / 39 |  | The same loop as `for i in 0..N` adding `t[i]`. | [array_iter_sum.rs](library/array_iter_sum.rs) |
 | `[T; N]::map` | Supported | 60 / 71 |  |  | [array_map.rs](library/array_map.rs) |
 | `array.reverse()` | Supported | 46 / 46 |  | On an array of known length it is a short loop of swaps. | [array_reverse.rs](library/array_reverse.rs) |
-| `array.rotate_left(k)` | Supported | 88 / 88 |  |  | [array_rotate_left.rs](library/array_rotate_left.rs) |
+| `array.rotate_left(k)` | Supported | 87 / 87 |  |  | [array_rotate_left.rs](library/array_rotate_left.rs) |
 | `array.sort_unstable()` on four elements | Supported | 80 / 80 |  | core's sort is far bigger than 96 cells would allow; a small insertion sort written out fits. | [array_sort_unstable.rs](library/array_sort_unstable.rs) |
 | `slice.split_at(k)` | Supported | 47 / 47 |  | It returns two slices, which the compiler doesn't have. | [array_split_at.rs](library/array_split_at.rs) |
 | `array.swap(i, j)` | Supported | 74 / 74 |  | On an array it is two indexed reads and two writes, with bounds checks. | [array_swap.rs](library/array_swap.rs) |
