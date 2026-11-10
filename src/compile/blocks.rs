@@ -368,6 +368,186 @@ pub fn dead_code(blocks: &mut [ir::Block], results: &HashSet<ir::Local>) {
     }
 }
 
+/// Bounds checks of one index that come one after another: `assert(r < 6)`, then `r + 1 < 6` and `r + 2 < 6` on
+/// the way on, as `b[r][c] + b[r + 1][c] + b[r + 2][c]` makes them. Once `r < 6` holds, r is on a card and `r + k < N`
+/// holds exactly when `r < N - k`, so the first check can be the strongest, `r < 4`, and the rest are gotos. The
+/// program panics on the same inputs, with the same message: the way from the first check to each later one is
+/// blocks with one way in, each going on from an assert, with no call (no output) and no other check that could
+/// fail first with another message. A bounds check of another index may come between (it fails with the same
+/// message), and so may the overflow check of `r + k` itself, which can't fail once r is on a card. The first
+/// check's bool must be read by its assert only, and r set nowhere on the way.
+pub fn merged_checks(blocks: &mut [ir::Block]) {
+    let preds = predecessors(blocks);
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let usize_const = |o: &ir::Operand| match o {
+        ir::Operand::Constant(ir::Const::Int {
+            value,
+            ty: ir::IntTy::Usize,
+        }) => Some(*value),
+        _ => None,
+    };
+    let local = |o: &ir::Operand| match o {
+        ir::Operand::Copy(p) | ir::Operand::Move(p) => p.as_local(),
+        _ => None,
+    };
+    let reads = |l: ir::Local| -> usize {
+        blocks
+            .iter()
+            .map(|b| b.statements.iter().map(|s| s.count(l)).sum::<usize>() + b.terminator.count(l))
+            .sum()
+    };
+    // a block's bounds check: the index local it compares and the length, where its bool is `v < N` set in the block
+    let check = |b: &ir::Block| -> Option<(ir::Local, ir::Local, i128)> {
+        let Terminator::Assert {
+            cond, expected: true, ..
+        } = &b.terminator
+        else {
+            return None;
+        };
+        let bc = local(cond)?;
+        let k = b
+            .statements
+            .iter()
+            .rposition(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(bc)))?;
+        let Statement::Assign(d, Rvalue::BinaryOp(ir::BinOp::Lt, v, n)) = &b.statements[k] else {
+            return None;
+        };
+        let v = local(v)?;
+        let unset_after = !b.statements[k + 1..]
+            .iter()
+            .any(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(v)));
+        (d.as_local() == Some(bc) && unset_after).then_some((bc, v, usize_const(n)?))
+    };
+    let mut edits: Vec<(usize, i128, Vec<usize>)> = vec![];
+    for (i0, b0) in blocks.iter().enumerate() {
+        let Some((bool0, x, n0)) = check(b0) else { continue };
+        let Terminator::Assert { target, .. } = &b0.terminator else {
+            continue;
+        };
+        // the first check's bool read by its assert alone (and set once)
+        if reads(bool0) != 2 {
+            continue;
+        }
+        // each local set on the way, as it is set
+        let mut defs: HashMap<ir::Local, &Rvalue> = HashMap::new();
+        let mut bound = n0;
+        let mut members = vec![];
+        let (mut prev, mut next) = (b0.name, *target);
+        for _ in 0..64 {
+            let Some(&j) = at.get(&next) else { break };
+            let ins = preds.get(&next).map(Vec::as_slice).unwrap_or_default();
+            if ins != [prev] || j == i0 {
+                break;
+            }
+            let b = &blocks[j];
+            let mut sets_x = false;
+            for s in &b.statements {
+                if let Statement::Assign(d, rv) = s {
+                    match d.as_local() {
+                        Some(l) => {
+                            defs.insert(l, rv);
+                        }
+                        None => {
+                            defs.extend(d.base_local().map(|l| (l, rv)));
+                        }
+                    }
+                    sets_x |= d.base_local() == Some(x);
+                }
+            }
+            if sets_x {
+                break;
+            }
+            // what x + k the index v is, k a constant
+            let plus = |v: ir::Local| -> Option<i128> {
+                if v == x {
+                    return Some(0);
+                }
+                match defs.get(&v)? {
+                    Rvalue::Use(o) if local(o) == Some(x) => Some(0),
+                    Rvalue::BinaryOp(ir::BinOp::Add, a, k) if local(a) == Some(x) => usize_const(k),
+                    Rvalue::BinaryOp(ir::BinOp::Add, k, a) if local(a) == Some(x) => usize_const(k),
+                    Rvalue::Use(ir::Operand::Copy(t) | ir::Operand::Move(t))
+                        if matches!(t.projection.as_slice(), [ir::Projection::Field(0, _)]) =>
+                    {
+                        match defs.get(&t.base_local()?)? {
+                            Rvalue::BinaryOp(ir::BinOp::AddWithOverflow, a, k) if local(a) == Some(x) => usize_const(k),
+                            Rvalue::BinaryOp(ir::BinOp::AddWithOverflow, k, a) if local(a) == Some(x) => usize_const(k),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            };
+            let Terminator::Assert { target, msg, .. } = &b.terminator else {
+                break;
+            };
+            match check(b) {
+                Some((_, v, n)) => {
+                    if let Some(k) = plus(v) {
+                        bound = bound.min(n - k);
+                        members.push(j);
+                    } else if !msg.starts_with("index out of bounds") {
+                        break;
+                    }
+                }
+                None => {
+                    // the overflow check of x + k, which can't fail once x is on a card
+                    let Terminator::Assert {
+                        cond: ir::Operand::Copy(t) | ir::Operand::Move(t),
+                        expected: false,
+                        ..
+                    } = &b.terminator
+                    else {
+                        break;
+                    };
+                    let pair = match (t.base_local(), t.projection.as_slice()) {
+                        (Some(p), [ir::Projection::Field(1, _)]) => p,
+                        _ => break,
+                    };
+                    match defs.get(&pair) {
+                        Some(
+                            Rvalue::BinaryOp(ir::BinOp::AddWithOverflow, a, k)
+                            | Rvalue::BinaryOp(ir::BinOp::AddWithOverflow, k, a),
+                        ) if local(a) == Some(x) && usize_const(k).is_some_and(|k| (0..=99).contains(&k)) => {}
+                        _ => break,
+                    }
+                }
+            }
+            prev = next;
+            next = *target;
+        }
+        if !members.is_empty() {
+            edits.push((i0, bound.max(0), members));
+        }
+    }
+    // (a check another run takes is no first check of a run of its own)
+    let taken: HashSet<usize> = edits.iter().flat_map(|(_, _, m)| m.iter().copied()).collect();
+    for (i0, bound, members) in edits {
+        if taken.contains(&i0) {
+            continue;
+        }
+        let Some((bool0, _, _)) = check(&blocks[i0]) else {
+            continue;
+        };
+        for s in blocks[i0].statements.iter_mut().rev() {
+            if let Statement::Assign(d, Rvalue::BinaryOp(ir::BinOp::Lt, _, n)) = s {
+                if d.as_local() == Some(bool0) {
+                    *n = ir::Operand::Constant(ir::Const::Int {
+                        value: bound,
+                        ty: ir::IntTy::Usize,
+                    });
+                    break;
+                }
+            }
+        }
+        for j in members {
+            if let Terminator::Assert { target, .. } = &blocks[j].terminator {
+                blocks[j].terminator = Terminator::Goto(*target);
+            }
+        }
+    }
+}
+
 /// A comparison, whose value is a bool.
 fn is_comparison(op: ir::BinOp) -> bool {
     use ir::BinOp::*;
@@ -402,6 +582,18 @@ pub fn repeated_checks(blocks: &mut [ir::Block]) {
         else {
             return None;
         };
+        // an overflow check's flag, `!copy (_34.1: bool)`, asserted again as GVN leaves it: the same place
+        if let (Some(pair), [ir::Projection::Field(1, _)]) = (p.base_local(), p.projection.as_slice()) {
+            if borrowed.contains(&pair) {
+                return None;
+            }
+            let def = b
+                .statements
+                .iter()
+                .rposition(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(pair)));
+            let flag = Rvalue::Use(ir::Operand::Copy(p.clone()));
+            return Some((flag, *expected, vec![pair], def));
+        }
         let v = p.as_local().filter(|v| !borrowed.contains(v))?;
         let def = b
             .statements
@@ -437,6 +629,10 @@ pub fn repeated_checks(blocks: &mut [ir::Block]) {
         let Some((what, expected, reads, def)) = asserted(b) else {
             continue;
         };
+        // (a flag worked out again in this block is a check of its own)
+        if matches!(what, Rvalue::Use(_)) && def.is_some() {
+            continue;
+        }
         // nothing it reads set on this block's lines before the assert's own
         let before = def.unwrap_or(b.statements.len());
         if b.statements[..before].iter().any(|s| sets(s, &reads)) {

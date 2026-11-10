@@ -19,3 +19,6 @@ tables        tests/fuzz/programs/tables.rs   -2..5 -2..5
 sums          tests/fuzz/programs/sums.rs     1-8x-300..300
 early         tests/fuzz/programs/early.rs    -999..999
 grids         tests/fuzz/programs/grids.rs    -2..5 -2..5
+neighbours    tests/fuzz/programs/neighbours.rs -3..6 -3..6
+tictactoe_tens tests/fuzz/programs/tictactoe_tens.rs -1..3 -1..10
+tictactoe_number tests/fuzz/programs/tictactoe_number.rs -5..35

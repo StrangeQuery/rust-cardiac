@@ -843,6 +843,8 @@ fn compile(
     // an array of arrays, one array
     let grids = nested::arrays_of_arrays(&mut fns, tens);
     let by_tens = !grids.is_empty();
+    // an index a constant away from another local, `t[i + 1]`, as the grids' are
+    nested::list_offsets(&mut fns);
     // rustc's u8 + - and * wrap, before the passes write plain ops of their own
     for n in &names {
         let f = fns.get_mut(n).unwrap();
@@ -1113,6 +1115,8 @@ fn compile(
             copies::forward_copies(&mut blocks, &local_types(&locals), &named, &params);
             // and checks the merges above have made the same as one before them
             blocks::repeated_checks(&mut blocks);
+            // and checks a later one on the same index implies, the first made the strongest
+            blocks::merged_checks(&mut blocks);
             blocks::dead_code(&mut blocks, &results);
             // what a loop works out the same every time round, once before it (CARDIAC_HOIST=1 while measured)
             if hoist::enabled() {

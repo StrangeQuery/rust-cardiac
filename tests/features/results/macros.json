@@ -270,7 +270,7 @@
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "14,5",
-        "cells": 26
+        "cells": 24
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
@@ -280,7 +280,7 @@
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "14,5",
-        "cells": 26
+        "cells": 24
       }
     }
   },
@@ -387,22 +387,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "17,1",
-        "cells": 11
+        "cells": 9
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "17,1",
-        "cells": 25
+        "cells": 23
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "17,1",
-        "cells": 11
+        "cells": 9
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "17,1",
-        "cells": 25
+        "cells": 23
       }
     }
   },

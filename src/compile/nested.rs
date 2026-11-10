@@ -411,6 +411,16 @@ fn folded(
     taken: &HashSet<Local>,
     params: &HashSet<Local>,
 ) -> HashMap<Local, (Local, u64)> {
+    folded_by(blocks, &|p: &Place| grid_indexes(p, gs), taken, params)
+}
+
+/// `folded`, for the indexes `indexes` finds in a place.
+fn folded_by(
+    blocks: &[Block],
+    indexes: &dyn Fn(&Place) -> Vec<Local>,
+    taken: &HashSet<Local>,
+    params: &HashSet<Local>,
+) -> HashMap<Local, (Local, u64)> {
     let preds = predecessors(blocks);
     let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
     let mut defs: HashMap<Local, usize> = HashMap::new();
@@ -471,11 +481,11 @@ fn folded(
         let mut uses: Vec<(usize, Local)> = vec![];
         for (j, s) in b.statements.iter().enumerate() {
             for p in s.places() {
-                uses.extend(grid_indexes(&p, gs).into_iter().map(|v| (j, v)));
+                uses.extend(indexes(&p).into_iter().map(|v| (j, v)));
             }
         }
         for p in b.terminator.places() {
-            uses.extend(grid_indexes(&p, gs).into_iter().map(|v| (lines, v)));
+            uses.extend(indexes(&p).into_iter().map(|v| (lines, v)));
         }
         for (j, v) in uses {
             let once = defs.get(&v) == Some(&1) && !taken.contains(&v);
@@ -484,7 +494,15 @@ fn folded(
                 .flatten()
                 .and_then(|rv| match rv {
                     Rvalue::Use(o) => whole(o).map(|x| (x, 0)),
-                    Rvalue::BinaryOp(BinOp::Add, x, k) => whole(x).filter(|x| small.contains(x)).zip(k_of(k)),
+                    Rvalue::BinaryOp(BinOp::Add, x, k) | Rvalue::BinaryOp(BinOp::Add, k, x) if k_of(k).is_some() => {
+                        whole(x)
+                            .filter(|x| {
+                                small.contains(x)
+                                    || line_of(blocks, bi, j, v)
+                                        .is_some_and(|(vb, vj)| checked_before(blocks, vb, vj, *x))
+                            })
+                            .zip(k_of(k))
+                    }
                     _ => None,
                 })
                 // (or the checked add's value, `move (_34.0: usize)`, where `_34 = AddWithOverflow(copy _7, const 1)`)
@@ -500,6 +518,63 @@ fn folded(
         }
     }
     out.into_iter().filter_map(|(v, f)| f.map(|f| (v, f))).collect()
+}
+
+/// An index a constant away from another local into an array of the function's own (not through a reference),
+/// `t[i + 1]` or `t[9 + s]`, as `folded` finds them for grids: `t[i]` with 1 in the instruction's address, `i + 1`
+/// worked out only for rustc's bounds check. Run after `arrays_of_arrays`, so a grid's own indexes are done already.
+pub fn list_offsets(fns: &mut Ordered<String, Function>) {
+    let names: Vec<String> = fns.keys().cloned().collect();
+    for name in names {
+        let f = fns.get_mut(&name).unwrap();
+        let types: HashMap<Local, Ty> = f
+            .params
+            .iter()
+            .cloned()
+            .chain(f.body.decls.iter().map(|d| (d.local, d.ty.clone())))
+            .collect();
+        let indexes = |p: &Place| -> Vec<Local> {
+            match (p.base_local(), p.projection.as_slice()) {
+                (Some(a), [Projection::Index(v)]) if matches!(types.get(&a), Some(Ty::Array(..))) => vec![*v],
+                _ => vec![],
+            }
+        };
+        let taken: HashSet<Local> = f
+            .body
+            .blocks
+            .iter()
+            .flat_map(|b| &b.statements)
+            .filter_map(|s| match s {
+                Statement::Assign(_, Rvalue::Ref(_, p)) => p.base_local(),
+                _ => None,
+            })
+            .collect();
+        let params: HashSet<Local> = f.params.iter().map(|(l, _)| *l).collect();
+        let fold = folded_by(&f.body.blocks, &indexes, &taken, &params);
+        if fold.is_empty() {
+            continue;
+        }
+        let rewrite = |p: &mut Place| {
+            let Some(a) = p.base_local() else { return };
+            if !matches!(types.get(&a), Some(Ty::Array(..))) {
+                return;
+            }
+            if let [Projection::Index(v)] = p.projection.as_slice() {
+                if let Some(&(x, k)) = fold.get(v) {
+                    p.projection = vec![match k {
+                        0 => Projection::Index(x),
+                        k => Projection::IndexPlus(x, k as u32),
+                    }];
+                }
+            }
+        };
+        for b in f.body.blocks.iter_mut() {
+            for s in b.statements.iter_mut() {
+                s.places_mut(&mut |p| rewrite(p));
+            }
+            b.terminator.places_mut(&mut |p| rewrite(p));
+        }
+    }
 }
 
 /// Whether x keeps its value from the line that sets v to line j of block bi: the walk back finds v's line with x
@@ -532,12 +607,81 @@ fn checked_add<'a>(
     };
     // the pair's line, before v's: found by walking back from v's own line
     let (vb, vj) = line_of(blocks, bi, j, v)?;
-    let Rvalue::BinaryOp(BinOp::AddWithOverflow, x, k) = walk(vb, vj, pair, &[])? else {
-        return None;
+    let (x, k) = match walk(vb, vj, pair, &[])? {
+        Rvalue::BinaryOp(BinOp::AddWithOverflow, x, k) | Rvalue::BinaryOp(BinOp::AddWithOverflow, k, x)
+            if k_of(k).is_some() =>
+        {
+            (x, k)
+        }
+        _ => return None,
     };
     let x = whole(x)?;
     walk(vb, vj, pair, &[x])?;
     Some((x, k_of(k)?))
+}
+
+/// Whether a bounds check of x, `x < N` for a constant N a card holds (or of a copy of x), passed on the way to line
+/// j of block bi, with x set nowhere after it: walking back through the block, then each block with one way in.
+/// From that check on, x is on a card, so `x + k` doesn't wrap.
+fn checked_before(blocks: &[Block], bi: usize, j: usize, x: Local) -> bool {
+    let preds = predecessors(blocks);
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let sets = |s: &Statement, l: Local| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(l));
+    let (mut bi, mut j) = (bi, j);
+    for _ in 0..16 {
+        if blocks[bi].statements[..j].iter().any(|s| sets(s, x)) {
+            return false;
+        }
+        let ins = preds.get(&blocks[bi].name).map(Vec::as_slice).unwrap_or_default();
+        let ([p], true) = (ins, bi != 0) else { return false };
+        let Some(&pj) = at.get(p) else { return false };
+        let b = &blocks[pj];
+        if let Terminator::Assert {
+            cond: Operand::Copy(c) | Operand::Move(c),
+            expected: true,
+            target,
+            ..
+        } = &b.terminator
+        {
+            let def = |l: Local| {
+                b.statements.iter().rev().find_map(|s| match s {
+                    Statement::Assign(d, rv) if d.as_local() == Some(l) => Some(rv),
+                    _ => None,
+                })
+            };
+            let compared = c.as_local().and_then(def).and_then(|rv| match rv {
+                Rvalue::BinaryOp(
+                    BinOp::Lt,
+                    Operand::Copy(y) | Operand::Move(y),
+                    Operand::Constant(Const::Int { value, .. }),
+                ) if (0..=999).contains(value) => y.as_local(),
+                _ => None,
+            });
+            // y is x, or a copy of x that x keeps its value after
+            let is_x = |y: Local| {
+                let copied =
+                    matches!(def(y), Some(Rvalue::Use(Operand::Copy(z) | Operand::Move(z))) if z.as_local() == Some(x));
+                let since = b
+                    .statements
+                    .iter()
+                    .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(y)));
+                y == x || copied && since.is_some_and(|k| !b.statements[k + 1..].iter().any(|s| sets(s, x)))
+            };
+            // (the check's own block may set x after the comparison: then it says nothing about x here)
+            let after = c.as_local().and_then(|l| {
+                b.statements
+                    .iter()
+                    .rposition(|s| matches!(s, Statement::Assign(d, _) if d.as_local() == Some(l)))
+            });
+            let kept = after.is_some_and(|k| !b.statements[k + 1..].iter().any(|s| sets(s, x)));
+            if *target == blocks[bi].name && compared.is_some_and(is_x) && kept {
+                return true;
+            }
+        }
+        bi = pj;
+        j = blocks[pj].statements.len();
+    }
+    false
 }
 
 /// Where v is set, walking back from line j of block bi as `folded` does: its block and line.

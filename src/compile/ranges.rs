@@ -246,6 +246,9 @@ struct Pass<'a> {
     /// The usize locals a difference that can go below 0 is stored into (see `range_pass`).
     below: HashSet<Local>,
     dropped: usize,
+    /// The arrays set once, from constants, and written nowhere else: the range of their elements (see
+    /// `constant_tables`).
+    tables: HashMap<Local, Range>,
     /// In the last visit: each plain sum, difference and product, and each linear combination, by block and
     /// statement, and whether its result may be past a card (see `past_a_card`).
     judged: Option<Vec<(BasicBlock, usize, Statement, bool)>>,
@@ -280,11 +283,27 @@ impl Pass<'_> {
         if let Some((v, t)) = o.int() {
             return matches!(t, IntTy::U8 | IntTy::I8 | IntTy::Usize | IntTy::I16).then_some([clamp(v), clamp(v)]);
         }
+        if let Some(r) = self.element(o) {
+            return Some(r);
+        }
         let x = o.local()?;
         facts
             .get(&Key::Local(x))
             .copied()
             .or_else(|| self.of_type(Key::Local(x)))
+    }
+
+    /// An element of a constant table, `copy _1[_5]`: the range of its values.
+    fn element(&self, o: &Operand) -> Option<Range> {
+        let (Operand::Copy(p) | Operand::Move(p)) = o else {
+            return None;
+        };
+        match (p.base_local(), p.projection.as_slice()) {
+            (Some(l), [Projection::Index(_) | Projection::IndexPlus(..) | Projection::ConstantIndex { .. }]) => {
+                self.tables.get(&l).copied()
+            }
+            _ => None,
+        }
     }
 
     /// The range of a linear combination, `Lin(+3*copy _1, -2*copy _2)`.
@@ -342,6 +361,17 @@ impl Pass<'_> {
                 if let Some(r) = r {
                     let past = !r.is_some_and(|r| r[0] >= -999 && r[1] <= 999);
                     self.judged.as_mut().unwrap().push((b.name, i, s.clone(), past));
+                }
+            }
+            // an element of a constant table: the range of its values
+            if let Some((x, Rvalue::Use(o))) = assigned_local(&s) {
+                if let Some(r) = self.element(o) {
+                    kill(x, &mut facts, &mut bools, &mut alias);
+                    if !self.taken.contains(&x) {
+                        facts.insert(Key::Local(x), r);
+                    }
+                    i += 1;
+                    continue;
                 }
             }
             if let Some((x, Rvalue::Use(o))) = assigned_local(&s) {
@@ -738,9 +768,10 @@ impl Pass<'_> {
                     .insert(Key::Local(x), if expected { [1, 1] } else { [0, 0] });
             }
         }
-        // an assert that passed: its comparison held (or, negated, did not)
+        // an assert that passed: its comparison held (or, negated, did not); a copy of the bool too, as GVN asserts
+        // one `r < 6` again
         if let Terminator::Assert {
-            cond: Operand::Move(p),
+            cond: Operand::Move(p) | Operand::Copy(p),
             expected,
             target,
             unwind,
@@ -857,6 +888,68 @@ impl Pass<'_> {
         }
         edge
     }
+}
+
+/// The arrays set once, whole, from integer constants (`[0, 1, 4, 9]`, `[0; 8]`), and otherwise only by element to
+/// an integer constant (`b[i] = 1`): not by a call, not a parameter (nothing sets one in the body), and with no
+/// address taken. Every element read is then one of those constants: the range from the least to the greatest.
+fn constant_tables(blocks: &[Block], taken: &HashSet<Local>) -> HashMap<Local, Range> {
+    // for each array: its whole sets, and its element sets, each the range of its constants (none: not constants)
+    let mut whole: HashMap<Local, Vec<Option<Range>>> = HashMap::new();
+    let mut elements: HashMap<Local, Vec<Option<Range>>> = HashMap::new();
+    let constants = |os: &mut dyn Iterator<Item = &Operand>| -> Option<Range> {
+        let mut r: Option<Range> = None;
+        for o in os {
+            let v = int_value(o)?;
+            r = Some(match r {
+                None => [v, v],
+                Some([lo, hi]) => [lo.min(v), hi.max(v)],
+            });
+        }
+        r
+    };
+    for b in blocks {
+        for s in &b.statements {
+            if let Statement::Assign(d, rv) = s {
+                let Some(l) = d.base_local() else { continue };
+                let element = matches!(
+                    d.projection.as_slice(),
+                    [Projection::Index(_) | Projection::IndexPlus(..) | Projection::ConstantIndex { .. }]
+                );
+                match (d.projection.is_empty(), element, rv) {
+                    (true, _, Rvalue::Array(os)) => whole.entry(l).or_default().push(constants(&mut os.iter())),
+                    (true, _, Rvalue::Repeat(o, _)) => {
+                        whole.entry(l).or_default().push(constants(&mut std::iter::once(o)))
+                    }
+                    (true, ..) => whole.entry(l).or_default().push(None),
+                    (false, true, Rvalue::Use(o)) => {
+                        elements.entry(l).or_default().push(constants(&mut std::iter::once(o)))
+                    }
+                    _ => elements.entry(l).or_default().push(None),
+                }
+            }
+        }
+        if let Terminator::Call { dest, .. } = &b.terminator {
+            if let Some(l) = dest.base_local() {
+                whole.entry(l).or_default().push(None);
+            }
+        }
+    }
+    let hull = |a: Range, b: Range| [a[0].min(b[0]), a[1].max(b[1])];
+    whole
+        .into_iter()
+        .filter(|(l, _)| !taken.contains(l))
+        .filter_map(|(l, rs)| {
+            let [Some(r)] = rs.as_slice() else { return None };
+            elements
+                .get(&l)
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+                .iter()
+                .try_fold(*r, |acc, e| e.map(|e| hull(acc, e)))
+                .map(|r| (l, r))
+        })
+        .collect()
 }
 
 /// The locals whose address is taken as a whole or at an index: `&x`, `&mut x`, `&raw mut x[0 of 1]`.
@@ -1001,6 +1094,7 @@ fn analyse(
         huge: HashSet::new(),
         below: HashSet::new(),
         dropped: 0,
+        tables: constant_tables(blocks, &taken_locals(blocks)),
         judged: None,
     };
     let mut out: HashMap<BasicBlock, Edges> = HashMap::new(); // block -> what holds on the way to each successor
