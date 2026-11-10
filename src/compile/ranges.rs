@@ -109,6 +109,37 @@ fn kept(r: Range) -> Range {
     [r[0].min(s[0]), r[1].max(s[1])]
 }
 
+/// Whether the statement after line i of the block reads x straight from the accumulator, as lowering's
+/// accumulator forwarding (`carries`) has it: x an i16 named nowhere else, read as the first operand of a plain
+/// sum or difference into a local, whose other operand is a constant or a whole i16 local. Then the statement reads
+/// all of x, not what a cell would keep of it. No thread has turned this off (`NO_EXACT`, after lowering found a
+/// result it didn't carry).
+fn carried_on(b: &Block, i: usize, x: Local, locals: &HashMap<Local, Ty>, names: usize) -> bool {
+    if NO_EXACT.with(|n| n.get()) || names != 2 || locals.get(&x) != Some(&Ty::Int(IntTy::I16)) {
+        return false;
+    }
+    let Some(Statement::Assign(d, Rvalue::BinaryOp(BinOp::Add | BinOp::Sub, Operand::Move(p), u))) =
+        b.statements.get(i + 1)
+    else {
+        return false;
+    };
+    let other = match u {
+        Operand::Constant(_) => true,
+        Operand::Copy(q) | Operand::Move(q) => q
+            .as_local()
+            .is_some_and(|l| locals.get(&l) == Some(&Ty::Int(IntTy::I16))),
+        _ => false,
+    };
+    p.as_local() == Some(x)
+        && other
+        && d.as_local().is_some_and(|l| locals.get(&l) == Some(&Ty::Int(IntTy::I16)))
+}
+
+thread_local! {
+    /// Set while a function is compiled again because lowering didn't carry a result `carried_on` took whole.
+    pub static NO_EXACT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// What a comparison `x op v` says about x when it holds, and when it does not.
 fn held(op: BinOp, v: i64) -> Option<Range> {
     Some(match op {
@@ -249,6 +280,11 @@ struct Pass<'a> {
     /// The arrays set once, from constants, and written nowhere else: the range of their elements (see
     /// `constant_tables`).
     tables: HashMap<Local, Range>,
+    /// The results taken whole for the statement after them, as lowering carries them there in the accumulator
+    /// (see `carried_on`); lowering checks it did.
+    exact: HashSet<Local>,
+    /// How many times each local is named in the function.
+    names: HashMap<Local, usize>,
     /// In the last visit: each plain sum, difference and product, and each linear combination, by block and
     /// statement, and whether its result may be past a card (see `past_a_card`).
     judged: Option<Vec<(BasicBlock, usize, Statement, bool)>>,
@@ -549,8 +585,15 @@ impl Pass<'_> {
                             if let Some(f) = fresh.take().filter(|f| f.3 && f.0 != x) {
                                 settle(&mut facts, f); // this statement read it
                             }
-                            facts.insert(Key::Local(x), kept(r));
-                            fresh = Some((x, kept(r), stored(r), false));
+                            // (carried into the next statement, all of it: else the cell's value too)
+                            let whole = matches!(op, BinOp::Add | BinOp::Sub)
+                                && carried_on(b, i, x, self.locals, self.names.get(&x).copied().unwrap_or(0));
+                            let read = if whole { r } else { kept(r) };
+                            if whole {
+                                self.exact.insert(x);
+                            }
+                            facts.insert(Key::Local(x), read);
+                            fresh = Some((x, read, stored(r), false));
                         }
                     }
                 }
@@ -564,8 +607,13 @@ impl Pass<'_> {
                     if let Some(f) = fresh.take().filter(|f| f.3 && f.0 != x) {
                         settle(&mut facts, f);
                     }
-                    facts.insert(Key::Local(x), kept(r));
-                    fresh = Some((x, kept(r), stored(r), false));
+                    let whole = carried_on(b, i, x, self.locals, self.names.get(&x).copied().unwrap_or(0));
+                    let read = if whole { r } else { kept(r) };
+                    if whole {
+                        self.exact.insert(x);
+                    }
+                    facts.insert(Key::Local(x), read);
+                    fresh = Some((x, read, stored(r), false));
                 }
                 i += 1;
                 continue;
@@ -1012,9 +1060,9 @@ pub fn range_pass(
     blocks: &mut [Block],
     locals: &HashMap<Local, Ty>,
     promised: &HashSet<Local>,
-) -> Result<(usize, HashSet<Statement>), Fail> {
-    let (dropped, judged) = analyse(blocks, locals, promised, false)?;
-    Ok((dropped, on_a_card(&judged)))
+) -> Result<(usize, HashSet<Statement>, HashSet<Local>), Fail> {
+    let (dropped, judged, exact) = analyse(blocks, locals, promised, false)?;
+    Ok((dropped, on_a_card(&judged), exact))
 }
 
 /// The statements judged to stay on a card, of those written once.
@@ -1044,7 +1092,7 @@ pub fn past_a_card(
 ) -> HashSet<(BasicBlock, usize)> {
     let mut copy = blocks.to_vec();
     let past: HashSet<(BasicBlock, usize)> = match analyse(&mut copy, locals, promised, true) {
-        Ok((_, judged)) => {
+        Ok((_, judged, _)) => {
             // (one the range pass found stays on a card, written once then and once now)
             let now = on_a_card(&judged.iter().map(|(b, i, s, _)| (*b, *i, s.clone(), false)).collect::<Vec<_>>());
             judged
@@ -1093,7 +1141,7 @@ fn analyse(
     locals: &HashMap<Local, Ty>,
     promised: &HashSet<Local>,
     record: bool,
-) -> Result<(usize, Vec<(BasicBlock, usize, Statement, bool)>), Fail> {
+) -> Result<(usize, Vec<(BasicBlock, usize, Statement, bool)>, HashSet<Local>), Fail> {
     let taken = taken_locals(blocks);
     let preds = predecessors(blocks);
     let unread = unread_pairs(blocks, locals, &taken);
@@ -1105,6 +1153,16 @@ fn analyse(
         below: HashSet::new(),
         dropped: 0,
         tables: constant_tables(blocks, &taken_locals(blocks)),
+        exact: HashSet::new(),
+        names: {
+            let mut n: HashMap<Local, usize> = HashMap::new();
+            for b in blocks.iter() {
+                for l in b.statements.iter().flat_map(|s| s.locals()).chain(b.terminator.locals()) {
+                    *n.entry(l).or_default() += 1;
+                }
+            }
+            n
+        },
         judged: None,
     };
     let mut out: HashMap<BasicBlock, Edges> = HashMap::new(); // block -> what holds on the way to each successor
@@ -1316,7 +1374,7 @@ fn analyse(
         let f = last_in.get(&b.name).cloned().flatten().unwrap_or_default();
         pass.visit(b, f, !record);
     }
-    Ok((pass.dropped, pass.judged.unwrap_or_default()))
+    Ok((pass.dropped, pass.judged.unwrap_or_default(), pass.exact))
 }
 
 /// The plain op a wrapping one does when nothing wraps.

@@ -309,6 +309,9 @@ pub struct Lowering<'a> {
     pub huge: HashSet<Local>,
     /// the usizes a promise keeps on a card (`blocks::promised_cards`): a cast into one needs no test of its sign
     pub promised: HashSet<Local>,
+    /// the results the range pass took whole for the statement after them, as accumulator forwarding carries them
+    /// there (`ranges::carried_on`): each must be carried, else the range pass's facts don't hold
+    pub exact: HashSet<Local>,
     /// of those, the ones a passed check has shown are on a card in the block being lowered, until it sets them
     /// (see `checked_on_card`)
     on_card_now: HashSet<Local>,
@@ -357,6 +360,7 @@ impl<'a> Lowering<'a> {
             names: Ordered::new(),
             huge: HashSet::new(),
             promised: HashSet::new(),
+            exact: HashSet::new(),
             on_card_now: HashSet::new(),
             results: HashSet::new(),
         };
@@ -761,6 +765,13 @@ impl<'a> Lowering<'a> {
                 } else {
                     None
                 };
+                // a result the range pass took whole for the next statement, not carried there: its facts may not
+                // hold, so the program is compiled again without that (`ranges::NO_EXACT`)
+                if let (Statement::Assign(d, _), None) = (s, &self.carry) {
+                    if d.as_local().is_some_and(|x| self.exact.contains(&x)) {
+                        fail!(internal(NOT_CARRIED))
+                    }
+                }
                 self.guard_huge(s);
                 self.statement(s).map_err(|e| self.at(e, &source(s)))?;
                 if let Statement::Assign(d, _) = s {
@@ -939,6 +950,9 @@ fn checked_on_card(blocks: &[ir::Block]) -> HashMap<BasicBlock, HashSet<Local>> 
     }
     known
 }
+
+/// What lowering says when a result the range pass took whole wasn't carried (see `Lowering::exact`).
+pub const NOT_CARRIED: &str = "a result taken whole for the next statement was not carried there";
 
 /// The integer type of an overflow pair `(T, bool)`, which lives in two cells.
 fn overflow_pair(ty: &Ty) -> Option<IntTy> {

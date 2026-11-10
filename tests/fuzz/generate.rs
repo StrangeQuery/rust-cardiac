@@ -19,9 +19,12 @@
 //! with `?` in an #[inline(never)] helper, matched, `unwrap_or`, `is_ok`, `ok()`.
 //!
 //! The generator also runs each program itself, on each input, as Rust would but with numbers of any size: what it
-//! prints, how it ends, and whether any value passed a card on the way. That is the oracle for "past a card": a
-//! run in which no value passed one must print the same on CARDIAC in every setting, whatever the passes folded
-//! away (CARDIAC's own checks see only what is left); and a run that passed one is no finding. Its cards are
+//! prints, how it ends, whether any value it kept passed a card on the way, and whether any value did. That is the
+//! oracle for "past a card". Without overflow checks, a run in which no value kept (in a variable, an array, a
+//! parameter or a result, a loop's bounds or an index, or output) passed one must print the same on CARDIAC,
+//! whatever the passes folded away: a value past a card only inside an expression, back on one before anything
+//! keeps it, is held whole in the accumulator, as in native Rust. With overflow checks, CARDIAC stops at any value
+//! past a card, so a run must match only if no value passed one. Any other run is no finding. Its cards are
 //! checked against Rust's on every run, and a disagreement is counted (the generator's mistake, never a finding).
 //!
 //! The programs are built a batch at a time, as the binaries of one package (target/fuzz/gen/pkg): one cargo
@@ -1353,6 +1356,7 @@ impl Prog {
                 .iter()
                 .map(|&(lo, hi)| Inputs { min: 1, max: 1, lo, hi })
                 .collect(),
+            exact: false,
         }
     }
 }
@@ -1377,7 +1381,18 @@ pub enum End {
 pub struct Sim {
     pub cards: Vec<i64>,
     pub end: End,
+    /// a value kept (see `Machine::kept`) passed a card
     pub past: bool,
+    /// any value passed a card, kept or only in an expression: with overflow checks on, CARDIAC panics there
+    pub past_any: bool,
+}
+
+impl Sim {
+    /// Whether a run that differs is past a card in a setting: with overflow checks on, any value that passed
+    /// one (a checked operation stops there); without them, only one that was kept.
+    pub fn past_in(&self, checks: bool) -> bool {
+        self.past || (checks && self.past_any)
+    }
 }
 
 #[derive(Clone)]
@@ -1393,6 +1408,7 @@ struct Machine<'a> {
     read: usize,
     cards: Vec<i64>,
     past: bool,
+    past_any: bool,
     steps: u64,
     /// The variables in scope, innermost last.
     env: Vec<(String, Val)>,
@@ -1401,9 +1417,21 @@ struct Machine<'a> {
 type Go<T> = Result<T, End>;
 
 impl Machine<'_> {
+    /// A value worked out in an expression: it may pass a card there, in the accumulator, and must still come out
+    /// as Rust's if it is back on one before anything keeps it.
     fn card(&mut self, v: i64) -> i64 {
         if !(-999..=999).contains(&v) {
+            self.past_any = true;
+        }
+        v
+    }
+
+    /// A value kept: in a variable, an array, a parameter or a result, a loop's bounds or an index, or output.
+    /// Past a card, a cell keeps its last three digits, and the run is no finding.
+    fn kept(&mut self, v: i64) -> i64 {
+        if !(-999..=999).contains(&v) {
             self.past = true;
+            self.past_any = true;
         }
         v
     }
@@ -1463,7 +1491,8 @@ impl Machine<'_> {
             E::Call(f, args) => {
                 let mut vals = vec![];
                 for a in args {
-                    vals.push(self.e(a)?);
+                    let v = self.e(a)?;
+                    vals.push(self.kept(v));
                 }
                 let func = self.p.funcs.iter().find(|g| &g.name == f).unwrap();
                 let saved = std::mem::take(&mut self.env);
@@ -1479,7 +1508,8 @@ impl Machine<'_> {
                     None => Ok(0),
                 });
                 self.env = saved;
-                r?
+                let r = r?;
+                self.kept(r)
             }
             E::Index(a, ix) => {
                 let i = self.ix(ix)?;
@@ -1498,7 +1528,8 @@ impl Machine<'_> {
             E::Enum(k, form, args, ks) => {
                 let mut vals = vec![];
                 for a in args {
-                    vals.push(self.e(a)?);
+                    let v = self.e(a)?;
+                    vals.push(self.kept(v));
                 }
                 self.kit(&self.p.kits[*k], *form, &vals, ks)
             }
@@ -1593,7 +1624,10 @@ impl Machine<'_> {
     fn ix(&mut self, ix: &Ix) -> Go<i64> {
         match ix {
             Ix::Usize(n) => Ok(self.int(n)),
-            Ix::Cast(e, _) => self.e(e),
+            Ix::Cast(e, _) => {
+                let v = self.e(e)?;
+                Ok(self.kept(v))
+            }
         }
     }
 
@@ -1640,6 +1674,7 @@ impl Machine<'_> {
             match s {
                 S::Let(v, e) => {
                     let x = self.e(e)?;
+                    let x = self.kept(x);
                     self.env.push((v.clone(), Val::Int(x)));
                 }
                 S::Flag(b, c) => {
@@ -1654,14 +1689,14 @@ impl Machine<'_> {
                         "+=" => old + x,
                         _ => old - x,
                     };
-                    let new = self.card(new);
+                    let new = self.kept(new);
                     if let Some(slot) = self.slot(v) {
                         *slot = Val::Int(new);
                     }
                 }
                 S::Out(e) => {
                     let x = self.e(e)?;
-                    let x = self.card(x);
+                    let x = self.kept(x);
                     self.cards.push(x);
                 }
                 S::If(c, a, b) => {
@@ -1676,6 +1711,7 @@ impl Machine<'_> {
                     loop {
                         self.tick()?;
                         let (i, b) = (self.int(k), self.e(bound)?);
+                        let b = self.kept(b);
                         if i >= b || self.block(body)? {
                             break;
                         }
@@ -1686,6 +1722,7 @@ impl Machine<'_> {
                 }
                 S::For(i, lo, hi, _, body) => {
                     let (lo, hi) = (self.e(lo)?, self.e(hi)?);
+                    let (lo, hi) = (self.kept(lo), self.kept(hi));
                     for v in lo..hi {
                         self.tick()?;
                         self.env.push((i.clone(), Val::Int(v)));
@@ -1705,6 +1742,7 @@ impl Machine<'_> {
                 S::Store(a, ix, e) => {
                     let i = self.ix(ix)?;
                     let x = self.e(e)?;
+                    let x = self.kept(x);
                     match self.slot(a) {
                         Some(Val::Array(t)) => {
                             let i = usize::try_from(i).map_err(|_| End::Panic)?;
@@ -1715,12 +1753,14 @@ impl Machine<'_> {
                 }
                 S::Bump(f, v, e) => {
                     let d = self.e(e)?;
+                    let d = self.kept(d);
                     let x = self.int(v);
                     let func = self.p.funcs.iter().find(|g| &g.name == f).unwrap();
                     let saved = std::mem::take(&mut self.env);
                     self.env = vec![("*v".to_string(), Val::Int(x)), ("d".to_string(), Val::Int(d))];
                     let r = self.block(&func.body);
                     let after = self.int("*v");
+                    let after = self.kept(after);
                     self.env = saved;
                     r?;
                     if let Some(slot) = self.slot(v) {
@@ -1746,6 +1786,7 @@ pub fn simulate(p: &Prog, input: &[i64]) -> Sim {
         read: 0,
         cards: vec![],
         past: false,
+        past_any: false,
         steps: 0,
         env: vec![],
     };
@@ -1757,6 +1798,7 @@ pub fn simulate(p: &Prog, input: &[i64]) -> Sim {
         cards: m.cards,
         end,
         past: m.past,
+        past_any: m.past_any,
     }
 }
 
@@ -2312,7 +2354,7 @@ fn both(work: &Work, setting: &str, name: &str, values: &[Value]) -> (Run, Run) 
 /// Whether Rust's run is the one the generator expects: the same cards, and a panic (its -999 card, exit 101)
 /// where the generator's run panicked. A run that passed a card, or ran too long, is not compared.
 fn agrees(sim: &Sim, native: &Run) -> bool {
-    if sim.past || sim.end == End::TooLong {
+    if sim.past_any || sim.end == End::TooLong {
         return true;
     }
     let mut cards: Vec<String> = sim.cards.iter().map(|c| c.to_string()).collect();
@@ -2327,7 +2369,8 @@ fn agrees(sim: &Sim, native: &Run) -> bool {
 /// no value passed a card on the way.
 fn miscompiled(p: &Prog, work: &Work, setting: &str, name: &str, values: &[Value]) -> Option<(Run, Run)> {
     let sim = simulate(p, &ints(values));
-    if sim.past || sim.end == End::Broken {
+    let checks = SETTINGS.iter().any(|(s, _, c)| *s == setting && *c);
+    if sim.past_in(checks) || sim.end == End::Broken {
         return None;
     }
     let (native, cardiac) = both(work, setting, name, values);
@@ -2541,7 +2584,7 @@ pub fn campaign(root: &Path, tool: &Path, o: Options) {
                             continue;
                         }
                         let (mut checked, mut trusted) = (false, true);
-                        for (j, (setting, _, _)) in SETTINGS.iter().enumerate() {
+                        for (j, (setting, _, checks)) in SETTINGS.iter().enumerate() {
                             if !built[setting].contains(name) {
                                 continue;
                             }
@@ -2570,7 +2613,7 @@ pub fn campaign(root: &Path, tool: &Path, o: Options) {
                             }
                             if (native.cards.as_str(), native.status) == (cardiac.cards.as_str(), cardiac.status) {
                                 tallies[j].0 += 1;
-                            } else if sim.past {
+                            } else if sim.past_in(*checks) {
                                 tallies[j].1 += 1;
                             } else {
                                 tallies[j].2 += 1;
@@ -2967,10 +3010,11 @@ pub fn repro(root: &Path, tool: &Path, file: &Path, input: &[String]) {
         tool.display(),
         input.join(" ")
     );
+    let one = Target { name: name.clone(), source: file.to_path_buf(), inputs: vec![], exact: false };
     let mut bad = false;
     for s in &settings {
         let line = match &b[s][&name] {
-            Built::Yes => match differs(&work, &built, s, &name, &values) {
+            Built::Yes => match differs(&work, &built, s, &one, &values) {
                 None => format!("same: {}", brief(&work.run_native(s, &name, &values))),
                 Some((n, c, past)) => {
                     bad |= !past;

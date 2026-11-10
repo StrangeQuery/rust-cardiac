@@ -38,22 +38,22 @@
       "opt-level 1, overflow checks off": {
         "outcome": "Match",
         "output": "5,-100",
-        "cells": 31
+        "cells": 30
       },
       "opt-level 1, overflow checks on": {
         "outcome": "Match",
         "output": "5,-100",
-        "cells": 31
+        "cells": 30
       },
       "opt-level 2, overflow checks off": {
         "outcome": "Match",
         "output": "5,-100",
-        "cells": 31
+        "cells": 30
       },
       "opt-level 2, overflow checks on": {
         "outcome": "Match",
         "output": "5,-100",
-        "cells": 31
+        "cells": 30
       }
     }
   },

@@ -72,6 +72,9 @@ struct Target {
     name: String,
     source: PathBuf,
     inputs: Vec<Inputs>,
+    /// Marked `exact`: no value the program keeps passes a card, so without overflow checks every run must match
+    /// native Rust, whatever a build with them says.
+    exact: bool,
 }
 
 /// One input: its value and the range it was drawn from, which shrinking keeps it in.
@@ -163,11 +166,14 @@ fn targets(root: &Path) -> Vec<Target> {
         if words.len() < 2 {
             bad()
         }
-        let inputs = words[2..].iter().map(|w| parse_inputs(w).unwrap_or_else(|| bad())).collect();
+        let exact = words.last() == Some(&"exact");
+        let ins = &words[2..words.len() - exact as usize];
+        let inputs = ins.iter().map(|w| parse_inputs(w).unwrap_or_else(|| bad())).collect();
         found.push(Target {
             name: words[0].to_string(),
             source: root.join(words[1]),
             inputs,
+            exact,
         });
     }
     found
@@ -402,14 +408,16 @@ fn build(work: &Work, targets: &[Target]) -> HashMap<&'static str, Vec<String>> 
 }
 
 /// A run that differs, and whether it passed what a card holds: native out() was given a value no card holds, or
-/// CARDIAC built with overflow checks (at this opt-level if it built, else at any) says a value didn't fit.
+/// CARDIAC built with overflow checks (at this opt-level if it built, else at any) says a value didn't fit. For a
+/// program marked `exact`, only a build with overflow checks can pass a card: one without must match.
 fn differs(
     work: &Work,
     built: &HashMap<&'static str, Vec<String>>,
     setting: &str,
-    name: &str,
+    t: &Target,
     values: &[Value],
 ) -> Option<(Run, Run, bool)> {
+    let name = t.name.as_str();
     let native = work.run_native(setting, name, values);
     let cardiac = work.run_cardiac(setting, name, values);
     if (native.cards.as_str(), native.status) == (cardiac.cards.as_str(), cardiac.status) {
@@ -422,6 +430,9 @@ fn differs(
         .map(|(s, _, _)| *s)
         .collect();
     checked.sort_by_key(|s| !s.starts_with(opt));
+    if t.exact && !SETTINGS.iter().any(|(s, _, c)| *s == setting && *c) {
+        checked.clear();
+    }
     let past = native.why.contains(NOT_A_CARD)
         || match checked.first() {
         Some(&s) if s == setting => past_a_card(&cardiac.why),
@@ -437,10 +448,10 @@ fn shrink(
     work: &Work,
     built: &HashMap<&'static str, Vec<String>>,
     setting: &str,
-    name: &str,
+    t: &Target,
     mut values: Vec<Value>,
 ) -> Vec<Value> {
-    let fails = |vs: &[Value]| matches!(differs(work, built, setting, name, vs), Some((_, _, false)));
+    let fails = |vs: &[Value]| matches!(differs(work, built, setting, t, vs), Some((_, _, false)));
     let mut tries = 0;
     'better: loop {
         let mut candidates: Vec<Vec<Value>> = vec![];
@@ -561,7 +572,7 @@ fn main() {
                             if !built[setting].contains(&t.name) {
                                 continue;
                             }
-                            match differs(work, built, setting, &t.name, &values) {
+                            match differs(work, built, setting, t, &values) {
                                 None => tallies[k].same += 1,
                                 Some((_, _, true)) => tallies[k].past += 1,
                                 Some(_) => {
@@ -570,9 +581,9 @@ fn main() {
                                     if tallies[k].failed > 1 {
                                         continue;
                                     }
-                                    let small = shrink(work, built, setting, &t.name, values.clone());
+                                    let small = shrink(work, built, setting, t, values.clone());
                                     let (native, cardiac, _) =
-                                        differs(work, built, setting, &t.name, &small).unwrap();
+                                        differs(work, built, setting, t, &small).unwrap();
                                     let input = words(&small).join(" ");
                                     let mut m = format!(
                                         "DIFFER {} {setting}, seed {seed} run {r}: input {input} (from {})\n",

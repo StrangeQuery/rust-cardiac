@@ -6,8 +6,9 @@ struct Box1 {
     v: i16,
 }
 
-/// Without overflow checks a product past a card is what its cell keeps (1200 is kept as 200): read again after it
-/// is stored, by a test, a second test, a sum, and from a field, it is what was printed
+/// Without overflow checks a product past a card is what its cell keeps (1200 is kept as 200), which is what is
+/// printed. The first test after it reads the accumulator and sees all of it, as native Rust does; a second test, a
+/// sum, and a read of a field read the cell, and see what was printed.
 #[inline(never)]
 fn plain(a: i16) {
     let p = a * 40;

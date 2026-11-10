@@ -3,8 +3,8 @@
 pub fn out(_v: i16) {}
 
 /// Without overflow checks a product past a card is what its cell keeps: a from 25 to 30 makes a * 40 1000 to 1200,
-/// kept as 0 to 200. The range pass knows the cell's value from that, not the product's, and decides no test from
-/// it: 200 is not more than 500.
+/// kept as 0 to 200. The test straight after reads the accumulator, which holds all of it, as native Rust's does;
+/// the range pass allows for either, the product or what the cell keeps, and decides nothing from it.
 #[inline(never)]
 fn known(a: i16) {
     if a >= 25 && a <= 30 {

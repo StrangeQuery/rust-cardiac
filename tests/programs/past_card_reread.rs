@@ -3,8 +3,8 @@
 pub fn out(_v: i16) {}
 
 /// Without overflow checks a result past a card is what its cell keeps, the last three digits with the sign: 30 *
-/// 40 is 1200, kept as 200. Each value is printed and then compared, and the comparison must see what was printed:
-/// the accumulator still holds the whole result after the store, so it can't stand in for the cell.
+/// 40 is 1200, kept as 200, which is what is printed. The comparison that comes straight after reads the
+/// accumulator, which still holds the whole result, so it sees 1200, as native Rust does.
 #[inline(never)]
 fn product(a: i16) {
     let p = a.wrapping_mul(40);
