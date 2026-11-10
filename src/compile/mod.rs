@@ -1186,7 +1186,11 @@ fn compile(
             blocks::merge_blocks(&mut blocks);
             // a sum of reads a constant apart, as a loop over a table of the offsets (only where a program
             // doesn't fit without it)
+            blocks::window_sums(&mut blocks, &mut locals, &promised);
             blocks::reroll_reads(&mut blocks, &mut locals);
+            // a number split into its digits and put back together, as the number
+            blocks::digits_rejoined(&mut blocks);
+            blocks::dead_code(&mut blocks, &results);
             // what a loop works out the same every time round, once before it (CARDIAC_HOIST=1 while measured)
             if hoist::enabled() {
                 let fixed: HashSet<ir::Local> = params.iter().chain(&results).chain([&ir::Local(0)]).copied().collect();

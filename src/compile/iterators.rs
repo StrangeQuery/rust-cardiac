@@ -74,7 +74,7 @@ fn array_into_iter_ty(t: &Ty) -> Option<(Ty, u64)> {
         return None;
     }
     match last_args(p).as_slice() {
-        [GenericArg::Ty(e @ (Ty::Int(IntTy::I16 | IntTy::U8) | Ty::Bool)), GenericArg::Const(n)] => {
+        [GenericArg::Ty(e @ (Ty::Int(IntTy::I16 | IntTy::U8 | IntTy::Usize) | Ty::Bool)), GenericArg::Const(n)] => {
             Some((e.clone(), *n))
         }
         _ => None,
@@ -493,8 +493,9 @@ fn as_range(
     // cleanup blocks out). CARDIAC never unwinds, and that drop does nothing, so the unwind is a plain one: any
     // other value whose drop did something is dropped on the way out too, and that drop is refused.
     let names: Vec<BasicBlock> = f.body.blocks.iter().map(|b| b.name).collect();
+    // (a check that panics too: `for off in T { n += b[s + off] }` checks the index inside the loop)
     for b in f.body.blocks.iter_mut() {
-        if let Terminator::Call { unwind, .. } = &mut b.terminator {
+        if let Terminator::Call { unwind, .. } | Terminator::Assert { unwind, .. } = &mut b.terminator {
             if matches!(unwind, Unwind::Cleanup(c) if !names.contains(c)) {
                 *unwind = Unwind::Continue;
             }

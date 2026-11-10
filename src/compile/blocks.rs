@@ -885,6 +885,730 @@ pub fn reroll_reads(blocks: &mut Vec<ir::Block>, locals: &mut crate::compile::ut
     }
 }
 
+/// A walk over a small window of a table, `for i in r..r + 3 { for j in c..c + 3 { n += b[i][j] } }` (or one
+/// loop), as one loop over a table of the offsets, row after row: `n += b[base + T[q]]` for q in 0..9, base `10 * r +
+/// c`, T `[0, 1, 2, 10, 11, 12, 20, 21, 22]`. Each loop runs from a usize a promise keeps on a card (so `r + 3`
+/// doesn't wrap: it runs 3 times), and its body, once the range pass has proved its checks, is the index worked
+/// out from the loops' variables and what doesn't change, and the one sum: the same reads, in the same order, into
+/// the same local, so the sum is the same at every step. Only where `REROLL` is on, as for `reroll_reads`.
+pub fn window_sums(
+    blocks: &mut Vec<ir::Block>,
+    locals: &mut crate::compile::util::Ordered<ir::Local, ir::Ty>,
+    promised: &HashSet<ir::Local>,
+) {
+    if !REROLL.with(|r| r.get()) {
+        return;
+    }
+    while window_sum(blocks, locals, promised) {}
+}
+
+/// A loop `for v in a..a + K`, at its header: `cmp = Lt(v, end)`, then on to the body or out.
+struct Counted {
+    header: usize,
+    body: usize,
+    exit: BasicBlock,
+    v: ir::Local,
+    end: ir::Local,
+    cmp: ir::Local,
+}
+
+/// An affine value: a constant, and each local's coefficient.
+type Affine = (i128, std::collections::BTreeMap<ir::Local, i128>);
+
+fn window_sum(
+    blocks: &mut Vec<ir::Block>,
+    locals: &mut crate::compile::util::Ordered<ir::Local, ir::Ty>,
+    promised: &HashSet<ir::Local>,
+) -> bool {
+    use ir::{ArrayLen, BinOp, Const, IntTy, Local, Operand, Place, PlaceBase, Projection, Ty};
+    let at: HashMap<BasicBlock, usize> = blocks.iter().enumerate().map(|(i, b)| (b.name, i)).collect();
+    let preds = predecessors(blocks);
+    let local = |o: &Operand| match o {
+        Operand::Copy(p) | Operand::Move(p) => p.as_local(),
+        _ => None,
+    };
+    let int = |o: &Operand| match o {
+        Operand::Constant(Const::Int { value, .. }) => Some(*value),
+        _ => None,
+    };
+    let counted = |h: usize| -> Option<Counted> {
+        let b = &blocks[h];
+        let [Statement::Assign(d, Rvalue::BinaryOp(BinOp::Lt, v, end))] = b.statements.as_slice() else {
+            return None;
+        };
+        let Terminator::SwitchInt {
+            discr,
+            arms,
+            otherwise: Some(body),
+        } = &b.terminator
+        else {
+            return None;
+        };
+        let [(0, exit)] = arms.as_slice() else { return None };
+        let cmp = d.as_local()?;
+        (local(discr) == Some(cmp)).then_some(())?;
+        Some(Counted {
+            header: h,
+            body: *at.get(body)?,
+            exit: *exit,
+            v: local(v)?,
+            end: local(end)?,
+            cmp,
+        })
+    };
+    // a usize that can't be past a card: promised, or a promised one's quotient or remainder by a constant (`s / 10`)
+    let single_defs: HashMap<Local, &Rvalue> = {
+        let mut all: HashMap<Local, Vec<&Rvalue>> = HashMap::new();
+        for b in blocks.iter() {
+            for st in &b.statements {
+                if let Statement::Assign(d, rv) = st {
+                    all.entry(d.base_local().unwrap()).or_default().push(rv);
+                }
+            }
+        }
+        all.into_iter()
+            .filter_map(|(l, v)| (v.len() == 1).then(|| (l, v[0])))
+            .collect()
+    };
+    let small = |a: Local| {
+        promised.contains(&a)
+            || matches!(single_defs.get(&a), Some(Rvalue::BinaryOp(BinOp::Div | BinOp::Rem, x, d))
+                if local(x).is_some_and(|x| promised.contains(&x)) && int(d).is_some_and(|d| d >= 1))
+    };
+    // the setup of a loop in the block before it: `end = Add(copy a, const K)` and `v = copy a`, a promised; its a
+    // and K, and the two lines
+    let setup = |b: &ir::Block, l: &Counted| -> Option<(Local, i128, [usize; 2])> {
+        let mut e = None;
+        let mut v = None;
+        for (k, s) in b.statements.iter().enumerate() {
+            match s {
+                Statement::Assign(d, Rvalue::BinaryOp(BinOp::Add, a, n)) if d.as_local() == Some(l.end) => {
+                    e = Some((local(a)?, int(n)?, k));
+                }
+                Statement::Assign(d, Rvalue::Use(a)) if d.as_local() == Some(l.v) => v = Some((local(a)?, k)),
+                _ => {}
+            }
+        }
+        let ((a, n, ke), (a2, kv)) = (e?, v?);
+        (a == a2 && small(a) && (1..=10).contains(&n)).then_some((a, n, [ke, kv]))
+    };
+    for h1 in 0..blocks.len() {
+        let Some(outer) = counted(h1) else { continue };
+        let outer_name = blocks[h1].name;
+        let ins = preds.get(&outer_name).cloned().unwrap_or_default();
+        // one loop or two: the inner one set up in the outer one's body, its exit the outer one's latch
+        let b1 = &blocks[outer.body];
+        let inner = match &b1.terminator {
+            Terminator::Goto(h2) => at.get(h2).and_then(|&h2| counted(h2)),
+            _ => None,
+        };
+        let (loops, sum_block, latches): (Vec<(&Counted, usize)>, usize, Vec<usize>) = match &inner {
+            Some(inner) => {
+                let Some(&l1) = at.get(&inner.exit) else { continue };
+                let latch = &blocks[l1];
+                let one_more = |b: &ir::Block, v: Local| {
+                    matches!(b.statements.as_slice(), [Statement::Assign(d, Rvalue::BinaryOp(BinOp::Add, x, k))]
+                        if d.as_local() == Some(v) && local(x) == Some(v) && int(k) == Some(1))
+                };
+                if !one_more(latch, outer.v) || latch.terminator != Terminator::Goto(outer_name) {
+                    continue;
+                }
+                if b1.statements.len() != 2 {
+                    continue;
+                }
+                (vec![(&outer, h1), (inner, outer.body)], inner.body, vec![l1])
+            }
+            None => (vec![(&outer, h1)], outer.body, vec![]),
+        };
+        // the sum checked for overflow (`t = AddWithOverflow(acc, ..)`, its assert, then `acc = move (t.0)` and the
+        // variable one more in a block of their own): that block, the pair and the sum's local
+        let innermost_name = blocks[loops.last().unwrap().0.header].name;
+        let checked: Option<(usize, Local, Local)> = match &blocks[sum_block].terminator {
+            Terminator::Goto(h) if *h == innermost_name => None,
+            Terminator::Assert {
+                cond: Operand::Copy(p) | Operand::Move(p),
+                expected: false,
+                target,
+                ..
+            } => {
+                let (Some(pair), [Projection::Field(1, _)]) = (p.base_local(), p.projection.as_slice()) else {
+                    continue;
+                };
+                let Some(&c) = at.get(target) else { continue };
+                let cb = &blocks[c];
+                let ok_preds = preds.get(target).map(Vec::as_slice) == Some(&[blocks[sum_block].name][..]);
+                let Some(Statement::Assign(d, Rvalue::Use(Operand::Copy(v) | Operand::Move(v)))) =
+                    cb.statements.first()
+                else {
+                    continue;
+                };
+                let (Some(acc), Some(from), [Projection::Field(0, _)]) =
+                    (d.as_local(), v.base_local(), v.projection.as_slice())
+                else {
+                    continue;
+                };
+                if !ok_preds
+                    || from != pair
+                    || cb.statements.len() != 2
+                    || cb.terminator != Terminator::Goto(innermost_name)
+                {
+                    continue;
+                }
+                Some((c, pair, acc))
+            }
+            _ => continue,
+        };
+        // the block that goes back to the innermost header, the variable one more on it
+        let tail = checked.map_or(sum_block, |(c, _, _)| c);
+        // the block before the outer loop (the way in that isn't the way back round), and each loop's start and count
+        let back_name = blocks[latches.first().copied().unwrap_or(tail)].name;
+        let pre_name = match ins.as_slice() {
+            [x, y] if *y == back_name => *x,
+            [x, y] if *x == back_name => *y,
+            _ => continue,
+        };
+        let Some(&pre) = at.get(&pre_name) else { continue };
+        if blocks[pre].terminator != Terminator::Goto(outer_name) {
+            continue;
+        }
+        let mut starts = vec![];
+        let mut setup_lines: Vec<(usize, usize)> = vec![];
+        let mut fine = true;
+        for (k, (l, _)) in loops.iter().enumerate() {
+            let where_set = if k == 0 { pre } else { outer.body };
+            match setup(&blocks[where_set], l) {
+                Some((a, n, lines)) => {
+                    starts.push((a, n));
+                    setup_lines.extend(lines.iter().map(|x| (where_set, *x)));
+                }
+                None => fine = false,
+            }
+        }
+        if !fine {
+            continue;
+        }
+        // the sum's block: the index worked out, the sum, the innermost variable one more, and back to its header
+        let innermost = loops.last().unwrap().0;
+        let Some(last) = blocks[tail].statements.last() else {
+            continue;
+        };
+        if !matches!(last, Statement::Assign(d, Rvalue::BinaryOp(BinOp::Add, x, k))
+            if d.as_local() == Some(innermost.v) && local(x) == Some(innermost.v) && int(k) == Some(1))
+        {
+            continue;
+        }
+        let body = &blocks[sum_block];
+        let rest: &[Statement] = if checked.is_some() {
+            &body.statements
+        } else {
+            &body.statements[..body.statements.len() - 1]
+        };
+        let vars: Vec<Local> = loops.iter().map(|(l, _)| l.v).collect();
+        let mut forms: HashMap<Local, Affine> = HashMap::new();
+        let form_of = |forms: &HashMap<Local, Affine>, o: &Operand| -> Option<Affine> {
+            if let Some(v) = int(o) {
+                return Some((v, Default::default()));
+            }
+            let l = local(o)?;
+            Some(
+                forms
+                    .get(&l)
+                    .cloned()
+                    .unwrap_or_else(|| (0, [(l, 1)].into_iter().collect())),
+            )
+        };
+        let add = |a: Affine, b: Affine| {
+            let mut m = a.1;
+            for (l, c) in b.1 {
+                *m.entry(l).or_default() += c;
+            }
+            (a.0 + b.0, m)
+        };
+        let mut sum: Option<(Local, Local, Affine)> = None;
+        // an element read into a local of its own first, `_22 = copy A[_45]`, as with overflow checks on
+        let mut element_reads: HashMap<Local, Operand> = HashMap::new();
+        let element_read = |o: &Operand| match o {
+            Operand::Copy(p) | Operand::Move(p) => {
+                matches!(
+                    p.projection.as_slice(),
+                    [Projection::Index(_) | Projection::IndexPlus(..)]
+                )
+            }
+            _ => false,
+        };
+        for s in rest {
+            let Statement::Assign(d, rv) = s else {
+                fine = false;
+                break;
+            };
+            let Some(t) = d.as_local() else {
+                fine = false;
+                break;
+            };
+            if let Rvalue::Use(o) = rv {
+                if element_read(o) && sum.is_none() {
+                    element_reads.insert(t, o.clone());
+                    continue;
+                }
+            }
+            let f = match rv {
+                Rvalue::Use(o) => form_of(&forms, o),
+                Rvalue::BinaryOp(op @ (BinOp::Add | BinOp::AddWithOverflow), x, y) => {
+                    let y = &local(y)
+                        .and_then(|l| element_reads.get(&l).cloned())
+                        .unwrap_or_else(|| y.clone());
+                    // the sum: `acc = Add(copy acc, copy A[index])`, or checked into a pair whose value is acc's
+                    let read = |o: &Operand| match o {
+                        Operand::Copy(p) | Operand::Move(p) => match (p.base_local(), p.projection.as_slice()) {
+                            (Some(a), [Projection::Index(x)]) => Some((a, *x, 0)),
+                            (Some(a), [Projection::IndexPlus(x, k)]) => Some((a, *x, *k as i128)),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    if let (Some(acc), Some((a, x, k))) = (local(x), read(y)) {
+                        let into = match checked {
+                            Some((_, pair, acc)) if t == pair && *op == BinOp::AddWithOverflow => acc,
+                            _ if *op == BinOp::Add => t,
+                            _ => Local(u32::MAX),
+                        };
+                        if acc == into && sum.is_none() {
+                            let index = add(
+                                form_of(&forms, &Operand::Copy(Place::local(x))).unwrap(),
+                                (k, Default::default()),
+                            );
+                            sum = Some((acc, a, index));
+                            continue;
+                        }
+                    }
+                    match (form_of(&forms, x), form_of(&forms, y)) {
+                        (Some(a), Some(b)) if local(x).is_some() || local(y).is_some() => Some(add(a, b)),
+                        _ => None,
+                    }
+                }
+                Rvalue::BinaryOp(BinOp::Mul, x, y) => match (int(x), int(y)) {
+                    (Some(k), None) | (None, Some(k)) => {
+                        let o = if int(x).is_some() { y } else { x };
+                        form_of(&forms, o).map(|(c, m)| (c * k, m.into_iter().map(|(l, v)| (l, v * k)).collect()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            };
+            let Some(f) = f else {
+                fine = false;
+                break;
+            };
+            forms.insert(t, f);
+        }
+        let Some((acc, array, index)) = sum.filter(|_| fine) else {
+            continue;
+        };
+        // the nest's blocks, and what they name: the variables, temps, ends and comparisons, read nowhere else
+        let mut nest: Vec<usize> = loops.iter().map(|(l, _)| l.header).collect();
+        nest.extend(latches.iter().copied());
+        nest.push(sum_block);
+        nest.push(tail);
+        if inner.is_some() {
+            nest.push(outer.body);
+        }
+        nest.sort_unstable();
+        nest.dedup();
+        let mut own: Vec<Local> = forms.keys().copied().collect();
+        own.extend(checked.map(|(_, pair, _)| pair));
+        own.extend(element_reads.keys().copied());
+        own.extend(loops.iter().flat_map(|(l, _)| [l.v, l.end, l.cmp]));
+        let in_nest = |l: Local| -> usize {
+            nest.iter()
+                .map(|&i| {
+                    blocks[i].statements.iter().map(|s| s.count(l)).sum::<usize>() + blocks[i].terminator.count(l)
+                })
+                .sum::<usize>()
+                + setup_lines
+                    .iter()
+                    .filter(|(b, _)| !nest.contains(b))
+                    .map(|&(b, k)| blocks[b].statements[k].count(l))
+                    .sum::<usize>()
+        };
+        let everywhere = |l: Local| -> usize {
+            blocks
+                .iter()
+                .map(|b| b.statements.iter().map(|s| s.count(l)).sum::<usize>() + b.terminator.count(l))
+                .sum()
+        };
+        // (the sum read twice in the nest, as the sum and set from it; and as the checked sum's assert's message
+        // says it)
+        let in_message = if checked.is_some() {
+            blocks[sum_block].terminator.count(acc)
+        } else {
+            0
+        };
+        if own.iter().any(|&l| in_nest(l) != everywhere(l)) || in_nest(acc) != 2 + in_message {
+            continue;
+        }
+        // nothing comes into the nest but at the outer loop's header, from the block before it
+        let names: HashSet<BasicBlock> = nest.iter().map(|&i| blocks[i].name).collect();
+        let entered = nest.iter().all(|&i| {
+            preds
+                .get(&blocks[i].name)
+                .map(Vec::as_slice)
+                .unwrap_or_default()
+                .iter()
+                .all(|p| names.contains(p) || (i == h1 && *p == pre_name))
+        });
+        if !entered {
+            continue;
+        }
+        // the array, the sum and the starts set nowhere in the nest
+        let set_in_nest = |l: Local| {
+            nest.iter().any(|&i| {
+                blocks[i]
+                    .statements
+                    .iter()
+                    .any(|s| matches!(s, Statement::Assign(d, _) if d.base_local() == Some(l)))
+            })
+        };
+        let invariant = index
+            .1
+            .keys()
+            .filter(|l| !vars.contains(l))
+            .any(|l| set_in_nest(*l) || *l == acc);
+        if invariant
+            || set_in_nest(array)
+            || starts.iter().any(|(a, _)| set_in_nest(*a))
+            || !matches!(locals.get(&array), Some(Ty::Array(..)))
+        {
+            continue;
+        }
+        // the index with each variable v = start + step: base (the rest, and each start times v's coefficient) and
+        // the offset of each step, row after row
+        let (konst, coefs) = index.clone();
+        let mut base: std::collections::BTreeMap<Local, i128> = std::collections::BTreeMap::new();
+        let mut steps: Vec<i128> = vec![];
+        for (l, c) in &coefs {
+            if !vars.contains(l) {
+                base.insert(*l, *c);
+            }
+        }
+        for (k, v) in vars.iter().enumerate() {
+            let c = coefs.get(v).copied().unwrap_or(0);
+            *base.entry(starts[k].0).or_default() += c;
+            steps.push(c);
+        }
+        if konst < 0 || steps.iter().any(|c| *c < 0) || base.iter().any(|(l, c)| *c < 0 || (*c != 0 && !small(*l))) {
+            continue;
+        }
+        let mut offsets: Vec<i128> = vec![konst];
+        for (k, step) in steps.iter().enumerate() {
+            let n = starts[k].1;
+            offsets = offsets.iter().flat_map(|o| (0..n).map(move |p| o + p * step)).collect();
+        }
+        if offsets.len() < 2 || offsets.iter().any(|o| *o > 999) {
+            continue;
+        }
+        // the middle square taken away just after (`n - b[r + 1][c + 1]`), from an array whose sum over the window
+        // can't pass a card: the same as leaving it out of the table, so it is, and the subtraction is a copy
+        let mut taken_out: Option<(usize, usize)> = None;
+        let tables = super::ranges::constant_tables(blocks, &super::ranges::taken_locals(blocks));
+        let bounded = tables
+            .get(&array)
+            .is_some_and(|r| r[0].abs().max(r[1].abs()).saturating_mul(offsets.len() as i64) <= 999);
+        // a checked sum stays a card from where it starts, a constant set just before the loops: then it can't
+        // overflow, and the loop over the table adds plainly
+        if checked.is_some() {
+            let start = blocks[pre].statements.iter().rev().find(|s| s.count(acc) > 0);
+            let c0 = match start {
+                Some(Statement::Assign(d, Rvalue::Use(Operand::Constant(Const::Int { value, .. }))))
+                    if d.as_local() == Some(acc) =>
+                {
+                    Some(*value as i64)
+                }
+                _ => None,
+            };
+            let fits = c0.zip(tables.get(&array)).is_some_and(|(c0, r)| {
+                c0.abs() + r[0].abs().max(r[1].abs()).saturating_mul(offsets.len() as i64) <= 999
+            });
+            if !fits {
+                continue;
+            }
+        }
+        if let (Some(&xi), true) = (at.get(&outer.exit), bounded) {
+            let mut later: HashMap<Local, Affine> = HashMap::new();
+            // an element read into a local first, `_28 = copy b[_47+11]`: the read
+            let mut later_reads: HashMap<Local, (Local, i128)> = HashMap::new();
+            let read_of = |o: &Operand| match o {
+                Operand::Copy(p) | Operand::Move(p) => match (p.base_local(), p.projection.as_slice()) {
+                    (Some(a), [Projection::Index(x)]) if a == array => Some((*x, 0)),
+                    (Some(a), [Projection::IndexPlus(x, k)]) if a == array => Some((*x, *k as i128)),
+                    _ => None,
+                },
+                _ => None,
+            };
+            for (si, s) in blocks[xi].statements.iter().enumerate() {
+                let Statement::Assign(d, rv) = s else { break };
+                let Some(t) = d.as_local() else { break };
+                if let (Rvalue::Use(o), false) = (rv, s.count(acc) > 0) {
+                    if let Some(r) = read_of(o) {
+                        later_reads.insert(t, r);
+                        continue;
+                    }
+                }
+                if s.count(acc) > 0 {
+                    let checked_sub = matches!(rv, Rvalue::BinaryOp(BinOp::SubWithOverflow, ..));
+                    // (checked, only as the block's last line, its assert the block's end)
+                    let last_line = si + 1 == blocks[xi].statements.len()
+                        && matches!(&blocks[xi].terminator, Terminator::Assert { cond: Operand::Copy(p) | Operand::Move(p), expected: false, .. }
+                            if p.base_local() == Some(t) && matches!(p.projection.as_slice(), [Projection::Field(1, _)]));
+                    if let Rvalue::BinaryOp(BinOp::Sub | BinOp::SubWithOverflow, x, y) = rv {
+                        if checked_sub && !last_line {
+                            break;
+                        }
+                        // (a local read into once, and read only here)
+                        let read = read_of(y).or_else(|| {
+                            let l = local(y)?;
+                            let total: usize = blocks
+                                .iter()
+                                .map(|b| b.statements.iter().map(|s| s.count(l)).sum::<usize>() + b.terminator.count(l))
+                                .sum();
+                            let in_message = blocks[xi].terminator.count(l);
+                            (total == 2 + in_message).then_some(())?;
+                            later_reads.get(&l).copied()
+                        });
+                        if let (Some(a0), Some((ix, k))) = (local(x), read) {
+                            let f = later.get(&ix).cloned().unwrap_or((0, [(ix, 1)].into_iter().collect()));
+                            let mut want = base.clone();
+                            want.retain(|_, c| *c != 0);
+                            let mut got = f.1.clone();
+                            got.retain(|_, c| *c != 0);
+                            let off = f.0 + k;
+                            if a0 == acc && got == want {
+                                if let Some(pos) = offsets.iter().position(|o| *o == off) {
+                                    taken_out = Some((si, pos));
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                let f = match rv {
+                    Rvalue::BinaryOp(BinOp::Mul, x, y) => match (int(x), int(y), local(x), local(y)) {
+                        (None, Some(k), Some(l), _) | (Some(k), None, _, Some(l)) => {
+                            let (c, m) = later.get(&l).cloned().unwrap_or((0, [(l, 1)].into_iter().collect()));
+                            Some((c * k, m.into_iter().map(|(l, v)| (l, v * k)).collect()))
+                        }
+                        _ => None,
+                    },
+                    Rvalue::BinaryOp(BinOp::Add, x, y) => {
+                        let f = |o: &Operand| {
+                            int(o).map(|v| (v, Default::default())).or_else(|| {
+                                let l = local(o)?;
+                                Some(later.get(&l).cloned().unwrap_or((0, [(l, 1)].into_iter().collect())))
+                            })
+                        };
+                        match (f(x), f(y)) {
+                            (Some(a), Some(b)) => Some(add(a, b)),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(f) = f {
+                    later.insert(t, f);
+                }
+            }
+        }
+        if let Some((si, pos)) = taken_out {
+            let xi = at[&outer.exit];
+            let ty = locals.get(&acc).cloned().unwrap_or(Ty::Int(IntTy::I16));
+            if let Statement::Assign(d, rv) = &mut blocks[xi].statements[si] {
+                if matches!(rv, Rvalue::BinaryOp(BinOp::SubWithOverflow, ..)) {
+                    // the pair's value, its check gone: it can't overflow
+                    *d = Place {
+                        base: d.base.clone(),
+                        projection: vec![Projection::Field(0, ty)],
+                    };
+                    if let Terminator::Assert { target, .. } = blocks[xi].terminator {
+                        blocks[xi].terminator = Terminator::Goto(target);
+                    }
+                }
+            }
+            if let Statement::Assign(_, rv) = &mut blocks[xi].statements[si] {
+                *rv = Rvalue::Use(Operand::Copy(Place::local(acc)));
+            }
+            offsets.remove(pos);
+        }
+        // the nest replaced: base worked out where the loops were set up, then the loop over the table
+        let usize_ty = Ty::Int(IntTy::Usize);
+        let mut next_local = locals.keys().map(|l| l.0).max().unwrap_or(0) + 1;
+        let mut fresh = |locals: &mut crate::compile::util::Ordered<Local, Ty>, ty: Ty| {
+            let l = Local(next_local);
+            next_local += 1;
+            locals.set(l, ty);
+            l
+        };
+        let k = |v: i128| {
+            Operand::Constant(Const::Int {
+                value: v,
+                ty: IntTy::Usize,
+            })
+        };
+        let copy = |l: Local| Operand::Copy(Place::local(l));
+        let mut lines: Vec<Statement> = vec![];
+        let mut total: Option<Local> = None;
+        for (l, c) in base.iter().filter(|(_, c)| **c != 0) {
+            let term = if *c == 1 {
+                *l
+            } else {
+                let t = fresh(locals, usize_ty.clone());
+                lines.push(Statement::Assign(
+                    Place::local(t),
+                    Rvalue::BinaryOp(BinOp::Mul, copy(*l), k(*c)),
+                ));
+                t
+            };
+            total = Some(match total {
+                None => term,
+                Some(sofar) => {
+                    let t = fresh(locals, usize_ty.clone());
+                    lines.push(Statement::Assign(
+                        Place::local(t),
+                        Rvalue::BinaryOp(BinOp::Add, copy(sofar), copy(term)),
+                    ));
+                    t
+                }
+            });
+        }
+        let base_local = match total {
+            Some(t) => t,
+            None => {
+                let t = fresh(locals, usize_ty.clone());
+                lines.push(Statement::Assign(Place::local(t), Rvalue::Use(k(0))));
+                t
+            }
+        };
+        let n = offsets.len();
+        let table = fresh(locals, Ty::Array(Box::new(usize_ty.clone()), ArrayLen::Known(n as u64)));
+        let q = fresh(locals, usize_ty.clone());
+        let (w, idx) = (fresh(locals, usize_ty.clone()), fresh(locals, usize_ty.clone()));
+        let elem = match locals.get(&array) {
+            Some(Ty::Array(e, _)) => (**e).clone(),
+            _ => unreachable!(),
+        };
+        let e = fresh(locals, elem);
+        let more = fresh(locals, Ty::Bool);
+        lines.push(Statement::Assign(
+            Place::local(table),
+            Rvalue::Array(offsets.iter().map(|o| k(*o)).collect()),
+        ));
+        lines.push(Statement::Assign(Place::local(q), Rvalue::Use(k(0))));
+        let looped_name = BasicBlock(blocks.iter().map(|b| b.name.0).max().unwrap_or(0).max(860_000) + 1);
+        let at_ = |a: Local, i: Local| Place {
+            base: PlaceBase::Local(a),
+            projection: vec![Projection::Index(i)],
+        };
+        let looped = ir::Block {
+            name: looped_name,
+            statements: vec![
+                Statement::Assign(Place::local(w), Rvalue::Use(Operand::Copy(at_(table, q)))),
+                Statement::Assign(
+                    Place::local(idx),
+                    Rvalue::BinaryOp(BinOp::Add, copy(base_local), copy(w)),
+                ),
+                Statement::Assign(Place::local(e), Rvalue::Use(Operand::Copy(at_(array, idx)))),
+                Statement::Assign(Place::local(acc), Rvalue::BinaryOp(BinOp::Add, copy(acc), copy(e))),
+                Statement::Assign(Place::local(q), Rvalue::BinaryOp(BinOp::Add, copy(q), k(1))),
+                Statement::Assign(Place::local(more), Rvalue::BinaryOp(BinOp::Lt, copy(q), k(n as i128))),
+            ],
+            terminator: Terminator::SwitchInt {
+                discr: Operand::Move(Place::local(more)),
+                arms: vec![(0, outer.exit)],
+                otherwise: Some(looped_name),
+            },
+        };
+        // (the setup's lines go: their locals are the nest's own)
+        let mut drop_lines: Vec<(usize, usize)> = setup_lines.clone();
+        drop_lines.sort_unstable();
+        for &(b, l) in drop_lines.iter().rev() {
+            if b == pre {
+                blocks[b].statements.remove(l);
+            }
+        }
+        blocks[pre].statements.extend(lines);
+        blocks[pre].terminator = Terminator::Goto(looped_name);
+        let gone: HashSet<BasicBlock> = nest.iter().map(|&i| blocks[i].name).collect();
+        blocks.retain(|b| !gone.contains(&b.name));
+        blocks.push(looped);
+        return true;
+    }
+    false
+}
+
+/// A number split into its digits and put back together: `t = (s / d) * d + s % d` is s, as Rust's division and
+/// remainder are defined (for any integer s and d not 0, `(s / d) * d + s % d == s`), and the product can't pass
+/// what s is. So a grid's index `10 * r + c`, with r and c the digits of the square read as one number, is that
+/// number. Each part set once, s too, so each is what it was made from wherever it is read.
+pub fn digits_rejoined(blocks: &mut [ir::Block]) {
+    use ir::{BinOp, Local, Operand, Place};
+    let local = |o: &Operand| match o {
+        Operand::Copy(p) | Operand::Move(p) => p.as_local(),
+        _ => None,
+    };
+    let int = |o: &Operand| match o {
+        Operand::Constant(ir::Const::Int { value, .. }) => Some(*value),
+        _ => None,
+    };
+    let mut all: HashMap<Local, Vec<Rvalue>> = HashMap::new();
+    for b in blocks.iter() {
+        for st in &b.statements {
+            if let Statement::Assign(d, rv) = st {
+                all.entry(d.base_local().unwrap()).or_default().push(rv.clone());
+            }
+        }
+        if let Terminator::Call { dest, .. } = &b.terminator {
+            all.entry(dest.base_local().unwrap())
+                .or_default()
+                .push(Rvalue::Use(Operand::Copy(Place::local(Local(u32::MAX)))));
+        }
+    }
+    let once = |l: Local| all.get(&l).and_then(|v| (v.len() == 1).then(|| v[0].clone()));
+    // (s / d) * d, as `Mul(copy q, const d)` with `q = Div(copy s, const d)`: s and d
+    let times = |o: &Operand| -> Option<(Local, i128)> {
+        let Rvalue::BinaryOp(BinOp::Mul, x, y) = once(local(o)?)? else {
+            return None;
+        };
+        let (q, d) = match (local(&x), int(&y), int(&x), local(&y)) {
+            (Some(q), Some(d), _, _) | (_, _, Some(d), Some(q)) => (q, d),
+            _ => return None,
+        };
+        let Rvalue::BinaryOp(BinOp::Div, s, d2) = once(q)? else {
+            return None;
+        };
+        (int(&d2) == Some(d) && d != 0).then_some(())?;
+        Some((local(&s)?, d))
+    };
+    let rem = |o: &Operand| -> Option<(Local, i128)> {
+        let Rvalue::BinaryOp(BinOp::Rem, s, d) = once(local(o)?)? else {
+            return None;
+        };
+        Some((local(&s)?, int(&d)?))
+    };
+    for b in blocks.iter_mut() {
+        for st in b.statements.iter_mut() {
+            let Statement::Assign(_, rv @ Rvalue::BinaryOp(BinOp::Add, _, _)) = st else {
+                continue;
+            };
+            let Rvalue::BinaryOp(_, x, y) = &*rv else { continue };
+            let joined = match (times(x).zip(rem(y)), times(y).zip(rem(x))) {
+                (Some((a, b)), _) | (_, Some((a, b))) if a == b && once(a.0).is_some() => Some(a.0),
+                _ => None,
+            };
+            if let Some(s) = joined {
+                *rv = Rvalue::Use(Operand::Copy(Place::local(s)));
+            }
+        }
+    }
+}
+
 /// A comparison, whose value is a bool.
 fn is_comparison(op: ir::BinOp) -> bool {
     use ir::BinOp::*;

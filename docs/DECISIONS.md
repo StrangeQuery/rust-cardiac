@@ -4,6 +4,45 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-09 · A window walked in loops is a walk over a table of offsets, and a number's digits put back are the number
+
+- **Decision.**
+  - `blocks::window_sums` (#23): a walk over a small window of a table in one loop or two, `for i in r..r + 3 {
+    for j in c..c + 3 { n += b[i][j] } }`, each loop running from a usize that can't be past a card (promised, or a
+    promised one's quotient or remainder by a constant) for a constant count, is one loop over a table of the
+    offsets: `n += b[base + T[q]]`, base `10 * r + c`, T the offsets row after row. The body must be the index worked
+    out from the loops' variables and what doesn't change, and the one sum, once the range pass has proved its
+    checks; the reads, their order and the local they go into are the same, so the sum is the same at every step. A
+    sum checked for overflow is taken when it starts from a constant just before and the table's values can't take
+    it past a card. A square taken away just after (`n - b[r + 1][c + 1]`, the middle) is left out of the table
+    instead, where the sum can't pass a card. Like `reroll_reads`, only where the program doesn't fit otherwise.
+  - `blocks::digits_rejoined` (#22): `(s / d) * d + s % d` is s, as Rust defines / and % (for any s and any d
+    but 0), each part set once: the index `10 * r + c` of a square read as one number is that number.
+  - `for x in CONST` over a named array (and an array of usize) is written out as `for x in t` is (#21).
+- **Why.** The page's way, a table laid out by tens and one walk over the offsets from the top-left neighbour, is
+  what the compiler now makes of the Rust a programmer writes for the same job: two loops over the 3 by 3 block, the
+  middle taken away, and the square read as one number.
+- **Cost.** Cells at opt-level 2, overflow checks off and then on; instructions the program's own, for the page's
+  input, where the program fits.
+
+  | Program | By hand (page) | With promises, before | With promises, now |
+  |---|---|---|---|
+  | Minesweeper, declared border, 3 by 3 loop | 88 cells, 105 instructions | 102, 122 | 89/128, 89/128 |
+  | Minesweeper, the square as one number | 78 cells, 96 instructions | 107, 126 | 85/124, 85/124 |
+  | Minesweeper, written as the page writes it | 78 cells, 96 instructions | (refused) | 94/140, 108 |
+
+  The page-style program (minesweeper_page.rs: the board by tens as the program declares it, a table of offsets,
+  `b[s + off]`, s promised) fits without overflow checks; with them, its sum in the loop keeps its overflow checks,
+  as nothing proves how often the loop runs. The compiler's own versions are smaller than it. Without promises
+  nothing changes, but the square as one number with overflow checks on, 173 to 167.
+- **What is left.** Against the page, the 3 by 3 walk is 1 cell bigger and 23 instructions longer, the square as
+  one number 7 cells and 28 instructions, and the page-style program 16 cells and 44 instructions: the table of
+  offsets is counted to its end rather than ended by a -1 the loop tests anyway, each read is built from a template
+  each time round, and the table and the loop's count take cells the page keeps in the board's holes.
+- **Evidence.** The promise versions that fit, and the page-style one without overflow checks, fuzzed against
+  native Rust on input that keeps the promises, in every setting they fit; the test suites, the examples, the
+  support matrix, the fuzzer's programs and 60 generated ones.
+
 ## 2026-11-09 · A promise of a usize keeps it on a card, and a sum of reads a constant apart can be a loop
 
 - **Decision.** For programs that promise their input with `assume()`, and one change for any program that
