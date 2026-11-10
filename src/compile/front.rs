@@ -1383,10 +1383,11 @@ fn braces(o: &Operand) -> bool {
 /// opening blocks, the cells' initial values). A scalar const used by path loses the path.
 fn inline_array_consts(file: &mut File) {
     let mut arrays: HashMap<String, Rvalue> = HashMap::new();
+    let mut types: HashMap<String, Ty> = HashMap::new();
     for item in &file.items {
         let Item::Const(ConstItem {
             path,
-            ty: Ty::Array(elem, ArrayLen::Known(_)),
+            ty: ty @ Ty::Array(elem, ArrayLen::Known(_)),
             value: ConstValue::Body(body),
         }) = item
         else {
@@ -1409,6 +1410,49 @@ fn inline_array_consts(file: &mut File) {
         });
         if let Some(literal) = literal {
             arrays.insert(name.to_string(), literal.clone());
+            types.insert(name.to_string(), ty.clone());
+        }
+    }
+    // `for x in T` casts the constant itself to make its iterator (`const T as [MaybeUninit<usize>; 8]
+    // (Transmute)`): the constant goes into a local of its own on the line before, as `let t = T;` would put it,
+    // and the cast is of that
+    for item in &mut file.items {
+        let Item::Fn(f) = item else { continue };
+        let mut next = f
+            .params
+            .iter()
+            .map(|(l, _)| l.0)
+            .chain(f.body.decls.iter().map(|d| d.local.0))
+            .max()
+            .unwrap_or(0)
+            + 1;
+        for b in f.body.blocks.iter_mut() {
+            let mut si = 0;
+            while si < b.statements.len() {
+                let named = match &b.statements[si] {
+                    Statement::Assign(_, Rvalue::Cast(Operand::Constant(Const::Path(p)), _, CastKind::Transmute)) => {
+                        const_path(p).and_then(|n| n.last().map(|l| l.to_string()))
+                    }
+                    _ => None,
+                };
+                let Some((literal, ty)) = named.and_then(|n| Some((arrays.get(&n)?.clone(), types.get(&n)?.clone())))
+                else {
+                    si += 1;
+                    continue;
+                };
+                let t = Local(next);
+                next += 1;
+                f.body.decls.push(super::ir::Decl {
+                    local: t,
+                    mutable: false,
+                    ty,
+                });
+                if let Statement::Assign(_, Rvalue::Cast(o, _, _)) = &mut b.statements[si] {
+                    *o = Operand::Copy(Place::local(t));
+                }
+                b.statements.insert(si, Statement::Assign(Place::local(t), literal));
+                si += 2;
+            }
         }
     }
     struct Inline<'a> {

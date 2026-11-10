@@ -34,3 +34,7 @@ tictactoe_tens_assumed         tests/fuzz/programs/tictactoe_tens_assumed.rs    
 tictactoe_number_assumed0      tests/fuzz/programs/tictactoe_number_assumed.rs       1..9
 tictactoe_number_assumed1      tests/fuzz/programs/tictactoe_number_assumed.rs       11..19
 tictactoe_number_assumed2      tests/fuzz/programs/tictactoe_number_assumed.rs       21..29
+minesweeper_page0              tests/fuzz/programs/minesweeper_page.rs              0..5
+minesweeper_page1              tests/fuzz/programs/minesweeper_page.rs              10..15
+minesweeper_page2              tests/fuzz/programs/minesweeper_page.rs              20..25
+minesweeper_page3              tests/fuzz/programs/minesweeper_page.rs              30..35
