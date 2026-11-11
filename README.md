@@ -40,6 +40,9 @@ The [examples](https://github.com/StrangeQuery/rust-cardiac/tree/HEAD/examples) 
 
 ## What's new
 
+**0.2.5.** Fixes a wrong answer from 0.2.4 when a sum briefly went past three digits. Grids, tables and bounds
+checks take fewer cells, and `for` loops over constant arrays now compile.
+
 **0.2.4.** A clearer opening for cargo-cardiac's docs.
 
 **0.2.3.** Tweaks to the compiler's messages.
