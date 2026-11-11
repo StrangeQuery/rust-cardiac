@@ -4,7 +4,7 @@
 
 # rust-cardiac
 
-The newest member of the [Strange Query CARDIAC](https://lab.strangequery.com/cardiac) collection, [rust-cardiac](https://lab.strangequery.com/rust-cardiac) brings the convenience, safety and security of Rust to the most legacy of legacy platforms: the [CARDboard Illustrative Aid to Computation](https://en.wikipedia.org/wiki/CARDboard_Illustrative_Aid_to_Computation).  Compile Rust to either the classic six-column
+The newest member of the [Strange Query CARDIAC](https://lab.strangequery.com/cardiac/) collection, [rust-cardiac](https://lab.strangequery.com/rust-cardiac) brings the convenience, safety and security of Rust to the most legacy of legacy platforms: the [CARDboard Illustrative Aid to Computation](https://en.wikipedia.org/wiki/CARDboard_Illustrative_Aid_to_Computation).  Compile Rust to either the classic six-column
 listing form or raw cards ready to be fed directly into a CARDIAC and executed.  For demos and the most up-to-date information see the
 [rust-cardiac home page on Strange Query](https://lab.strangequery.com/rust-cardiac/).  Open Source and MIT-licensed.
 
