@@ -34,8 +34,8 @@ counts down from the number it reads. `cargo cardiac run` builds it for CARDIAC 
 press Enter, and it counts down to 0. Or give it the number on standard input, `echo 5 | cargo cardiac run`, or
 after `--`, `cargo cardiac run -- 5`.
 
-The rest is on [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/): the listing to
-open in Cardigan, panic maps, running a deck from your own Rust program, and what Rust works.
+The rest is on [lab.strangequery.com/rust-cardiac](https://lab.strangequery.com/rust-cardiac/): the build
+settings, debugging in Cardigan, the built-ins your program uses, and what Rust works.
 
 To work in vscode, running and debugging the same program natively and on CARDIAC, see
 [Using rust-cardiac with vscode](https://lab.strangequery.com/rust-cardiac/vscode/).
