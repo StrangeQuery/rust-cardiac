@@ -79,6 +79,53 @@ There are deeper checks for changes that go further:
 Two runs of `test_compiler.sh` at the same time share a directory under `$TMPDIR`. Give a second run its own
 `TMPDIR`.
 
+The compiler's test programs in `tests/programs` are single files that define the built-ins they call themselves,
+as stubs the compiler knows by name, so they need no package and no `cardiac` crate:
+
+```rust
+#![no_std]
+#[inline(never)]
+pub fn out(_v: i16) {}
+
+pub fn main() { out(7); }
+```
+
+`cargo cardiac test` is the compiler's own test command, which the scripts use. It compiles a program as the tests
+do, writes its IR printed as MIR (`.mir`) and its assembly (`.asm`) beside it, runs it from `main_bb0` on the
+input, and prints the values it outputs on one line:
+
+    cargo cardiac test [-C opt-level=N] [-C overflow-checks=on|off] [-C debug-assertions=on|off] FILE.rs [-- INPUT...]
+    cargo cardiac test [--manifest-path PATH] [-p NAME] [--release | --profile NAME] --bin NAME [-- INPUT...]
+
+## How the compiler works
+
+    Rust --rustc (the CARDIAC driver)--> MIR --cargo-cardiac, in rustc--> CARDIAC assembly --assembler--> deck
+
+`cargo cardiac build` reads the package with `cargo metadata`, then runs `cargo check` on it with the profile, in a
+target directory of its own, with the CARDIAC driver as cargo's rustc. The driver is rustc with a CARDIAC backend:
+when rustc has analysed a program, the driver turns its MIR into the compiler's IR and compiles it in rustc's
+process. The crates a program uses are built with `-Zalways-encode-mir`, so whatever `main` reaches is compiled,
+whichever crate it is in.
+
+The compiler (`src/compile`) works in these steps:
+
+- **IR.** Each crate's MIR, from rustc_public inside rustc, is made into a typed IR (`ir`), named as rustc names it
+  (`driver/src/convert.rs`). The crates' items are joined into one program (`crates`).
+- **Front end.** The program is put in the terms the passes expect (`front`).
+- **Passes.** Typed transformations on each function's blocks. `for` loops become counter loops and structs
+  become plain locals; then range analysis drops the checks it can prove, copies are forwarded, repeated work is
+  done once, sums are folded, INP and OUT go straight to array elements, and cells are shared between values never
+  live together.
+- **Lowering.** Each function becomes machine IR (`lower`, `machine`): typed lines of instructions, labels and data
+  cells. The runtime routines the program needs are added (`runtime`).
+- **Peephole.** The peephole rules and the block layout rewrite the machine lines (`peephole`).
+- **Phases and deck.** A program in phases is split into its data and each phase's code (`phases`). The assembler
+  places them from cell 03, and the deck and the panic map are written (`tape`, `panics`).
+
+Calls use CARDIAC's own convention: JMP leaves a return instruction in cell 99, the callee keeps it, and `return`
+jumps back through it. Indexing an array by a variable is self-modifying code, as it was by hand. Why things are the
+way they are: `docs/DECISIONS.md`.
+
 ## Where things are
 
 - `src/compile/` is the compiler: the IR, lowering, the passes, and the machine that lays out cells.
