@@ -4,6 +4,21 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · Two shifts one after the other are one shift
+
+- **Decision.** A peephole rule (16) joins two SFTs in a row, no label between, into one. `SFT l r` then `SFT 0 b`
+  is `SFT l (r + b)`; `SFT 0 a` then `SFT l r`, for a <= l <= r, is `SFT (l - a) r`. So a digit in the middle of a
+  value, `m / 10 % 10`, is `SFT 23` where it was `SFT 01, SFT 33`; `m / 100 % 10` is `SFT 13`, `m / 10 % 100`
+  `SFT 12` and `m % 100 / 10` `SFT 23`. Fixes #37.
+- **Why.** `/` and `%` by 10 and 100 are each a shift already (`divide()`; #30's `% 10` is `SFT 33`), and the second
+  shift only moves digits the first left. SFT works on the accumulator's four digits and keeps the sign, so the
+  joined shift gives the same digits and the same sign for every accumulator, past a card or not, and that is Rust's
+  `/` (toward zero) then `%` (the dividend's sign) for a negative value too. A unit test runs every pair the rule
+  joins on every accumulator from -9999 to 9999 against SFT as burn runs it.
+- **Cost.** None: an instruction and a cell less each time. The issue's program goes from 8 cells to 7. No example
+  and no feature test changes (none takes a digit from the middle); of Card Attack's 994 Rust machines, one
+  (nixie's nshrink) goes from 94 to 93 cells. Where rustc keeps `m / 10` for a second use, the first shift stays.
+
 ## 2026-11-09 · A value past a card is read from the accumulator again where it is still there
 
 Supersedes "A value past a card read again after its store is what the cell keeps" (2026-11-07).

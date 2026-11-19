@@ -261,6 +261,8 @@ pub fn peephole(lines: &[Line], keep: &[String]) -> Vec<Line> {
         sweep(&mut lines);
         changed |= drop_branch_reloads(&mut lines);
         sweep(&mut lines);
+        changed |= join_shifts(&mut lines);
+        sweep(&mut lines);
         changed |= drop_unused_labels(&mut lines, keep);
         if !changed {
             changed = drop_join_reloads(&mut lines, keep);
@@ -747,6 +749,56 @@ fn halts_unread(after: &[Line], names: &[String]) -> bool {
     false
 }
 
+/// SFT's operand as its two shifts: left, then right.
+fn shifts(arg: &Arg) -> Option<(u32, u32)> {
+    let Arg::Num(n) = arg else { return None };
+    let d: Vec<u32> = n.chars().map(|c| c.to_digit(10)).collect::<Option<_>>()?;
+    match d.as_slice() {
+        [r] => Some((0, *r)),
+        [l, r] => Some((*l, *r)),
+        _ => None,
+    }
+}
+
+/// The one shift that is `SFT l1 r1` then `SFT l2 r2`, where there is one (see rule 16).
+fn joined_shift((l1, r1): (u32, u32), (l2, r2): (u32, u32)) -> Option<(u32, u32)> {
+    if l2 == 0 && r1 + r2 <= 9 {
+        Some((l1, r1 + r2))
+    } else if l1 == 0 && r1 <= l2 && l2 <= r2 {
+        Some((l2 - r1, r2))
+    } else {
+        None
+    }
+}
+
+/// 16. two shifts one after the other, as one. SFT keeps four digits and the sign, and works on the digits alone, so
+///     `SFT l r` then `SFT 0 b` is `SFT l (r + b)`: a right shift after a right shift; and `SFT 0 a` then `SFT l r`,
+///     for a <= l <= r, is `SFT (l - a) r`: the digits the first shift drops off the right are dropped by the
+///     second's right shift instead, and none of the others is moved past the left end. A digit in the middle,
+///     `m / 10 % 10` (`SFT 01`, `SFT 33`), is `SFT 23`.
+fn join_shifts(lines: &mut [Line]) -> bool {
+    let mut changed = false;
+    for i in 0..lines.len() {
+        let Some((Op::Sft, first)) = lines[i].as_instr() else { continue };
+        let Some(j) = (i + 1..lines.len()).find(|&j| !matches!(lines[j].kind, Kind::Blank | Kind::Note(_))) else {
+            continue;
+        };
+        let Some((Op::Sft, second)) = lines[j].as_instr() else { continue };
+        let (Some((l1, r1)), Some((l2, r2))) = (shifts(first), shifts(second)) else {
+            continue;
+        };
+        let Some(joined) = joined_shift((l1, r1), (l2, r2)) else { continue };
+        let comment = lines[j].comment.clone();
+        lines[i].kind = Kind::Instr(Op::Sft, Arg::Num(format!("{}{}", joined.0, joined.1)));
+        if let Some(c) = comment {
+            lines[i].note(&c);
+        }
+        lines[j] = deleted();
+        changed = true;
+    }
+    changed
+}
+
 /// 12. a load nobody uses: CLA x, then only OUTs, then another CLA (or INP-only, or HRS)
 fn drop_unused_loads(lines: &mut [Line]) -> bool {
     let mut changed = false;
@@ -926,4 +978,41 @@ fn drop_unused_cells(lines: Vec<Line>) -> Vec<Line> {
         _ => true,
     };
     lines.into_iter().filter(wanted).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::joined_shift;
+
+    /// SFT as CARDIAC runs it: the digits shifted left, four kept, then shifted right; the sign kept.
+    fn sft(acc: i32, l: u32, r: u32) -> i32 {
+        let x = (acc.abs() as i64 * 10i64.pow(l) % 10000) as i32 / 10i32.pow(r);
+        if acc < 0 {
+            -x
+        } else {
+            x
+        }
+    }
+
+    #[test]
+    fn joined_shifts_shift_as_the_two_do() {
+        let mut joined = 0;
+        for l1 in 0..10 {
+            for r1 in 0..10 {
+                for l2 in 0..10 {
+                    for r2 in 0..10 {
+                        let Some((l, r)) = joined_shift((l1, r1), (l2, r2)) else { continue };
+                        joined += 1;
+                        for acc in -9999..=9999 {
+                            let two = sft(sft(acc, l1, r1), l2, r2);
+                            assert_eq!(sft(acc, l, r), two, "SFT {l1}{r1}, SFT {l2}{r2} as SFT {l}{r}, on {acc}");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(joined > 0);
+        assert_eq!(joined_shift((0, 1), (3, 3)), Some((2, 3)));
+        assert_eq!(joined_shift((0, 2), (3, 3)), Some((1, 3)));
+    }
 }
