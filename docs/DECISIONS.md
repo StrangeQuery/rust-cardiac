@@ -4,6 +4,26 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · A static is read and written in its own cells, not through its address
+
+Supersedes the cost in "A static is a fixed run of cells, as every variable on CARDIAC is" (2026-11-05).
+
+- **Decision.** In lowering, a local that holds a static's address and nothing else (`_2 = const {alloc1: *mut
+  i16}`, set to no other value), and is only read through (`(*_2)`, `(*_2)[k]`, `(*_2)[i]`; never read as a value,
+  borrowed, passed on or used as an index, and not a parameter or a result), stands for the static itself: a read
+  or write through it is of the static's cell, as a local's is, an element at a variable index is indexed from the
+  static as a local array is, and the address is not kept. Any other pointer to a static goes through its address,
+  as before. At every opt-level. Fixes #39.
+- **Why.** A static's cells are placed when the program is built, as a local's are; working its address out at run
+  time (CLA the address, ADD 100 or 600, STO into the next cell) was four instructions where one does, and three
+  cells (the address, and the constants 100 and 600). Every read and write is still a real read and write of the
+  cell, so a call that changes a static is seen by its caller, as before.
+- **Cost.** None. The issue's program goes from 22 cells to 10 (92 instructions to 51 for its run on 5 1 2 3);
+  `tests/programs/static_cells.rs` from 108 and 133 cells (overflow checks off and on), which didn't fit, to 70 and
+  92. Five feature tests shrink: `static mut` counter 38 to 19 cells, a `static mut` path 31 to 13, a static array
+  indexed at run time 37 to 31, indexing a static array 42 to 36, a static item in a block 30 to 25. No example and
+  no Card Attack machine uses a static.
+
 ## 2026-11-19 · A bool compared with a constant bool is the bool or its `!`
 
 - **Decision.** Before the comparisons turned over are folded (`blocks::not_of_comparisons`), `b != false` and

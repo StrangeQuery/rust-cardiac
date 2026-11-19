@@ -91,6 +91,26 @@ impl<'a> Lowering<'a> {
         let Some(l) = p.base_local().and_then(numbered) else {
             fail!(unsupported_place(p))
         };
+        // through a pointer that only ever holds a static's address: the static's own cells
+        if let Some(name) = self.static_ptrs.get(&l).cloned() {
+            if !self.sh.statics_used.contains(&name) {
+                self.sh.statics_used.push(name.clone());
+            }
+            let base = Sym::Static(name);
+            match p.projection.as_slice() {
+                [Projection::Deref] => return Ok(Loc::At(base.into())),
+                [Projection::Deref, Projection::ConstantIndex { offset, .. }] => {
+                    return Ok(Loc::At(Cell::element(&base, *offset as u32)))
+                }
+                [Projection::Deref, Projection::Index(i)] if numbered(*i).is_some() => {
+                    return Ok(Loc::Computed(Dyn::Index(base, self.cell(*i, None))))
+                }
+                [Projection::Deref, Projection::IndexPlus(i, k)] if numbered(*i).is_some() => {
+                    return Ok(Loc::Computed(Dyn::IndexPlus(base, self.cell(*i, None), *k)))
+                }
+                _ => fail!(internal(format!("a static read through as {p}"))),
+            }
+        }
         match p.projection.as_slice() {
             [Projection::Field(k, t)] if *k < 10 && one_word(t) => Ok(Loc::At(self.cell(l, Some(*k)).into())),
             [] => Ok(Loc::At(self.cell(l, None).into())),

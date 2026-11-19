@@ -317,6 +317,9 @@ pub struct Lowering<'a> {
     on_card_now: HashSet<Local>,
     /// the function's result cells besides `_0`, which its caller reads after it returns
     pub results: HashSet<Local>,
+    /// the locals that only ever hold one static's address, and are only read through (see `static_pointers`): by
+    /// the static each points to
+    static_ptrs: HashMap<Local, String>,
 }
 
 impl<'a> Lowering<'a> {
@@ -363,6 +366,7 @@ impl<'a> Lowering<'a> {
             exact: HashSet::new(),
             on_card_now: HashSet::new(),
             results: HashSet::new(),
+            static_ptrs: HashMap::new(),
         };
         for (&local, ty) in locals.iter() {
             if *ty == Ty::Unit || *ty == Ty::Never {
@@ -519,6 +523,63 @@ impl<'a> Lowering<'a> {
         lines_naming(&self.blocks, l)
     }
 
+    /// The locals that hold a static's address and nothing else, `_2 = const {alloc1: *mut i16}`, and are only read
+    /// through, `(*_2)`, `(*_2)[k]` or `(*_2)[i]`: not a parameter or a result, set only to that address, never read
+    /// as a value, borrowed or used as an index. A static is a fixed run of cells, so a read or write through one is
+    /// of the static's cell itself, as a local's is, and the address need not be kept.
+    fn static_pointers(&self) -> HashMap<Local, String> {
+        use ir::{Const, Operand, PlaceBase, Projection, Rvalue};
+        let params = self
+            .callees
+            .sigs
+            .get(&self.func)
+            .map(|s| s.params.clone())
+            .unwrap_or_default();
+        // each local set to a static's address, and the lines that name it as they may
+        let mut of: HashMap<Local, Option<String>> = HashMap::new();
+        let mut good: HashMap<Local, usize> = HashMap::new();
+        let through = |p: &ir::Place| match p.projection.as_slice() {
+            [Projection::Deref] | [Projection::Deref, Projection::ConstantIndex { .. }] => true,
+            [Projection::Deref, Projection::Index(i)] | [Projection::Deref, Projection::IndexPlus(i, _)] => {
+                p.base_local() != Some(*i)
+            }
+            _ => false,
+        };
+        for b in &self.blocks {
+            for s in &b.statements {
+                let mut places = s.places();
+                if let Statement::Assign(d, Rvalue::Use(Operand::Constant(Const::Alloc(alloc, _)))) = s {
+                    if let Some(x) = d.as_local() {
+                        let name = self.sh.statics.of_alloc.get(alloc).cloned();
+                        let e = of.entry(x).or_insert(name.clone());
+                        if *e != name {
+                            *e = None;
+                        }
+                        *good.entry(x).or_default() += 1;
+                        places.remove(0);
+                    }
+                }
+                for p in places {
+                    if let (PlaceBase::Local(x), true) = (&p.base, through(p)) {
+                        *good.entry(*x).or_default() += 1;
+                    }
+                }
+            }
+            for p in b.terminator.places() {
+                if let (PlaceBase::Local(x), true) = (&p.base, through(p)) {
+                    *good.entry(*x).or_default() += 1;
+                }
+            }
+        }
+        of.into_iter()
+            .filter_map(|(x, name)| {
+                let name = name?;
+                let own = !params.contains(&x) && !self.results.contains(&x) && x != Local(0);
+                (own && good.get(&x) == Some(&ir::occurrences(&self.blocks, x))).then_some((x, name))
+            })
+            .collect()
+    }
+
     /// The array locals one statement sets from constants and nothing else writes: not a parameter (its caller
     /// writes it), nothing else assigned to it or to an element, no call's result, and no address taken that could
     /// write through. Rust reads no local before it is set, so every read sees those constants, and they can be the
@@ -625,6 +686,7 @@ impl<'a> Lowering<'a> {
         self.init.clear();
         self.moved_out.clear();
         self.blocks = blocks;
+        self.static_ptrs = self.static_pointers();
         self.fused_flags.clear();
         let entry = BasicBlock(0);
         let bb0_targeted = self.blocks.iter().any(|b| b.terminator.names(entry));

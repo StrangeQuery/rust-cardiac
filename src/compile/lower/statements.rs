@@ -120,6 +120,12 @@ impl<'a> Lowering<'a> {
     pub(super) fn statement(&mut self, s: &Statement) -> Result<(), Fail> {
         let src = source(s);
         let src = src.as_str();
+        // a static's address, kept for nothing: each read and write through it is of the static's cells
+        if let Statement::Assign(d, Rvalue::Use(ir::Operand::Constant(Const::Alloc(..)))) = s {
+            if d.as_local().is_some_and(|x| self.static_ptrs.contains_key(&x)) {
+                return Ok(());
+            }
+        }
         if !self.init_block && self.constant_arrays.iter().any(|x| s.def() == Some(*x)) && self.initial_value(s)? {
             return Ok(());
         }
