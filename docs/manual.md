@@ -156,6 +156,11 @@ arithmetic does, and `checked_add` is `None` past 999.
   down, then the work done. `skip_cards(n)` and `add_times(c, n)` are a computed jump into a row of ten `INP 00` or
   nine `ADD c`. Each row is a routine put in once (27 and 34 cells), and costs about 1.2 instructions a card and 1
   an addition, plus 17 and 27 a call. For a few passes (n below 4 or so) the loop is cheaper.
+- A loop that only adds to totals what doesn't change (`for _ in 0..d { t += x; }`), with a count the compiler
+  knows is at most 60 (a digit, `% 10`, a mask, a promise, a test before the loop): at opt-level 1 to 3, where it
+  can run again in a run (inside another loop, or in a function) and the program fits, it is a jump into a row of
+  ADDs of its own, 5 instructions and one an addition, but a cell for every addition it can make. Promise the
+  count's range (`assume(d >= 0 && d <= 9)`) to get it; opt-level s or z keeps the loop.
 - `let x = if c { e } else { K }` in straight-line code: each arm sets x and one jumps past the other, about 3 cells
   more than `let mut x = K; if c { x = e; }`, whose K is x's starting value in the deck when it runs once. The
   compiler doesn't do this itself, because storing K first keeps x alive across the test, which can cost a shared

@@ -19,6 +19,7 @@
 //! cell does.
 pub mod acc;
 pub mod adaptors;
+pub mod addrow;
 pub mod arith;
 pub mod bits;
 pub mod blocks;
@@ -264,10 +265,63 @@ fn largest_phase(listing: &[Line]) -> Option<usize> {
     r.code.iter().map(|c| cells(&r.data) + cells(c)).max()
 }
 
-/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. A function
-/// that calls itself has a stack as deep as the memory left over holds: compiled with room for one call, then
-/// again with the rest of memory its stack's.
+/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. A loop
+/// made a row of ADDs (`addrow`) takes a cell for each addition it can make, which pays only where the program
+/// has the cells: when it doesn't fit, it is compiled again without the row that takes most, and so on. A program
+/// in phases, or with a stack (whose depth is what memory is left), has none.
 fn compile_cut(
+    mir: &ir::File,
+    optimize: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    cuts: Option<&[phases::Cut]>,
+    tens: bool,
+) -> Result<Compiled, Fail> {
+    let without_rows =
+        || addrow::with_rows(false, || compile_stacked(mir, optimize, debug_assertions, enums, structs, cuts, tens));
+    if !optimize || cuts.is_some_and(|c| !c.is_empty()) || addrow::OFF.with(|o| o.get()) {
+        return without_rows();
+    }
+    let skipped = addrow::SKIP.with(|s| s.take());
+    let result = loop {
+        addrow::MADE.with(|m| m.borrow_mut().clear());
+        let c = compile_stacked(mir, optimize, debug_assertions, enums, structs, cuts, tens);
+        let made = addrow::MADE.with(|m| m.take());
+        if made.is_empty() {
+            break c;
+        }
+        let (none, fits) = match &c {
+            Ok(c) => (
+                !c.phase_starts.is_empty() || c.stack_cells > 0,
+                largest_phase(&c.listing).is_some_and(|n| n <= MEMORY),
+            ),
+            Err(_) => (false, false),
+        };
+        if none {
+            break without_rows();
+        }
+        if fits {
+            break c;
+        }
+        // too big (or refused): again without the row that takes most cells
+        let skip = addrow::SKIP.with(|s| s.borrow().clone());
+        let Some((f, h, _)) = made
+            .iter()
+            .filter(|(f, h, _)| !skip.contains(&(f.clone(), *h)))
+            .max_by_key(|(_, _, cells)| *cells)
+        else {
+            break without_rows();
+        };
+        addrow::SKIP.with(|s| s.borrow_mut().insert((f.clone(), *h)));
+    };
+    addrow::SKIP.with(|s| s.replace(skipped));
+    result
+}
+
+/// `compile_cut`, rows as `addrow` is set. A function that calls itself has a stack as deep as the memory left over
+/// holds: compiled with room for one call, then again with the rest of memory its stack's.
+fn compile_stacked(
     mir: &ir::File,
     optimize: bool,
     debug_assertions: bool,
@@ -1199,17 +1253,23 @@ fn compile_once(
             blocks::dead_code(&mut blocks, &results);
             blocks::bools_on_edges(&mut blocks, true);
             blocks::thread_constants(&mut blocks);
+            // (what holds where loops start, while the promises are still there to say it: `addrow`)
+            let promised_ranges = ranges::edge_ranges(&blocks, &local_types(&locals), &promised);
             exact = ranges::range_pass(&mut blocks, &local_types(&locals), &promised)?.2;
             blocks::dead_code(&mut blocks, &results);
             blocks::dead_stores(&mut blocks, &results);
             blocks::merge_blocks(&mut blocks);
             // a counter that only counts counts to 0, the test CARDIAC has
             let fixed: HashSet<ir::Local> = params.iter().chain(&results).chain([&ir::Local(0)]).copied().collect();
-            for c in blocks::rebase_counters(&mut blocks, &local_types(&locals), &fixed, &params) {
-                locals.set(c, ir::Ty::Int(ir::IntTy::I16));
+            let rebased = blocks::rebase_counters(&mut blocks, &local_types(&locals), &fixed, &params);
+            for c in &rebased {
+                locals.set(*c, ir::Ty::Int(ir::IntTy::I16));
             }
             // what rustc copied into both ways of a test it answers again, joined once each copy has its checks
+            let before_joined = blocks.clone();
             tails::join_tails(&mut blocks, &mut locals);
+            // (two ways joined into one may come into a loop with values the early ranges don't cover: `addrow`)
+            let joined = blocks != before_joined;
             arith::rematerialize(&mut blocks, &mut locals);
             arith::merge_repeats(&mut blocks);
             copies::forward_fields(&mut blocks, &named);
@@ -1232,6 +1292,14 @@ fn compile_once(
             // a number split into its digits and put back together, as the number
             blocks::digits_rejoined(&mut blocks);
             blocks::dead_code(&mut blocks, &results);
+            // a loop that adds what doesn't change a small run-time number of times, as a jump into a row of ADDs
+            // (a counter counted to 0 now holds other values than it did)
+            let early = promised_ranges.as_ref().filter(|_| !joined).map(|e| (e, rebased.iter().copied().collect()));
+            if addrow::add_rows(&mut blocks, &mut locals, &n, &promised, &results, &exact, early) {
+                // (the counter's first value, say, which nothing reads now)
+                blocks::dead_stores(&mut blocks, &results);
+                blocks::dead_code(&mut blocks, &results);
+            }
             // what a loop works out the same every time round, once before it (CARDIAC_HOIST=1 while measured)
             if hoist::enabled() {
                 let fixed: HashSet<ir::Local> = params.iter().chain(&results).chain([&ir::Local(0)]).copied().collect();

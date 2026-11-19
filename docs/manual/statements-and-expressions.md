@@ -62,6 +62,16 @@ A loop that does one thing n times costs 6 or 7 instructions a pass: the count t
 the work. For a loop of `inp()`s or of `+= c`, `skip_cards(n)` and `add_times(c, n)` are cheaper: see
 [The runtime](runtime.md).
 
+A loop that only adds to totals what doesn't change from one pass to the next, `for _ in 0..d { t += x; u -= y; }`
+(or the same as a `while`), is compiled as hand-written CARDIAC does it when the compiler knows the count is small,
+at most 60: from its type, a mask (`d & 7`), `% 10`, `digit()`, a promise (`assume(d >= 0 && d <= 9)`) or a test
+before the loop. Each total is a jump into a row of `ADD x`, one for each addition the count can make, entered so
+that d of them run: 5 instructions and one an addition, where the loop takes 8 an addition. The row costs a cell
+for each addition it can make, so it is made only at opt-level 1, 2 and 3 (s and z keep the loop), only for a loop
+that can run again in a run (inside another loop, or in a function), and only where the program still fits; the
+compiler gives rows back, the largest first, until it does. A constant added each pass is the count times the
+constant instead, where that is smaller.
+
 ## Index expressions
 
 CARDIAC has no indexed addressing, so an array or pointer read through a variable index is self-modifying code:

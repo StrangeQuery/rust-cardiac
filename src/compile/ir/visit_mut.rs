@@ -147,6 +147,13 @@ pub fn walk_rvalue<V: VisitMut + ?Sized>(v: &mut V, r: &mut Rvalue) {
                 v.visit_operand(o);
             }
         }
+        Rvalue::Row(r) => {
+            v.visit_operand(&mut r.acc);
+            for (_, o) in &mut r.steps {
+                v.visit_operand(o);
+            }
+            v.visit_operand(&mut r.times);
+        }
     }
 }
 

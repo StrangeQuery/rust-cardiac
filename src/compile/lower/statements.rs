@@ -1,7 +1,7 @@
 //! Statements: each assignment, by the shape of its right-hand side, and the constants main's opening blocks store
 //! that become cells' initial values instead.
 use crate::compile::ir::{self, BinOp, Const, IntTy, Local, Locals, Projection, Rvalue, Statement, Ty, UnOp};
-use crate::compile::machine::Op;
+use crate::compile::machine::{Line, Op};
 use crate::compile::runtime::NO_CARD;
 use crate::compile::Fail;
 
@@ -143,6 +143,54 @@ impl<'a> Lowering<'a> {
             fail!(unsupported_statement(s))
         };
         match rv {
+            Rvalue::Row(r) => {
+                // a jump built into a row of `most` passes' ADDs and SUBs, n passes from its end (`addrow`): JMP end
+                // less n for each line a pass takes
+                let dst = self.place_any(dest)?;
+                let end = self.fresh("re");
+                let go = self.fresh("rg");
+                // (the jump to the row's end is kept in the code, in the cell after the built jump, which never
+                // runs: the data section is assembled on its own and can't name a label in the code)
+                let jump = Sym::Instr(Access::Jump, Box::new(Cell::from(end.clone())));
+                let n = self.operand(&r.times)?;
+                let n = self.mat(n);
+                let n = self.arith(&n)?;
+                let mut steps = vec![];
+                for (sign, o) in &r.steps {
+                    let v = self.operand(o)?;
+                    let v = self.mat(v);
+                    let op = if *sign == ir::Sign::Plus { Op::Add } else { Op::Sub };
+                    steps.push((op, self.arith(&v)?));
+                }
+                self.emit(Op::Cla, jump.clone());
+                for _ in &steps {
+                    self.emit_c(Op::Sub, n.clone(), &format!("{} times", r.times));
+                }
+                self.emit(Op::Sto, go.clone());
+                let acc = self.operand(&r.acc)?;
+                self.load(&acc)?;
+                self.cell_here(&go);
+                self.code.last_mut().unwrap().note("becomes JMP into the row");
+                self.code.push(Line::data_cell(&jump.to_string(), jump.contents().unwrap()));
+                for _ in 0..r.most {
+                    for (op, x) in &steps {
+                        self.emit(*op, x.clone());
+                    }
+                }
+                self.define(&end);
+                // the cell keeps three digits of a total past a card, which every later read takes
+                self.wide = true;
+                self.store(&dst, src)?;
+                if r.check.is_some() {
+                    // checked once, at the end: the partial totals only grow, or only shrink
+                    self.sh.pool.chk = true;
+                    self.use_panic();
+                    self.emit_c(Op::Jmp, Sym::Runtime("rt_chk_entry"), "is the total still a card?");
+                    let back = self.fresh("rr");
+                    self.define(&back);
+                }
+                Ok(())
+            }
             Rvalue::BinaryOp(op @ (BinOp::AddWithOverflow | BinOp::SubWithOverflow | BinOp::MulWithOverflow), x, y) => {
                 // the result into .0 and whether it left its type's range into .1
                 let Some(d) = dest.as_local() else {

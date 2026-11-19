@@ -81,6 +81,12 @@ impl OptLevel {
     pub fn passes(self) -> bool {
         self != OptLevel::No
     }
+
+    /// Whether a loop that adds a small run-time number of times may be a jump into a row of ADDs (`addrow`),
+    /// which takes a cell for each addition it can make: not at s and z, which ask for the smallest program.
+    pub fn rows(self) -> bool {
+        matches!(self, OptLevel::Less | OptLevel::More | OptLevel::Aggressive)
+    }
 }
 
 /// A compile error, with a note when the opt-level is 0: there rustc's MIR is unoptimized and the compiler's
@@ -613,14 +619,16 @@ pub fn build(
 ) -> Result<Built, NotBuilt> {
     let linked = &mir.linked;
     let compile = || -> Result<_, Diag> {
-        let compiled = compile_mir(
-            linked,
-            mir.opt_level.passes(),
-            mir.debug_assertions,
-            &mir.enums,
-            &mir.structs,
-            mir.auto_overlay,
-        )
+        let compiled = super::addrow::with_rows(mir.opt_level.rows(), || {
+            compile_mir(
+                linked,
+                mir.opt_level.passes(),
+                mir.debug_assertions,
+                &mir.enums,
+                &mir.structs,
+                mir.auto_overlay,
+            )
+        })
         .map_err(|e| hint(explain(linked, e).at(file), mir.opt_level))?;
         let r = split_phases(&compiled.listing).map_err(|e| e.at(file))?;
         Ok((compiled, r))
@@ -770,14 +778,16 @@ pub fn keep_mir(source: &Path, file: &ir::File) -> Result<(), String> {
 /// Compile a test program as the compiler's tests do: one program, started at main_bb0. Writes FILE.asm next to
 /// it (`source`; `file` as it is shown) and returns the assembly.
 pub fn compile_test(file: &str, source: &Path, mir: &Mir) -> Result<String, Diag> {
-    let asm = compile_mir(
-        &mir.linked,
-        mir.opt_level.passes(),
-        mir.debug_assertions,
-        &mir.enums,
-        &mir.structs,
-        mir.auto_overlay,
-    )
+    let asm = super::addrow::with_rows(mir.opt_level.rows(), || {
+        compile_mir(
+            &mir.linked,
+            mir.opt_level.passes(),
+            mir.debug_assertions,
+            &mir.enums,
+            &mir.structs,
+            mir.auto_overlay,
+        )
+    })
     .map_err(|e| hint(explain(&mir.linked, e).at(file), mir.opt_level))?
     .text();
     let out = source.with_extension("asm");

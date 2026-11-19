@@ -4,6 +4,68 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · A loop that adds what doesn't change a small run-time number of times is a jump into a row of ADDs
+
+- **Decision.** `addrow`, after the passes that clean up loops (#33): a loop whose head only tests a counter that
+  steps by one, and whose body only adds to totals what doesn't change from one pass to the next (`for _ in 0..d {
+  t += x; u -= y; }`, `while n > 0 { t += x; n -= 1 }`, `while k < d { t += x + x; k += 1 }`, and their checked
+  forms), becomes one block: what doesn't change worked out once (`v / 10`, `a - b`), then for each total a jump
+  built into a row of ADDs, `JMP end - n` into `ADD x` repeated as often as the count can be, which falls through
+  at its end to the total's store. That is what hand-written CARDIAC does for a multiply by a digit, one instruction
+  an addition. The count must be known small: from its type, a mask, `% 10`, `digit()`, a promise or a test before
+  the loop (the ranges at the loop's head are taken before the promises are used up, as the range pass's own).
+  Where it can't be below 0 the head's test goes, and a count of 0 jumps to the row's end; else the test stays and
+  the row is entered for 1 or more. A constant step is the count times the constant where that is smaller than the
+  row (`q += 1` is `q + n`). The jump's constant, `JMP end` (the data section is assembled on its own and can't name
+  a label in the code), is kept in the cell after the built jump, which never runs.
+- **Why.** A counted loop is 8 instructions a pass of adding one value (test, step, load, add, store, jump), 11 for
+  two. The issue's harness, which reads d and c and outputs the sum, on top of the 7 instructions it takes with no
+  adding at all: `for _ in 0..d { t += c }` was 2 + 8d instructions (17 cells) and is 5 + d (26 cells); two totals,
+  `t += tens; u += units`, were 13 + 11d (33 cells) and are 22 + 2d (55 cells).
+- **The row's end.** Hand code puts the row at 90-98 and lets the JMP's own return address in cell 99 bring it back;
+  that is a row shared by several callers. A row here is one loop's, in line, so it falls through to the store, and
+  costs what the hand code's does: 4 instructions to build and take the jump, a cell for each addition. A row shared
+  by loops adding the same value, ending at 99, is not done.
+- **The sums agree with the loop's.** A total's partial sums only grow or only shrink, so the cell's three digits of
+  the last are what the loop's stores kept (the accumulator wraps at 10,000 the same way), and an overflow check of
+  the last (`rt_chk` after the store) panics exactly when one of the loop's would have, at the same total. That needs
+  the accumulator's four digits to hold the partial sums, which a checked total's start and step bound (`|t| + most
+  |x| <= 9999`, so a count up to 9 for any card); a pass of different terms (`t += a - b`) needs it too, checked or
+  not, unless the combination is on a card and is worked out once. A value worked out once must be read as the loop
+  read it: from its cell, so one past a card that the loop read whole from the accumulator stays a loop.
+- **Cost, and when.** A cell for each addition the row can make, which pays only where the program has the cells
+  and the loop runs often enough. So: rows only at opt-level 1, 2 and 3 (s and z ask for the smallest program, and
+  get the loop, as `OptLevel::rows` says); at most 60 additions; only for a loop that can run again in a run (inside
+  another loop, or in a function, which may be called again and again), since every cell also takes about three
+  instructions of the loader's each run, which a loop main runs once seldom wins back; and only where the program
+  fits: `compile_cut` compiles it again without the row that takes most cells, and so on, until it fits or has none
+  (none in a program in phases, or with a stack, whose depth is the memory left over). No flag: where the cells are
+  needed, the compiler gives them back itself, and opt-level s or z is the way to ask for the loop. The row is
+  slower than the loop only for a count of 0: by 3 instructions, and 6 more for each total after the first (the jump
+  built to the row's end).
+- **Measured.** Cells at opt-level 2, overflow checks off unless said.
+  - The examples: none changes (ray/span's loop runs once a run, so it stays a loop).
+  - The support suite and tests/programs: no listing changes (2,992 and 460 compiles): none of their loops of this
+    shape has a count the compiler can bound.
+  - cardiac-speech's Rust version (83 machines): front/dur 75 to 86 cells (its multiply by a digit in a function),
+    the rest the same; check_text (929 texts), check_front (23 sentences) and check_voice with --rust and
+    --all-rust (4 fixtures) all exact. The old loop lattice (kfirst, kmid, klast, before a73927a) counts with
+    `899 - inp()`, which nothing bounds, so it stays as it was; with the digit promised (`assume(d1 >= 0 && d1 <=
+    9)`) the rows are made, 18 cells in kmid, but kmid is 76 cells already and doesn't fit with them, so the
+    compiler gives them back and the lattice is the 251,489,126 instructions it was on born1968 (all Rust).
+  - Card Attack's 994 machines: 30 decks change. 28 grow, 270 cells in all (2 to 29 each: the geforce, globe and rpi
+    machines' shared `by100` multiply, deep's digit loops, amiga's blends), and 1 shrinks (heart's stride, which adds a
+    constant, 84 to 80). Every one still fits (the largest is 96), and the 62 in phases are as they were. Of its 124
+    loops of this shape, 74 count something nothing bounds (mostly a card read), 15 are bounded but run once a run, 2
+    add a difference that could pass the accumulator's four digits, and 33 are made rows, of which those in the machines
+    that still fit stay: 29 rows in 27 decks. On random decks (6 a changed machine, values 0 to 9, to 200, and anywhere
+    on a card) every run gives the same cards as before, in 0.67 of the instructions (5,753,394 to 3,882,070).
+- **Evidence.** tests/programs/add_row_*.rs, against native Rust at opt-level 1 and 2, overflow checks on and off:
+  counts from -11 to 11 through `% 10`, a promise, a u8 mask, a test before the loop, a `while` counting down, two
+  totals, values worked out once, a counter read after the loop; add_row_overflow.rs, a total past a card, as the
+  loop left it both ways; add_row_count.rs, one instruction an addition from 0 to 9. tests/fuzz/programs/add_rows.rs
+  in the fuzzer's eight settings; the unit tests in addrow.rs; the full check.
+
 ## 2026-11-19 · The accumulator carries a value from block to block, and a store nothing reads goes
 
 - **Decision.** A pass on the finished listing, `acc::carry`, wherever the peephole rules run (opt-level 1 and above):

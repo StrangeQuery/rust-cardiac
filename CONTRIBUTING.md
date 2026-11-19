@@ -114,7 +114,8 @@ The compiler (`src/compile`) works in these steps:
 - **Front end.** The program is put in the terms the passes expect (`front`).
 - **Passes.** Typed transformations on each function's blocks. `for` loops become counter loops and structs
   become plain locals; then range analysis drops the checks it can prove, copies are forwarded, repeated work is
-  done once, sums are folded, INP and OUT go straight to array elements, and cells are shared between values never
+  done once, sums are folded, a loop that only adds what doesn't change a small number of times becomes a jump into
+  a row of ADDs (`addrow`), INP and OUT go straight to array elements, and cells are shared between values never
   live together.
 - **Lowering.** Each function becomes machine IR (`lower`, `machine`): typed lines of instructions, labels and data
   cells. The runtime routines the program needs are added (`runtime`).

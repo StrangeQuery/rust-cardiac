@@ -59,6 +59,20 @@ for opt in 1 2; do
       tests/programs/grid_copy.rs tests/programs/grid_offsets.rs tests/programs/grid_one.rs tests/programs/grid_refs.rs \
       tests/programs/grid_row_past.rs tests/programs/grid_ten.rs tests/programs/grid_wide.rs || exit 1
   done
+  # loops that add what doesn't change a small run-time number of times, made jumps into rows of ADDs (addrow.rs),
+  # for counts from below the least to past the most; and a total that passes a card, as the loop leaves it: with
+  # overflow checks CARDIAC stops at the same addition, without them the cell keeps what the loop's stores kept
+  for c in "$checked" "$unchecked"; do
+    sh native_diff.sh $c tests/programs/add_row_rem.rs tests/programs/add_row_promised.rs tests/programs/add_row_two.rs \
+      tests/programs/add_row_tested.rs tests/programs/add_row_down.rs tests/programs/add_row_split.rs \
+      tests/programs/add_row_difference.rs || exit 1
+  done
+  out=$(./target/release/cargo-cardiac test $checked tests/programs/add_row_overflow.rs)
+  [ "$out" = "0,5,125,-120,250,-245,375,-370,500,-495,625,-620,750,-745,875,-870,-999" ] &&
+    echo "MATCH  add_row_overflow: $out" || { echo "DIFFER add_row_overflow: $out"; exit 1; }
+  out=$(./target/release/cargo-cardiac test $unchecked tests/programs/add_row_overflow.rs)
+  [ "$out" = "0,5,125,-120,250,-245,375,-370,500,-495,625,-620,750,-745,875,-870,0,-995,125,-120" ] &&
+    echo "MATCH  add_row_overflow, unchecked: $out" || { echo "DIFFER add_row_overflow, unchecked: $out"; exit 1; }
   # `?` converting the error with From: rustc's MIR inliner, on at opt-level 1 too, inlines the conversion at both
   sh native_diff.sh $unchecked tests/programs/try_from.rs || exit 1
   # and as `cargo cardiac build` compiles, a release build (no overflow checks): the division routine, every sign
@@ -256,6 +270,13 @@ for want in "0:0 147" "1:-9 148" "9:-81 156" "10:-90 148" "37:-333 157" "99:-891
   n=${want%%:*}
   got=$("$BURN" tests/programs/add_times_count.cqb -- -9 $n 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "${want#*:} " ] && echo "MATCH  add_times(-9, $n): $got" || { echo "DIFFER add_times(-9, $n): $got, not ${want#*:}"; exit 1; }
+done
+# a loop made a row of ADDs (addrow.rs): one instruction for each addition, for counts 0 to the most (9)
+./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/add_row_count.rs || exit 1
+for want in "0:3 102" "1:-4 103" "5:-32 107" "9:-60 111"; do
+  n=${want%%:*}
+  got=$("$BURN" tests/programs/add_row_count.cqb -- $n -7 3 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
+  [ "$got" = "${want#*:} " ] && echo "MATCH  add row, $n additions: $got" || { echo "DIFFER add row, $n additions: $got, not ${want#*:}"; exit 1; }
 done
 for want in "0:90" "1:91" "9:99" "10:102" "37:133" "999:1287"; do
   n=${want%%:*}

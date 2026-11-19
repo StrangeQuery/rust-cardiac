@@ -689,6 +689,20 @@ pub enum Rvalue {
     Sum(Vec<(Sign, Operand)>),
     /// A linear combination with small coefficients, worked out in the accumulator: `Lin(+3*copy _1, -2*copy _2)`.
     Lin(Vec<(i64, Operand)>),
+    /// A total and what a pass adds to it, n times, n known to be 0..=most: a computed jump into a row of `most`
+    /// passes' ADDs and SUBs, as `addrow` makes of a loop. `Row(copy _4, [+copy _3], copy _1, 9)` is _4 + _1 * _3.
+    Row(Box<Row>),
+}
+
+/// `Rvalue::Row`: `acc` with each of `steps` added (or taken away) `times` times, `times` within 0..=`most`.
+/// `check`: the overflow check's message, when the total is checked (once, after the row).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Row {
+    pub acc: Operand,
+    pub steps: Vec<(Sign, Operand)>,
+    pub times: Operand,
+    pub most: u32,
+    pub check: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -1109,6 +1123,17 @@ impl fmt::Display for Rvalue {
                     write!(f, "{}{}*{o}", if *k < 0 { "-" } else { "+" }, k.abs())?;
                 }
                 f.write_str(")")
+            }
+            Rvalue::Row(r) => {
+                let checked = if r.check.is_some() { "WithOverflow" } else { "" };
+                write!(f, "Row{checked}({}, [", r.acc)?;
+                for (i, (s, o)) in r.steps.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{s}{o}")?;
+                }
+                write!(f, "], {}, {})", r.times, r.most)
             }
         }
     }

@@ -64,6 +64,10 @@ impl Locals for Rvalue {
             Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter().for_each(|(_, o)| o.visit_locals(f)),
             Rvalue::Sum(terms) => terms.iter().for_each(|(_, o)| o.visit_locals(f)),
             Rvalue::Lin(terms) => terms.iter().for_each(|(_, o)| o.visit_locals(f)),
+            Rvalue::Row(r) => std::iter::once(&r.acc)
+                .chain(r.steps.iter().map(|(_, o)| o))
+                .chain([&r.times])
+                .for_each(|o| o.visit_locals(f)),
         }
     }
 }
@@ -159,6 +163,10 @@ impl Rvalue {
             Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter().map(|(_, o)| o).collect(),
             Rvalue::Sum(terms) => terms.iter().map(|(_, o)| o).collect(),
             Rvalue::Lin(terms) => terms.iter().map(|(_, o)| o).collect(),
+            Rvalue::Row(r) => std::iter::once(&r.acc)
+                .chain(r.steps.iter().map(|(_, o)| o))
+                .chain([&r.times])
+                .collect(),
         }
     }
 }
@@ -224,7 +232,7 @@ impl Rvalue {
         }
     }
 
-    fn operands_mut(&mut self) -> Vec<&mut Operand> {
+    pub(crate) fn operands_mut(&mut self) -> Vec<&mut Operand> {
         match self {
             Rvalue::Use(o) | Rvalue::UnaryOp(_, o) | Rvalue::Cast(o, ..) | Rvalue::Repeat(o, _) => vec![o],
             Rvalue::BinaryOp(_, a, b) => vec![a, b],
@@ -233,6 +241,13 @@ impl Rvalue {
             Rvalue::Struct(_, fields) | Rvalue::Closure(_, fields) => fields.iter_mut().map(|(_, o)| o).collect(),
             Rvalue::Sum(terms) => terms.iter_mut().map(|(_, o)| o).collect(),
             Rvalue::Lin(terms) => terms.iter_mut().map(|(_, o)| o).collect(),
+            Rvalue::Row(r) => {
+                let Row { acc, steps, times, .. } = &mut **r;
+                std::iter::once(acc)
+                    .chain(steps.iter_mut().map(|(_, o)| o))
+                    .chain([times])
+                    .collect()
+            }
         }
     }
 

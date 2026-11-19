@@ -1061,8 +1061,33 @@ pub fn range_pass(
     locals: &HashMap<Local, Ty>,
     promised: &HashSet<Local>,
 ) -> Result<(usize, HashSet<Statement>, HashSet<Local>), Fail> {
-    let (dropped, judged, exact) = analyse(blocks, locals, promised, false)?;
+    let (dropped, judged, exact, _) = analyse(blocks, locals, promised, false)?;
     Ok((dropped, on_a_card(&judged), exact))
+}
+
+/// What holds on each way from one block to the next, for each whole local the analysis follows: the range pass's
+/// analysis, read only, changing nothing (None when it doesn't settle).
+pub fn edge_ranges(
+    blocks: &[Block],
+    locals: &HashMap<Local, Ty>,
+    promised: &HashSet<Local>,
+) -> Option<HashMap<(BasicBlock, BasicBlock), HashMap<Local, Range>>> {
+    let mut copy = blocks.to_vec();
+    let (_, _, _, out) = analyse(&mut copy, locals, promised, true).ok()?;
+    let mut edges = HashMap::new();
+    for (from, to) in out {
+        for (b, facts) in to {
+            let ranges = facts
+                .into_iter()
+                .filter_map(|(k, r)| match k {
+                    Key::Local(l) => Some((l, r)),
+                    Key::Value(_) => None,
+                })
+                .collect();
+            edges.insert((from, b), ranges);
+        }
+    }
+    Some(edges)
 }
 
 /// The statements judged to stay on a card, of those written once.
@@ -1092,7 +1117,7 @@ pub fn past_a_card(
 ) -> HashSet<(BasicBlock, usize)> {
     let mut copy = blocks.to_vec();
     let past: HashSet<(BasicBlock, usize)> = match analyse(&mut copy, locals, promised, true) {
-        Ok((_, judged, _)) => {
+        Ok((_, judged, _, _)) => {
             // (one the range pass found stays on a card, written once then and once now)
             let now = on_a_card(&judged.iter().map(|(b, i, s, _)| (*b, *i, s.clone(), false)).collect::<Vec<_>>());
             judged
@@ -1141,7 +1166,7 @@ fn analyse(
     locals: &HashMap<Local, Ty>,
     promised: &HashSet<Local>,
     record: bool,
-) -> Result<(usize, Vec<(BasicBlock, usize, Statement, bool)>, HashSet<Local>), Fail> {
+) -> Result<AnalysisResult, Fail> {
     let taken = taken_locals(blocks);
     let preds = predecessors(blocks);
     let unread = unread_pairs(blocks, locals, &taken);
@@ -1374,8 +1399,17 @@ fn analyse(
         let f = last_in.get(&b.name).cloned().flatten().unwrap_or_default();
         pass.visit(b, f, !record);
     }
-    Ok((pass.dropped, pass.judged.unwrap_or_default(), pass.exact))
+    Ok((pass.dropped, pass.judged.unwrap_or_default(), pass.exact, out))
 }
+
+/// What `analyse` finds: the checks dropped, the statements judged, the results taken whole, and what holds on the
+/// way from each block to each of its successors.
+type AnalysisResult = (
+    usize,
+    Vec<(BasicBlock, usize, Statement, bool)>,
+    HashSet<Local>,
+    HashMap<BasicBlock, Edges>,
+);
 
 /// The plain op a wrapping one does when nothing wraps.
 pub fn unwrapped(op: BinOp) -> BinOp {
