@@ -41,3 +41,4 @@ minesweeper_page1              tests/fuzz/programs/minesweeper_page.rs          
 minesweeper_page2              tests/fuzz/programs/minesweeper_page.rs              20..25
 minesweeper_page3              tests/fuzz/programs/minesweeper_page.rs              30..35
 wrap          tests/fuzz/programs/wrap.rs     0..899 0..299 -150..150 exact
+rows          tests/fuzz/programs/rows.rs     0..9 -111..111 exact

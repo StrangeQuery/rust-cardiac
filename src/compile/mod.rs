@@ -27,6 +27,7 @@ pub mod closures;
 pub mod copies;
 pub mod cycles;
 pub mod crates;
+pub mod cross_jumps;
 pub mod enum_methods;
 pub mod enums;
 pub mod forloops;
@@ -124,15 +125,25 @@ pub fn compile_mir(
     if fits(&first) || !optimize {
         return first;
     }
-    // too big: again with sums of reads a constant apart as loops over tables of their offsets (smaller, slower)
-    blocks::REROLL.with(|r| r.set(true));
-    let second = compile_mir_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay);
-    blocks::REROLL.with(|r| r.set(false));
-    match (&first, &second) {
-        _ if fits(&second) => second,
-        (Ok(a), Ok(b)) if cells(&b.listing) < cells(&a.listing) => second,
-        _ => first,
+    // too big: again with ends shared where that puts a jump on a way (smaller, a little slower); then with sums of
+    // reads a constant apart as loops over tables of their offsets (smaller, slower), and with both
+    let mut best = first;
+    for (slower, reroll) in [(true, false), (false, true), (true, true)] {
+        cross_jumps::SLOWER.with(|s| s.set(slower));
+        blocks::REROLL.with(|r| r.set(reroll));
+        let again = compile_mir_laid_out(mir, optimize, debug_assertions, enums, structs, auto_overlay);
+        cross_jumps::SLOWER.with(|s| s.set(false));
+        blocks::REROLL.with(|r| r.set(false));
+        if fits(&again) {
+            return again;
+        }
+        if let (Ok(a), Ok(b)) = (&best, &again) {
+            if cells(&b.listing) < cells(&a.listing) {
+                best = again;
+            }
+        }
     }
+    best
 }
 
 /// `compile_mir`, with its arrays of arrays laid out by tens where that fits.
@@ -1392,6 +1403,8 @@ fn compile_once(
         // a local and the argument cell it is passed in, made one cell, leave copies of a cell onto itself: those
         // alone go (the other rules know a scratch cell's uses as they were before cells were shared)
         l = peephole::drop_self_copies(&l, &starts);
+        // runs that end alike share their ends, once cells are shared (two arms' locals may be one cell now)
+        l = cross_jumps::cross_jump(&l, &starts);
         l.push(Line::new(Kind::Blank));
         l
     } else {

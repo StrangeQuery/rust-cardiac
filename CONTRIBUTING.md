@@ -118,7 +118,8 @@ The compiler (`src/compile`) works in these steps:
   live together.
 - **Lowering.** Each function becomes machine IR (`lower`, `machine`): typed lines of instructions, labels and data
   cells. The runtime routines the program needs are added (`runtime`).
-- **Peephole.** The peephole rules and the block layout rewrite the machine lines (`peephole`).
+- **Peephole.** The peephole rules and the block layout rewrite the machine lines (`peephole`). Last, runs of code
+  that end alike and go to the same place share their end (`cross_jumps`).
 - **Phases and deck.** A program in phases is split into its data and each phase's code (`phases`). The assembler
   places them from cell 03, and the deck and the panic map are written (`tape`, `panics`).
 

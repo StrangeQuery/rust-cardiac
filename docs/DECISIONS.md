@@ -4,6 +4,42 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · Runs of code that end alike and go to the same place share their end (cross-jumping)
+
+- **Decision.** A pass on the machine IR (`cross_jumps`), the last one, after the peephole rules, the block layout
+  and the sharing of cells, at opt-level 1 and up: where two runs of code end with the same instructions and then
+  go to the same place (a `JMP` to one label, the same `HRS`, or running on into the label), one copy of what they
+  end with is kept and the other run jumps into it at the cell where they start to agree. A label inside the copy
+  that goes moves to its twin in the kept one, and a run whose copy starts at a label nothing runs into needs no
+  jump at all: its labels move. Each step takes the merge that saves the most cells, until none saves one. It
+  applies to any code, not only to matches: if/else arms that store and jump alike, returns that load the same
+  result, two checks of the same thing before the same jump.
+- **What may be shared.** Only code run as it stands, in one function and one phase: not a labelled `DAT` in the
+  code (an instruction the program writes), not a run after a label that a constant, an offset or a load names (a
+  row entered by a computed jump, as `add_times` and a jump table are), and not the runtime routines. A branch to
+  `rt_panic` matches another only with the same reason for the panic map. A jump writes cell 99, so a function
+  that reads cell 99 anywhere but at its entry gets no jump added or moved.
+- **What it costs.** When the kept copy runs on into the place both go to, the other run's jump there becomes its
+  jump in, and nothing more runs; with no jump needed, one instruction less. Otherwise the jump in is one
+  instruction more each time that way runs. Those merges, which make a program slower, are made only for a program
+  that doesn't fit without them (`cross_jumps::SLOWER`): it is compiled again with them, before the sums of reads
+  are made loops (`blocks::REROLL`), and with both. A program that fits is never slower, and no program gets
+  bigger, so there is no flag. This is where the row of ADDs comes from (#35): arms that each add c once more than
+  the one before are, when the cells are needed, one row of ADDs that each arm jumps into at its own cell, the
+  hand-written multiply by a digit.
+- **Measured.** Cells, before and after; nothing anywhere got bigger, and every program that built still builds.
+  - The test programs at opt-level 1 and 2, overflow checks on and off: 230 of 896 builds smaller, by 444 cells.
+  - The examples: 17 of 28 smaller, by 32 cells (nim 93 to 88, the ray tracer's bounce 64 to 60, sky 45 to 42,
+    hop 91 to 88); their runs take the same instructions or fewer (bounce 12 fewer, nim 15, collatz 14 and 23).
+  - The issue's match (tail_rows.rs, a function of it called on a table): 135 cells to 90, so it fits, with the
+    row. tail_rows2.rs (the product, no divide, and more after it): 129 to 93.
+  - cardiac-speech's 83 Rust machines: 54 smaller, by 109 cells (spcls and right 6 each); every check exact, with
+    `--rust` and `--all-rust`; its runs take as many instructions or a few fewer.
+  - Card Attack's 994 Rust machines: 526 smaller, by 980 cells (gl_place 81 to 70, zm_place 91 to 81); all fit.
+- **What is left.** The kept copy may still end in a jump the block layout could have made a run-on, had it seen
+  the merged code (the layout runs before it). Arms that a match's own test sends to different places (rustc's
+  jump threading of two matches on one value) can't share, as they don't go to the same place.
+
 ## 2026-11-19 · A static is read and written in its own cells, not through its address
 
 Supersedes the cost in "A static is a fixed run of cells, as every variable on CARDIAC is" (2026-11-05).

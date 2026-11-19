@@ -66,7 +66,7 @@ for opt in 1 2; do
     tests/programs/smul2.rs tests/programs/structs2.rs tests/programs/repeats.rs tests/programs/repeats2.rs tests/programs/structs3.rs tests/programs/structs4.rs tests/programs/exprhelp.rs tests/programs/exprif.rs tests/programs/exprtuple.rs tests/programs/forloops.rs tests/programs/forloops2.rs tests/programs/forloops3.rs tests/programs/forloops4.rs tests/programs/phases.rs tests/programs/phases2.rs \
     tests/programs/forward.rs tests/programs/lin_plain.rs tests/programs/addr_out.rs tests/programs/addr_out_mut.rs tests/programs/compare_right.rs tests/programs/compare_left.rs tests/programs/compare_both.rs \
     tests/programs/compare_past.rs tests/programs/compare_past_left.rs tests/programs/promise_and.rs tests/programs/divide_branches.rs \
-    tests/programs/const_arrays.rs tests/programs/joined_tails.rs tests/programs/joined_tails2.rs \
+    tests/programs/const_arrays.rs tests/programs/joined_tails.rs tests/programs/joined_tails2.rs tests/programs/tail_rows.rs tests/programs/tail_rows2.rs \
     tests/programs/abs.rs tests/programs/wrapping.rs tests/programs/euclid.rs tests/programs/euclid2.rs \
     tests/programs/div_element.rs tests/programs/rem_element.rs \
     tests/programs/div_computed.rs tests/programs/rem_computed.rs tests/programs/sdiv_computed.rs tests/programs/srem_computed.rs tests/programs/div5_computed.rs tests/programs/div_in_place.rs tests/programs/div_by_own.rs \
@@ -237,8 +237,9 @@ for want in minesweeper_edges:146:155 minesweeper_border:147:172 minesweeper_nei
 done
 # Programs that once fitted in these cells, as a release build compiles them (overflow checks off), and must not
 # grow past them (fit_*.rs): sums that pass a card for a moment, read straight after from the accumulator, and
-# indexes worked out from sums carried into the next operation.
-for want in fit_strips:94 fit_root:95 fit_sphere:94 fit_specks:96 fit_mix:89 fit_rings:61; do
+# indexes worked out from sums carried into the next operation; and match arms that end alike, which fit once they
+# share their ends (tail_rows*.rs, 135 and 129 cells each with their own).
+for want in fit_strips:94 fit_root:95 fit_sphere:94 fit_specks:96 fit_mix:89 fit_rings:61 tail_rows:90 tail_rows2:93; do
   n=${want%%:*}; most=${want#*:}
   said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
   got=$(echo "$said" | sed -n 's/.* \([0-9]*\) cells.*/\1/p' | head -1)
