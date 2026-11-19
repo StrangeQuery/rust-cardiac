@@ -24,18 +24,37 @@ fn plain_use(op: Op) -> bool {
     matches!(op, Op::Cla | Op::Add | Op::Sub | Op::Out | Op::Sto | Op::Inp)
 }
 
-/// The data cells that can share: written somewhere, and only ever used plainly.
+/// The data cells that can share: written somewhere, starting at 0, and only ever used plainly.
 fn candidates(lines: &[Line], data_start: usize) -> Vec<String> {
+    let written: HashSet<&str> = lines
+        .iter()
+        .filter_map(|line| match &line.kind {
+            Kind::Instr(Op::Sto | Op::Inp, Arg::Sym(name, None)) => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let zero: HashSet<&str> = lines[data_start..]
+        .iter()
+        .filter_map(|line| match &line.kind {
+            Kind::Dat(Some(name), Arg::Num(n)) if n.parse::<i64>() == Ok(0) => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    plain_cells(lines, data_start)
+        .into_iter()
+        .filter(|name| written.contains(name.as_str()) && zero.contains(name.as_str()))
+        .collect()
+}
+
+/// The data cells, in listing order, used only plainly: each one a cell of its own (not an array or a resource's
+/// slot), every use of it a plain read or write of the cell itself, and its address never taken (named in a `DAT`,
+/// or as `name+N`). Nothing reaches such a cell but the instructions that name it.
+pub(super) fn plain_cells(lines: &[Line], data_start: usize) -> Vec<String> {
     let mut excluded: HashSet<&str> = HashSet::new();
-    let mut written: HashSet<&str> = HashSet::new();
     for line in lines {
         match &line.kind {
-            Kind::Instr(op, Arg::Sym(name, offset)) => {
-                if offset.is_some() || !plain_use(*op) {
-                    excluded.insert(name);
-                } else if matches!(op, Op::Sto | Op::Inp) {
-                    written.insert(name);
-                }
+            Kind::Instr(op, Arg::Sym(name, offset)) if offset.is_some() || !plain_use(*op) => {
+                excluded.insert(name);
             }
             Kind::Dat(_, Arg::Sym(name, _)) => {
                 excluded.insert(name);
@@ -46,7 +65,7 @@ fn candidates(lines: &[Line], data_start: usize) -> Vec<String> {
     let data = &lines[data_start..];
     let mut found = vec![];
     for (index, line) in data.iter().enumerate() {
-        let Kind::Dat(Some(name), initial) = &line.kind else {
+        let Kind::Dat(Some(name), _) = &line.kind else {
             continue;
         };
         // an array: its first cell labelled, the rest after it (a resource's has a Table label before it)
@@ -54,8 +73,7 @@ fn candidates(lines: &[Line], data_start: usize) -> Vec<String> {
             .get(index + 1)
             .is_some_and(|next| matches!(next.kind, Kind::Dat(None, _)));
         let resource = index > 0 && matches!(data[index - 1].kind, Kind::Table { .. });
-        let zero = matches!(initial, Arg::Num(n) if n.parse::<i64>() == Ok(0));
-        if !array && !resource && zero && written.contains(name.as_str()) && !excluded.contains(name.as_str()) {
+        if !array && !resource && !excluded.contains(name.as_str()) {
             found.push(name.clone());
         }
     }
@@ -63,12 +81,12 @@ fn candidates(lines: &[Line], data_start: usize) -> Vec<String> {
 }
 
 /// The program's code as cells, one for each instruction or cell in it, and the labels on them.
-struct Code<'a> {
-    cells: Vec<&'a Line>,
-    labels: HashMap<&'a str, usize>,
+pub(super) struct Code<'a> {
+    pub(super) cells: Vec<&'a Line>,
+    pub(super) labels: HashMap<&'a str, usize>,
 }
 
-fn code(lines: &[Line]) -> Code<'_> {
+pub(super) fn code(lines: &[Line]) -> Code<'_> {
     let mut cells = vec![];
     let mut labels = HashMap::new();
     let mut pending: Vec<&str> = vec![];
@@ -98,7 +116,7 @@ fn row_end(slot: &str, code: &Code) -> Option<usize> {
 }
 
 /// For each code cell, the cells that can run after it; None when the control flow is one this doesn't follow.
-fn successors(code: &Code) -> Option<Vec<Vec<usize>>> {
+pub(super) fn successors(code: &Code) -> Option<Vec<Vec<usize>>> {
     // the function each cell belongs to: from its NAME_entry label to the next (before the first, main)
     let mut function_of = vec![String::new(); code.cells.len()];
     let mut entries: Vec<(usize, &str)> = code

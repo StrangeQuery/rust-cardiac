@@ -17,6 +17,7 @@
 //! file's flags) turns them on, as the MIR rustc writes shows. A failed check panics, which prints -999 on the
 //! teletype and halts. Without overflow checks, a value past -999..999 keeps the low three digits when stored, as a
 //! cell does.
+pub mod acc;
 pub mod adaptors;
 pub mod arith;
 pub mod bits;
@@ -1398,11 +1399,20 @@ fn compile_once(
     listing.push(Line::new(Kind::Blank));
     let starts = sh.phase_starts.clone();
     let listing = if optimize {
-        let mut l = peephole::peephole(&peephole::layout(&peephole::peephole(&listing, &starts)), &starts);
-        l = stack::share_cells(&l);
+        let laid_out = peephole::peephole(&peephole::layout(&peephole::peephole(&listing, &starts)), &starts);
         // a local and the argument cell it is passed in, made one cell, leave copies of a cell onto itself: those
         // alone go (the other rules know a scratch cell's uses as they were before cells were shared)
-        l = peephole::drop_self_copies(&l, &starts);
+        let shared = |l: &[Line]| peephole::drop_self_copies(&stack::share_cells(l), &starts);
+        let plain = shared(&laid_out);
+        // the accumulator carried from block to block (`acc`), its loads and the stores nothing reads gone, and the
+        // rules again on what that leaves; then carried again over the cells as shared, which can make more loads
+        // and stores needless (two locals, one in each arm, are one cell now), and the cells nothing names any more
+        // gone. Kept when it takes no more cells: a store gone can leave the cells to share packed less well.
+        let carried = peephole::drop_unused_cells(acc::carry(&shared(&peephole::peephole(
+            &acc::carry(&laid_out),
+            &starts,
+        ))));
+        let mut l = if cells(&carried) <= cells(&plain) { carried } else { plain };
         // runs that end alike share their ends, once cells are shared (two arms' locals may be one cell now)
         l = cross_jumps::cross_jump(&l, &starts);
         l.push(Line::new(Kind::Blank));

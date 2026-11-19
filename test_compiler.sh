@@ -262,6 +262,15 @@ for want in "0:90" "1:91" "9:99" "10:102" "37:133" "999:1287"; do
   got=$("$BURN" tests/programs/skip_cards_count.cqb -- $n $(cards $n 7) 555 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "555 ${want#*:} " ] && echo "MATCH  skip_cards($n): $got" || { echo "DIFFER skip_cards($n): $got, not 555 ${want#*:}"; exit 1; }
 done
+# a row of adds that blocks fall into, each also entered from a match (#36): the sum stays in the accumulator from
+# block to block, and each way in from the match loads it on its own way. The sum and the instructions the run takes,
+# for c = 7 and d from 0 to 9: each add is one instruction, and a way in from the match a load and a jump
+./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/acc_row.rs || exit 1
+for want in "0:0 175" "1:7 181" "2:14 184" "5:35 193" "8:56 202" "9:63 202"; do
+  d=${want%%:*}
+  got=$("$BURN" tests/programs/acc_row.cqb -- $d 7 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
+  [ "$got" = "${want#*:} " ] && echo "MATCH  acc_row(d = $d): $got" || { echo "DIFFER acc_row(d = $d): $got, not ${want#*:}"; exit 1; }
+done
 # --emit: build writes what it is asked for. phases.rs in two decks (no # lines) and two six-column listings
 # with the start, no assembly; and its decks output what a default build's do
 E=$(mktemp -d); D=$(mktemp -d); cp tests/programs/phases.rs $E/; cp tests/programs/phases.rs $D/

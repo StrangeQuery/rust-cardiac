@@ -5,8 +5,9 @@
 ## What's different on CARDIAC
 
 - A cell holds -999 to 999, and so does every integer type CARDIAC takes. The accumulator has a fourth digit: past a
-  card, a value panics with overflow checks on; with them off, its cell keeps the last three digits, though the line
-  straight after the operation can still read all of it from the accumulator, as native Rust reads the whole value.
+  card, a value panics with overflow checks on; with them off, its cell keeps the last three digits, though code that
+  reads it while the accumulator still holds it, straight after the operation or in the block that comes next, reads
+  all of it, as native Rust reads the whole value.
 - No integer type is wider than a card. `i32` and `isize` are held as an `i16` is, and `i64`, `u32`, `u64`, `i128` and
   `u128` are refused.
 - There are no floats and no heap: `f32`, `f64`, `Box`, `Vec` and `String` are refused.
@@ -28,8 +29,9 @@ than Rust's.
 
 **Past a card.** With overflow checks on, an `i16` past -999..=999 panics on CARDIAC, where native Rust carries on
 to 32767. With them off, CARDIAC keeps the last three digits (1100 is 100) where Rust would keep the whole value; a
-test or a sum straight after the operation reads the accumulator, and sees all of it, as Rust does (`wrap(u + 110,
-900)` with u + 110 at 1000 for a moment gives 100). A program whose values fit on a card prints the same both ways.
+test or a sum that reads the value while the accumulator still holds it, straight after the operation or in the
+block it goes on to, sees all of it, as Rust does (`wrap(u + 110, 900)` with u + 110 at 1000 for a moment gives
+100). A program whose values fit on a card prints the same both ways.
 
 Without overflow checks, a `u8` or `i8` product that passes a card is what CARDIAC keeps of it, as for an `i16`:
 the last three digits with the sign (40000 keeps 000), which the type then wraps. A product from -999 to 999 wraps

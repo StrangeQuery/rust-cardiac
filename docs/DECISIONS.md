@@ -4,6 +4,48 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · The accumulator carries a value from block to block, and a store nothing reads goes
+
+- **Decision.** A pass on the finished listing, `acc::carry`, wherever the peephole rules run (opt-level 1 and above):
+  once after the block layout and its peephole rules, and once more after cells are shared. It follows the program's
+  control flow as the compiled stack does, into and out of functions, and works out which cells the accumulator holds
+  the value of before each instruction, on every way there. A `CLA x` where it already holds x goes, and so does a
+  `STO x` where x already holds it. Then a store into a cell nothing reads before the cell is written again goes too, by
+  the same liveness the compiled stack uses. Only cells reached by nothing but the instructions that name them take
+  part. Last, a block that starts `CLA x`, where some ways in leave x in the accumulator and the rest are TACs, can have
+  each of those TACs go to a `CLA x` and a `JMP` of its own instead (as hand code loads the sum before it jumps into a
+  row of adds). That is done for all such blocks at once, and kept only where it takes no more cells and each block's
+  own store into x then goes, except for the last block of a row that fall into one another, which keeps its store for
+  what reads x after the row. It is never done for a TAC that is a loop's way round to its own top. Fixes #36.
+- **Why.** The peephole rules see a few instructions and stop at a label, so a value went to its cell at the end of one
+  block and was loaded again at the start of the next, even where every way in left it in the accumulator, and a cell
+  was written where nothing read it again. A row of `s += c` blocks, each also entered from a `match`, was three
+  instructions an add, and each store cut a sum past a card to three digits; it is now one, with the sum in the
+  accumulator to the end of the row, as hand code keeps it.
+- **Cost.** No cell, ever. Every change takes an instruction away, and the loads on TACs' ways in are kept only when
+  they take no more cells; but a store gone changes which cells can share, and the sharing, which packs them greedily,
+  can come out a cell worse (support row trait_dyn_dispatch, 53 to 54). So the listing is shared both ways, carried and
+  not, and the carried one is kept when it takes no more cells. That costs the compile a second sharing pass. The one
+  way that can get longer is a way in by a TAC to the last block of such a row, by one JMP (the row's test program,
+  `tests/programs/acc_row.rs`: 181 instructions for d = 1, against 180; every other d is shorter, d = 9 by 16). A loop's
+  way round never is. Without the store, a value lives in the accumulator only, so a debugger shows its cell as it was
+  when it was last stored, as with a register. A value past a card is read whole in more places, where before the load
+  in the next block took its three digits: the same thing the 2026-11-09 rule does straight after an operation, now
+  across a label.
+- **Measured** against main as it was with cross-jumping (#35) in, cells unless said:
+  - tests/programs, opt-level 2, overflow checks off and on: 28,047 to 27,798 cells over 438 builds; 113 smaller,
+    none bigger (unread_checked 45 to 36, struct_mut 92 to 85, minesweeper_edges 153 to 147, fit_root 94 to 89).
+  - The examples: guess 48 to 47, sky 42 to 38, hit 78 to 77, sway 51 to 50, the rest the same. Instructions on
+    test_examples.sh's inputs: sky 615 to 413, guess 222 to 218, sway 397 to 393, hit 341 to 337, none more.
+  - The support suite (tests/features), release builds, measured before the rebase onto #35, #37, #38 and #39:
+    24,020 to 23,746 cells over 723 rows, 121 smaller, none bigger; with overflow checks, 28,300 to 28,004. No row's
+    outcome changed. (The committed results, remade now, take in those four changes too: 23,357.)
+  - cardiac-speech's Rust machines: 5,620 to 5,587 cells over 83 machines, 17 smaller, none bigger. Its checks all
+    exact; with `--all-rust`, born1968_tts runs 73,535,576 instructions to 72,294,389 (1.7% fewer), and with
+    `--rust` 46,054,231 to 46,050,103.
+  - Card Attack's 932 Rust machines: 58,784 to 58,468 cells, 173 smaller, none bigger, every one still in one phase
+    of no more than 100 cells.
+
 ## 2026-11-19 · Runs of code that end alike and go to the same place share their end (cross-jumping)
 
 - **Decision.** A pass on the machine IR (`cross_jumps`), the last one, after the peephole rules, the block layout

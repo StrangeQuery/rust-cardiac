@@ -964,7 +964,7 @@ fn drop_unused_labels(lines: &mut Vec<Line>, keep: &[String]) -> bool {
 
 /// 7. data cells nothing reads or writes: a cell is used if an instruction names it, or if an address constant
 ///    (DAT label) points at it
-fn drop_unused_cells(lines: Vec<Line>) -> Vec<Line> {
+pub fn drop_unused_cells(lines: Vec<Line>) -> Vec<Line> {
     let mut used: HashSet<String> = HashSet::new();
     for l in &lines {
         if let Kind::Instr(_, arg) | Kind::Dat(_, arg) = &l.kind {
