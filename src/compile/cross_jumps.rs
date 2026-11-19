@@ -116,6 +116,12 @@ struct Shape {
     touched: HashSet<String>,
 }
 
+/// A jump table's first cell: `main_jt4`.
+fn is_jump_table(name: &str) -> bool {
+    name.rsplit_once("_jt")
+        .is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
+}
+
 fn skippable(l: &Line) -> bool {
     matches!(l.kind, Kind::Blank | Kind::Note(_))
 }
@@ -145,9 +151,18 @@ fn shape(lines: &[Line]) -> Shape {
     }
     let labels: HashSet<&str> = lines[..end].iter().filter_map(code_label).collect();
     let mut touched: HashSet<String> = HashSet::new();
+    // in a switch's jump table (`main_jt4: DAT main_bb3+800` and the cells after it, `lower::branches`), whose
+    // entries are each a JMP to their label
+    let mut table = false;
     for l in lines {
+        table = match &l.kind {
+            Kind::Dat(Some(name), _) => is_jump_table(name),
+            Kind::Dat(None, _) => table,
+            _ => false,
+        };
         let (named, jump) = match &l.kind {
             Kind::Instr(op, arg) => (arg, matches!(op, Op::Jmp | Op::Tac)),
+            Kind::Dat(_, Arg::Sym(name, Some(800))) if table && labels.contains(name.as_str()) => continue,
             Kind::Dat(_, arg) => (arg, false),
             _ => continue,
         };
@@ -614,6 +629,17 @@ mod tests {
             \x20       JMP main_bb3\nmain_bb2:\n        CLA c\n        ADD c\n        STO s\nmain_bb3:\n        OUT s\n\
             \x20       HRS 0\n";
         assert_eq!(run(reads, true), print(&parse(reads).unwrap()));
+    }
+
+    /// A jump table's entries are jumps to their labels: arms entered from one still share their ends.
+    #[test]
+    fn jump_table_entries_are_jumps() {
+        let text = "main_bb0:\n        CLA d\n        ADD jmp_main_jt0\n        STO main_jt0_go\nmain_jt0_go: DAT 0\n\
+            main_jt0: DAT main_bb1+800\n          DAT main_bb2+800\njmp_main_jt0: DAT main_jt0+800\nmain_bb1:\n\
+            \x20       CLA c\n        ADD c\n        STO s\n        JMP main_bb3\nmain_bb2:\n        CLA c\n\
+            \x20       ADD c\n        STO s\nmain_bb3:\n        OUT s\n        HRS 0\n";
+        let out = run(text, true);
+        assert!(cells(&out) < cells(text), "{out}");
     }
 
     /// A check's reason for the panic map is part of what a line does: two branches to rt_panic for different

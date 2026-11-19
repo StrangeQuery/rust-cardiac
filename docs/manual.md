@@ -148,7 +148,8 @@ arithmetic does, and `checked_add` is `None` past 999.
 
 - `==`, `!=`, and a `match` on values. CARDIAC's one test is TAC, "jump if negative": `x < k` is a subtraction and a
   TAC, but `x == k` is two tests (not below, not above), about six instructions. A `match` tests its arms one after
-  another, each an equality, as a chain of `else if x == k` does. A value tested once and then again
+  another, each an equality, as a chain of `else if x == k` does (a `match` on enough consecutive values, `0 => ..,
+  1 => .., ..`, is a jump into a table instead, five instructions for any arm). A value tested once and then again
   (`let b = if c { 1 } else { 0 }; if b == 1`) costs both, unless the compiler can follow the constant straight to
   the arm. Test with `<` and `>=` where the values allow (`if x < 0`, ranges in a `match`), put the most common arm
   first, and keep a value's sign meaningful (-1 for none: the niche layout does this for `Option<i16>`).

@@ -4,6 +4,69 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · A dense switch is a jump into a table of JMPs when that is fewer cells
+
+- **Decision.** A switch whose arms are on consecutive values (a `match d { 0 => .., 1 => .., .. }`, an enum's
+  variants, a call through a function pointer) is lowered as runs of values that go to one block, and then either
+  as the chain of tests it was (one SUB and one TAC a run) or, at opt-level 1 and 2, as a jump into a table: `CLA
+  d`, `ADD` a JMP on the table's first cell, `STO` into the next cell and run it, into a row of JMPs in the code,
+  one for each value (`lower::branches::dense_switch`). The table is taken when it is fewer cells, counting the tests
+  of the sides the value can be past and the constants they need; at as many cells, when it is fewer instructions
+  over the arms. An arm that only goes on (a `break`, a `continue`, a block that is a goto) is entered from the
+  table where it goes, and a `return` in main is `HRS 00` in the table. The range pass, where it knows the range
+  of an i16 or a u8 it switches on (a type, a mask, `% 10`, an `assume`), drops the arms it can't take, and when
+  the range is near the arms gives each of its other values an arm to `otherwise`, which is then none
+  (`ranges::switch_domain`): a switch with no `otherwise` has an arm for every value it can be, so neither form
+  tests for a value past them. The chain also stops testing a u8 for below 0, and merges arms on consecutive
+  values that go to one block, at opt-level 1 and 2. The table, its JMP constant and the slot are in the code (the
+  data is assembled on its own and can't name a code label), and the compiled stack follows the slot to every
+  block the table goes to (`stack::table_of`). Fixes #34.
+- **Why.** A chain is two instructions for each arm passed; a table is five for any value, but a cell for each
+  value. Hand code does the same with a row of JMPs (or of ADDs, #33). The function pointers' switch (2026-11-06)
+  is the same switch, a u8 numbering the functions, and takes the table the same way when it has enough of them.
+- **Considered.** A flag: the table is never more cells than the chain, and at as many cells it is taken only
+  when it is fewer instructions over the arms, so no program gets bigger, and none gets slower on average over
+  its arms. It is up to two instructions slower for the first arm or two (5 instructions against 2 or 4), the
+  price of the cells or instructions it saves on the rest. The table in the data, where other constants are: the
+  data can't name a label in the code. An enum's own range (rustc's `otherwise: unreachable`), which the front end
+  turns into the last variant's arm before any pass sees it (#42), so an enum's switch pays for a test above its
+  last variant.
+- **Crossover, measured.** A match on d with n values, arms 0 to n - 2 and `_`, output in a loop, release build
+  (cells of the whole program, then instructions a pass, fewest to most):
+
+  | d | n | before | now |
+  |---|---|---|---|
+  | promised 0 to n - 1 | 5 | 30, 9-16 | 30, 9-16 (chain) |
+  | | 6 | 35, 9-18 | 35, 11-12 |
+  | | 7 | 40, 9-20 | 39, 11-12 |
+  | | 10 | 55, 9-26 | 51, 11-12 |
+  | u8 | 3 | 30, 15-18 | 29, 14-17 (chain, no test below 0) |
+  | | 9 | 60, 15-30 | 59, 16-19 |
+  | | 10 | 65, 15-32 | 63, 16-19 |
+  | i16, nothing known | 8 | 51, 13-27 | 51, 13-27 (chain) |
+  | | 9 | 56, 13-29 | 56, 13-19 |
+  | | 10 | 61, 13-31 | 60, 13-19 |
+
+  So the table is taken from 6 values when the range is known, and from 9 when the value can be past the arms on
+  one side or both; it is smaller from 7 and 10. Below that the chain stays, and is what it was.
+- **With cross-jumping.** A table's entry, `DAT main_bb3+800`, is a jump to its label for cross-jumping too
+  (`cross_jumps::shape`), so arms entered from a table still share their ends (#35): tail_rows.rs goes from 90
+  cells to 85 and tail_rows2.rs from 93 to 88, and test_compiler.sh holds them there.
+- **Cost.** None in cells. tests/programs at opt-level 2, overflow checks off and on: 29,139 cells to 29,045 over
+  482 builds, 24 smaller, none bigger. The examples, the support matrix, cardiac-speech's 83 Rust machines and Card
+  Attack's 994 are unchanged, deck for deck (none of their matches is a dense one on enough values; Card Attack's
+  are on ranges). #34's multiply by a digit (tests/programs/switch_digit.rs) goes from 86 to 81 cells, and
+  cardiac-speech's rust/dev/ex_match.rs, the same program, from 81 to 76, its pass for d = 9 from 35 instructions
+  to 20 (d = 5, 25 to 16; d = 0, 10 to 11). #36's rows of adds lose the accumulator carry where the table enters
+  them (#48), and are still smaller: acc_row.rs from 57 cells to 52 and faster for every d (c = 7: 175 instructions
+  to 158 for d = 0, 202 to 185 for d = 9); ex_duff.rs from 57 to 52, its pass 2 instructions shorter for d = 1 to 5
+  and one longer for d = 0 and d = 9 (37 to 38). cardiac-speech's checks (--rust and --all-rust) are exact.
+- **Evidence.** tests/programs/switch_table_*.rs, each matching native Rust at opt-level 1 and 2 with checks on and
+  off: a range promised, nothing known (negative arms, values below, among and above), arms from 5 up in runs, a
+  u8, an enum's eight variants, a u8's low bits, a bool and a u8 as one value, a remainder by 10 (negative values to
+  the otherwise arm), arms that break, continue and return, and main ending from an arm. The fuzzer's switch_digit and switch_any
+  (tests/fuzz/programs) match native Rust in every setting.
+
 ## 2026-11-19 · A loop that adds what doesn't change a small run-time number of times is a jump into a row of ADDs
 
 - **Decision.** `addrow`, after the passes that clean up loops (#33): a loop whose head only tests a counter that

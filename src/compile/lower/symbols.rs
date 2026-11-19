@@ -61,6 +61,9 @@ pub enum Sym {
     Block(String, BasicBlock),
     /// A label or a cell lowering makes up, numbered within its function: `main_rc4`, `main_sm7`.
     Fresh { func: String, stem: &'static str, n: usize },
+    /// The cell a jump into a jump table is built in and run, named for the table: `main_jt4_go`. The compiled stack
+    /// (`stack::share_cells`) finds where it can go by its name.
+    Slot(Box<Sym>),
     /// Where a function starts: `add_entry`.
     Entry(String),
     /// The cell a function keeps its return instruction in, and jumps to: `add_exit`.
@@ -200,6 +203,7 @@ impl fmt::Display for Sym {
             Sym::Instr(access, cell) => write!(f, "{}_{}", access.stem(), cell.mangled()),
             Sym::Block(func, bb) => write!(f, "{func}_{bb}"),
             Sym::Fresh { func, stem, n } => write!(f, "{func}_{stem}{n}"),
+            Sym::Slot(table) => write!(f, "{table}_go"),
             Sym::Entry(func) => write!(f, "{func}_entry"),
             Sym::Exit(func) => write!(f, "{func}_exit"),
             Sym::Runtime(name) => f.write_str(name),

@@ -1,13 +1,16 @@
 //! Terminators that branch: gotos, returns, switches and asserts; compare-and-branch; and the fusing of a
 //! comparison or an overflow-checked op into the branch that reads its bool, which then is never stored.
+use std::collections::HashSet;
+
 use crate::compile::ir::{
     self, blocks_naming, BasicBlock, BinOp, IntTy, Local, Projection, Rvalue, Statement, Terminator, Ty,
 };
-use crate::compile::machine::{Arg, Op};
+use crate::compile::machine::{Arg, Kind, Line, Op};
 use crate::compile::Fail;
 
 use super::arith::plain_op;
 use super::places::{Loc, Value};
+use super::symbols::Access;
 use super::{bare, is_comparison, numbered, one_word, plain_unwind, source, Cell, Lowering, Sym};
 
 /// How many lines of a block read the value of an overflow-checked pair `(t.0: T)` (with `skip_asserts`, not
@@ -26,6 +29,24 @@ fn value_reads(b: &ir::Block, t: Local, skip_asserts: bool) -> usize {
 /// A switch arm's value as a number (a value too large for one saturates).
 fn clamp(v: i128) -> i64 {
     v.clamp(i64::MIN as i128, i64::MAX as i128) as i64
+}
+
+/// The values a dense switch sends to one block: `first..=last`, unbounded where none.
+#[derive(Clone, Copy, Debug)]
+struct Run {
+    first: Option<i64>,
+    last: Option<i64>,
+    to: BasicBlock,
+}
+
+/// A jump table for a dense switch: the runs below `runs[lo]` and above `runs[hi]` are tested for (at most one on
+/// each side), and the values of those from `lo` to `hi` go through the table.
+#[derive(Clone, Copy, Debug)]
+struct Table {
+    lo: usize,
+    hi: usize,
+    cells: i64,
+    instructions: i64,
 }
 
 impl<'a> Lowering<'a> {
@@ -55,36 +76,19 @@ impl<'a> Lowering<'a> {
                 }
                 let v = self.operand(discr)?;
                 let vv = self.mat(v);
-                // arms on consecutive values v0, v0 + 1, ... (a match's `0 => .., 1 => .., 2 => ..`): one subtraction
-                // for them all, x - v0 below 0 the other way, then each SUB 00 and TAC the next arm: two cells an
-                // arm, not an equality's two tests
                 let mut sorted: Vec<(i64, BasicBlock)> = arms.iter().map(|(v, t)| (clamp(*v), *t)).collect();
                 sorted.sort();
-                let consecutive = sorted.windows(2).all(|w| w[1].0 == w[0].0 + 1);
-                if let (true, true, Some(other)) = (sorted.len() >= 2, consecutive, otherwise) {
-                    let (v0, other) = (sorted[0].0, self.label(*other));
-                    if (-999..=999).contains(&v0) {
-                        self.load(&vv)?;
-                        let comment = format!("switchInt == {v0} to {}", v0 + sorted.len() as i64 - 1);
-                        if v0 != 0 {
-                            let k = self.konst(v0);
-                            self.emit_c(Op::Sub, k, &comment);
-                            self.emit(Op::Tac, other.clone());
-                        } else {
-                            self.emit_c(Op::Tac, other.clone(), &comment);
-                        }
-                        for (_, target) in &sorted {
-                            let one = self.konst(1);
-                            self.emit(Op::Sub, one);
-                            let t = self.label(*target);
-                            self.emit(Op::Tac, t);
-                        }
-                        self.unsigned_switch = false;
-                        self.emit(Op::Jmp, other);
-                        return Ok(());
-                    }
+                if self.dense_switch(&vv, &sorted, *otherwise)? {
+                    self.unsigned_switch = false;
+                    return Ok(());
                 }
-                for (value, target) in arms {
+                // without `otherwise` (`ranges::switch_domain`), the last arm is it
+                let mut arms = arms.clone();
+                let otherwise = match otherwise {
+                    Some(o) => Some(*o),
+                    None => arms.pop().map(|(_, b)| b),
+                };
+                for (value, target) in &arms {
                     let val = clamp(*value);
                     let next = self.fresh("n");
                     let target = self.label(*target);
@@ -103,7 +107,7 @@ impl<'a> Lowering<'a> {
                 let Some(other) = otherwise else {
                     fail!(internal(format!("switchInt without otherwise: {t}")))
                 };
-                let l = self.label(*other);
+                let l = self.label(other);
                 self.emit(Op::Jmp, l);
                 Ok(())
             }
@@ -168,6 +172,239 @@ impl<'a> Lowering<'a> {
             }
             _ => self.call(t),
         }
+    }
+
+    /// A switch whose arms are on consecutive values (or, without `otherwise`, on every value it can be, as
+    /// `ranges::switch_domain` leaves it), as runs of values that go to one block: a chain of tests, one SUB and one
+    /// TAC a run, or (with the passes, at opt-level 1 and 2) a jump into a table, `ADD` of a `JMP` on the table's
+    /// first cell, `STO` into the next cell and run it, into a row of `JMP`s in the code, one for each value. The
+    /// table is taken when it is fewer cells, or as many and fewer instructions over the arms: 5 instructions for any
+    /// value against two for each run passed, but a cell for each value, and a test for each side the values can be
+    /// past. False when the arms aren't consecutive, and nothing is emitted.
+    fn dense_switch(
+        &mut self,
+        vv: &Value,
+        sorted: &[(i64, BasicBlock)],
+        otherwise: Option<BasicBlock>,
+    ) -> Result<bool, Fail> {
+        let consecutive = sorted.windows(2).all(|w| w[1].0 == w[0].0 + 1);
+        if sorted.len() < 2 || !consecutive {
+            return Ok(false);
+        }
+        let (v0, vl) = (sorted[0].0, sorted[sorted.len() - 1].0);
+        if !(-999..=999).contains(&v0) || !(-999..=999).contains(&vl) {
+            return Ok(false);
+        }
+        // at opt-level 0 as it always was: a run each value, and a test for below the arms
+        let opt = self.optimize;
+        let mut runs: Vec<Run> = vec![];
+        let mut push = |r: Run| match runs.last_mut() {
+            Some(p) if opt && p.to == r.to => p.last = r.last,
+            _ => runs.push(r),
+        };
+        if let Some(o) = otherwise {
+            if !(opt && self.unsigned_switch && v0 <= 0) {
+                push(Run {
+                    first: None,
+                    last: Some(v0 - 1),
+                    to: o,
+                });
+            }
+        }
+        for &(v, to) in sorted {
+            push(Run {
+                first: Some(v),
+                last: Some(v),
+                to,
+            });
+        }
+        if let Some(o) = otherwise {
+            push(Run {
+                first: Some(vl + 1),
+                last: None,
+                to: o,
+            });
+        }
+        let comment = format!("switchInt == {v0} to {vl}");
+        if runs.len() == 1 {
+            self.carried = None;
+            let l = self.label(runs[0].to);
+            self.emit_c(Op::Jmp, l, &comment);
+            return Ok(true);
+        }
+        // a new constant's cell, for the cost
+        let kc = |l: &Self, k: i64| -> i64 { (k != 1 && k != 0 && !l.sh.consts.contains(&Sym::Const(k))) as i64 };
+        // the chain: each run but the last a test, x - (its last + 1) < 0, from what the test before left
+        let m = runs.len();
+        let mut tests: Vec<i64> = vec![];
+        let mut at = 0;
+        for r in &runs[..m - 1] {
+            let bound = r.last.unwrap() + 1;
+            tests.push(bound - at);
+            at = bound;
+        }
+        if tests.iter().any(|k| k.abs() > 999) {
+            return Ok(false);
+        }
+        // (its last JMP left out: the block layout nearly always puts the last run's block next, and drops it)
+        let chain_cells: i64 = tests.iter().map(|&k| if k != 0 { 2 + kc(self, k) } else { 1 }).sum();
+        let run_of = |v: i64| {
+            runs.iter()
+                .position(|r| r.first.is_none_or(|f| f <= v) && r.last.is_none_or(|l| v <= l))
+                .unwrap()
+        };
+        let chain_to = |i: usize| -> i64 {
+            let passed: i64 = tests[..i.min(m - 1) + usize::from(i < m - 1)]
+                .iter()
+                .map(|&k| if k != 0 { 2 } else { 1 })
+                .sum();
+            passed + i64::from(i == m - 1)
+        };
+        let chain_instructions: i64 = (v0..=vl).map(|v| chain_to(run_of(v))).sum();
+        let mut best: Option<Table> = None;
+        if opt {
+            for (a, b) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                if (runs[0].first.is_none() && a == 0) || (runs[m - 1].last.is_none() && b == 0) || m < a + b + 1 {
+                    continue;
+                }
+                let (lo, hi) = (a, m - 1 - b);
+                let (s, e) = (runs[lo].first.unwrap(), runs[hi].last.unwrap());
+                let n = e - s + 1;
+                // (the table's constant, a JMP on its cell `off` cells on, must be one the table's cells reach)
+                let (mut cells, mut at, mut low, mut high) = (n + 4, 0, 0, 0);
+                if a == 1 {
+                    let k = s - at;
+                    low = 1 + i64::from(k != 0);
+                    cells += 1 + if k != 0 { 1 + kc(self, k) } else { 0 };
+                    at = s;
+                }
+                if b == 1 {
+                    let k = e + 1 - at;
+                    high = 1 + i64::from(k != 0);
+                    cells += 2 + if k != 0 { 1 + kc(self, k) } else { 0 };
+                    at = e + 1;
+                }
+                let mut index = 4;
+                if at < s {
+                    cells += 1 + kc(self, s - at);
+                    index += 1;
+                    at = s;
+                }
+                if at - s > 99 || n > 99 {
+                    continue;
+                }
+                let instructions: i64 = (v0..=vl)
+                    .map(|v| {
+                        let i = run_of(v);
+                        if i < lo {
+                            low
+                        } else if i > hi {
+                            low + high + 1
+                        } else {
+                            low + high + index
+                        }
+                    })
+                    .sum();
+                let t = Table {
+                    lo,
+                    hi,
+                    cells,
+                    instructions,
+                };
+                if best.is_none_or(|x| (t.cells, t.instructions) < (x.cells, x.instructions)) {
+                    best = Some(t);
+                }
+            }
+        }
+        let table = best.filter(|t| (t.cells, t.instructions) < (chain_cells, chain_instructions));
+        self.load(vv)?;
+        let mut comment = comment;
+        let Some(t) = table else {
+            for (r, &k) in runs.iter().zip(&tests) {
+                if k != 0 {
+                    let c = self.konst(k);
+                    self.emit_c(Op::Sub, c, &std::mem::take(&mut comment));
+                }
+                let l = self.label(r.to);
+                self.emit_c(Op::Tac, l, &std::mem::take(&mut comment));
+            }
+            let l = self.label(runs[m - 1].to);
+            self.emit(Op::Jmp, l);
+            return Ok(true);
+        };
+        comment.push_str(", through a jump table");
+        let (s, e) = (runs[t.lo].first.unwrap(), runs[t.hi].last.unwrap());
+        let mut at = 0;
+        if t.lo == 1 {
+            if s != at {
+                let c = self.konst(s - at);
+                self.emit_c(Op::Sub, c, &std::mem::take(&mut comment));
+            }
+            let l = self.label(runs[0].to);
+            self.emit_c(Op::Tac, l, &std::mem::take(&mut comment));
+            at = s;
+        }
+        if t.hi == m - 2 {
+            if e + 1 != at {
+                let c = self.konst(e + 1 - at);
+                self.emit_c(Op::Sub, c, &std::mem::take(&mut comment));
+            }
+            let go = self.fresh("jg");
+            self.emit_c(Op::Tac, go.clone(), &std::mem::take(&mut comment));
+            let l = self.label(runs[m - 1].to);
+            self.emit(Op::Jmp, l);
+            self.define(&go);
+            at = e + 1;
+        }
+        if at < s {
+            let c = self.konst(s - at);
+            self.emit_c(Op::Sub, c, &std::mem::take(&mut comment));
+            at = s;
+        }
+        // the table in the code, after the cell the jump into it is built in, and the JMP on its first cell after
+        // it: the data is assembled on its own, and can't name a label in the code
+        let row = self.fresh("jt");
+        let jump = Sym::Instr(Access::Jump, Box::new(Cell::element(&row, (at - s) as u32)));
+        self.emit_c(Op::Add, jump.clone(), &std::mem::take(&mut comment));
+        let slot = Sym::Slot(Box::new(row.clone()));
+        self.emit(Op::Sto, slot.clone());
+        let mut go = Line::data_cell(&slot.to_string(), Arg::Num("0".into()));
+        go.note("becomes JMP into the table");
+        self.code.push(go);
+        for v in s..=e {
+            let entry = self.table_entry(runs[run_of(v)].to);
+            let line = if v == s {
+                let mut first = Line::data_cell(&row.to_string(), entry);
+                first.note(&format!("the table: {s} to {e}"));
+                first
+            } else {
+                Line::new(Kind::Dat(None, entry))
+            };
+            self.code.push(line);
+        }
+        self.code
+            .push(Line::data_cell(&jump.to_string(), jump.contents().unwrap()));
+        Ok(true)
+    }
+
+    /// A jump table's entry for a block: `JMP` to it, or the instruction the block is when it does nothing else, so
+    /// that the table goes there itself: past blocks that only go to another, to the block they go to, and a return
+    /// as the return (`HRS 00` in main).
+    fn table_entry(&self, to: BasicBlock) -> Arg {
+        let mut b = to;
+        let mut seen = HashSet::new();
+        while let Some(blk) = self.blocks.iter().find(|x| x.name == b) {
+            if b == BasicBlock(0) || !blk.statements.iter().all(|s| *s == Statement::Nop) || !seen.insert(b) {
+                break;
+            }
+            match blk.terminator {
+                Terminator::Goto(n) => b = n,
+                Terminator::Return if self.func == "main" => return Arg::Num("900".into()),
+                Terminator::Return => return Arg::Sym(Sym::Exit(self.func.clone()).to_string(), Some(800)),
+                _ => break,
+            }
+        }
+        Arg::Sym(self.label(b).to_string(), Some(800))
     }
 
     /// Compare-and-branch: jump to T when the comparison holds, F otherwise. u8 and bool are never negative.

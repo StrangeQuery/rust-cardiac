@@ -929,9 +929,10 @@ fn holds(before: &[Line], x: &Arg) -> bool {
 ///    through cell 99, not by name, so _ret labels always stay. rt_panic stays while the line before falls into it:
 ///    the panic map finds the routine by its label, and a run that reaches it unlabelled halts as if it ended
 fn drop_unused_labels(lines: &mut Vec<Line>, keep: &[String]) -> bool {
-    // named by an instruction, or by a constant (a jump built on `rt_times_end` is on `DAT rt_times_end+800`)
+    // named by an instruction, or by a constant (a jump built on `rt_times_end` is on `DAT rt_times_end+800`), or by
+    // a jump table's entry, `DAT main_bb3+800` in the data
     let constants = lines.iter().filter_map(|l| match &l.kind {
-        Kind::Dat(Some(_), arg) => arg.symbol(),
+        Kind::Dat(_, arg) => arg.symbol(),
         _ => None,
     });
     let used: HashSet<String> = lines

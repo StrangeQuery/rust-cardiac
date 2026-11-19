@@ -38,6 +38,10 @@ for opt in 1 2; do
     tests/programs/unread_checked.rs tests/programs/empty_for.rs \
     tests/programs/settled_oob.rs tests/programs/settled_rem.rs tests/programs/settled_neg.rs tests/programs/panic_after_loop.rs \
     tests/programs/switch_negative.rs tests/programs/switch_negative2.rs \
+    tests/programs/switch_table_assumed.rs tests/programs/switch_table_unknown.rs tests/programs/switch_table_runs.rs \
+    tests/programs/switch_table_u8.rs tests/programs/switch_table_enum.rs tests/programs/switch_table_bits.rs \
+    tests/programs/switch_table_bool.rs tests/programs/switch_table_rem.rs tests/programs/switch_table_exits.rs \
+    tests/programs/switch_table_main.rs \
     tests/programs/oob_after_loop.rs tests/programs/oob_after_empty.rs \
     tests/programs/overwrite_checked.rs \
     tests/programs/fold_twice.rs \
@@ -253,7 +257,15 @@ done
 # grow past them (fit_*.rs): sums that pass a card for a moment, read straight after from the accumulator, and
 # indexes worked out from sums carried into the next operation; and match arms that end alike, which fit once they
 # share their ends (tail_rows*.rs, 135 and 129 cells each with their own).
-for want in fit_strips:94 fit_root:95 fit_sphere:94 fit_specks:96 fit_mix:89 fit_rings:61 tail_rows:90 tail_rows2:93; do
+for want in fit_strips:94 fit_root:95 fit_sphere:94 fit_specks:96 fit_mix:89 fit_rings:61 tail_rows:85 tail_rows2:88; do
+  n=${want%%:*}; most=${want#*:}
+  said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
+  got=$(echo "$said" | sed -n 's/.* \([0-9]*\) cells.*/\1/p' | head -1)
+  if [ -n "$got" ] && [ "$got" -le "$most" ]; then echo "MATCH  $n: $got cells, no more than $most"
+  else echo "DIFFER $n: $said, not $most cells or fewer"; exit 1; fi
+done
+# A dense match through a jump table (switch_digit.rs, #34), the multiply by a digit: must not grow past these cells.
+for want in switch_digit:81; do
   n=${want%%:*}; most=${want#*:}
   said=$(./target/release/cargo-cardiac build -C opt-level=2 -C overflow-checks=off tests/programs/$n.rs 2>&1)
   got=$(echo "$said" | sed -n 's/.* \([0-9]*\) cells.*/\1/p' | head -1)
@@ -283,11 +295,11 @@ for want in "0:90" "1:91" "9:99" "10:102" "37:133" "999:1287"; do
   got=$("$BURN" tests/programs/skip_cards_count.cqb -- $n $(cards $n 7) 555 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "555 ${want#*:} " ] && echo "MATCH  skip_cards($n): $got" || { echo "DIFFER skip_cards($n): $got, not 555 ${want#*:}"; exit 1; }
 done
-# a row of adds that blocks fall into, each also entered from a match (#36): the sum stays in the accumulator from
-# block to block, and each way in from the match loads it on its own way. The sum and the instructions the run takes,
-# for c = 7 and d from 0 to 9: each add is one instruction, and a way in from the match a load and a jump
+# a row of adds that blocks fall into, each also entered from a match (#36), the match a jump into a table (#34). The
+# sum and the instructions the run takes, for c = 7 and d from 0 to 9: 5 instructions into the row for any d, then
+# three for each add, as the table's ways in don't carry the sum in the accumulator (#48)
 ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/acc_row.rs || exit 1
-for want in "0:0 175" "1:7 181" "2:14 184" "5:35 193" "8:56 202" "9:63 202"; do
+for want in "0:0 158" "1:7 161" "2:14 164" "5:35 173" "8:56 182" "9:63 185"; do
   d=${want%%:*}
   got=$("$BURN" tests/programs/acc_row.cqb -- $d 7 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "${want#*:} " ] && echo "MATCH  acc_row(d = $d): $got" || { echo "DIFFER acc_row(d = $d): $got, not ${want#*:}"; exit 1; }

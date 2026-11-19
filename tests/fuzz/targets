@@ -43,3 +43,5 @@ minesweeper_page3              tests/fuzz/programs/minesweeper_page.rs          
 wrap          tests/fuzz/programs/wrap.rs     0..899 0..299 -150..150 exact
 rows          tests/fuzz/programs/rows.rs     0..9 -111..111 exact
 add_rows      tests/fuzz/programs/add_rows.rs 0..9 -999..999 -999..999
+switch_digit  tests/fuzz/programs/switch_digit.rs 0..9 -300..300 exact
+switch_any    tests/fuzz/programs/switch_any.rs -5..12 -300..300 exact

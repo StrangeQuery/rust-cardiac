@@ -115,6 +115,16 @@ fn row_end(slot: &str, code: &Code) -> Option<usize> {
     code.labels.get(format!("{routine}_end").as_str()).copied()
 }
 
+/// The first cell of the jump table a slot's built jump goes into: `main_jt4`, for the slot `main_jt4_go`.
+fn table_of(slot: &str, code: &Code) -> Option<usize> {
+    let table = slot.strip_suffix("_go")?;
+    let (_, n) = table.rsplit_once("_jt")?;
+    if n.is_empty() || !n.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    code.labels.get(table).copied()
+}
+
 /// For each code cell, the cells that can run after it; None when the control flow is one this doesn't follow.
 pub(super) fn successors(code: &Code) -> Option<Vec<Vec<usize>>> {
     // the function each cell belongs to: from its NAME_entry label to the next (before the first, main)
@@ -158,6 +168,29 @@ pub(super) fn successors(code: &Code) -> Option<Vec<Vec<usize>>> {
             // a routine's exit cell holds the jump back to its caller; any other cell in the code is a
             // self-modifying slot, an instruction built and stored there, which runs and carries on
             Kind::Dat(Some(name), _) if name.ends_with("_exit") => back,
+            // or a jump into a switch's jump table (`main_jt4_go` into the row at `main_jt4`): wherever its
+            // entries go
+            Kind::Dat(Some(name), _) if table_of(name, code).is_some() => {
+                let mut to = vec![];
+                let first = table_of(name, code).unwrap();
+                for (k, entry) in code.cells[first..].iter().enumerate() {
+                    match &entry.kind {
+                        Kind::Dat(None, _) if k == 0 => return None,
+                        Kind::Dat(None, _) => {}
+                        Kind::Dat(Some(_), _) if k == 0 => {}
+                        _ => break,
+                    }
+                    match &entry.kind {
+                        Kind::Dat(_, Arg::Sym(label, Some(800))) if label.ends_with("_exit") => {
+                            to.extend(back.iter().copied())
+                        }
+                        Kind::Dat(_, Arg::Sym(label, Some(800))) => to.push(target(label)?),
+                        Kind::Dat(_, Arg::Num(n)) if n == "900" => {}
+                        _ => return None,
+                    }
+                }
+                to
+            }
             // or a jump built into a routine's row (`rt_skip_go` into the row ending at `rt_skip_end`): to any
             // cell of it, and on (the row comes back after it)
             Kind::Dat(Some(name), _) if row_end(name, code).is_some() => {

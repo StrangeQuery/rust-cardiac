@@ -50,7 +50,8 @@ Without overflow checks, arithmetic that passes a card keeps the last three digi
 `break value`; labelled blocks, `break` and `continue`; and early `return` all work.
 
 **`match`** works on integers, `bool`s, `char`s, enums, structs, tuples and arrays: see [Patterns](patterns.md). A
-`match` on values tests its arms one after another, each an equality, as a chain of `else if x == k` does. Ranges
+`match` on values tests its arms one after another, each an equality, as a chain of `else if x == k` does, unless its
+arms are on enough consecutive values, when it jumps into a table (see [Patterns](patterns.md)). Ranges
 in a `match` are cheaper than equalities, and the most common arm should come first.
 
 ## Loops

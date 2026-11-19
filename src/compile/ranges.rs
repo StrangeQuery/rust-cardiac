@@ -314,6 +314,79 @@ impl Pass<'_> {
         }
     }
 
+    /// A switch with arms on two values or more, on an i16 or a u8 whose range is known (as for a test the ranges
+    /// decide, the range is what it holds): the arms it can't take go, and when what is left of the range is near the
+    /// arms, its other values become arms to `otherwise`, which is then none. A switch without `otherwise` has an arm
+    /// for every value it can be, so lowering reads the range from its arms and makes no test that can't fail
+    /// (`lower::branches`).
+    fn switch_domain(&mut self, b: &mut Block, facts: &Facts) {
+        let Terminator::SwitchInt {
+            discr,
+            arms,
+            otherwise: Some(other),
+        } = &b.terminator
+        else {
+            return;
+        };
+        let Some(x) = discr.place().and_then(|p| p.as_local()) else {
+            return;
+        };
+        let card = matches!(self.locals.get(&x), Some(Ty::Int(IntTy::I16 | IntTy::U8)));
+        if arms.len() < 2 || !card || self.taken.contains(&x) {
+            return;
+        }
+        let Some([lo, hi]) = self.val(facts, &Operand::Copy(Place::local(x))) else {
+            return;
+        };
+        if lo > hi || lo < -999 || hi > 999 {
+            return;
+        }
+        let (discr, other) = (discr.clone(), *other);
+        let mut live: Vec<(i128, BasicBlock)> = arms
+            .iter()
+            .copied()
+            .filter(|(v, _)| (lo as i128..=hi as i128).contains(v))
+            .collect();
+        let span = (hi - lo + 1) as usize;
+        let to = if live.len() == span {
+            if span == 1 {
+                Terminator::Goto(live[0].1)
+            } else {
+                Terminator::SwitchInt {
+                    discr,
+                    arms: live,
+                    otherwise: None,
+                }
+            }
+        } else if live.len() >= 2 && span <= 2 * live.len() + 2 {
+            for v in lo..=hi {
+                if !live.iter().any(|(w, _)| *w == v as i128) {
+                    live.push((v as i128, other));
+                }
+            }
+            live.sort();
+            Terminator::SwitchInt {
+                discr,
+                arms: live,
+                otherwise: None,
+            }
+        } else if live.len() < arms.len() {
+            if live.is_empty() {
+                Terminator::Goto(other)
+            } else {
+                Terminator::SwitchInt {
+                    discr,
+                    arms: live,
+                    otherwise: Some(other),
+                }
+            }
+        } else {
+            return;
+        };
+        b.terminator = to;
+        self.dropped += 1;
+    }
+
     /// The range of an operand, if known: a constant of a card's type, or a whole local.
     fn val(&self, facts: &Facts, o: &Operand) -> Option<Range> {
         if let Some((v, t)) = o.int() {
@@ -752,6 +825,7 @@ impl Pass<'_> {
                 b.terminator = Terminator::Goto(to);
                 self.dropped += 1;
             }
+            self.switch_domain(b, &facts);
         }
         let mut edge = Edges::new();
         for s in b.terminator.successors() {
