@@ -71,14 +71,15 @@ for opt in 1 2; do
       tests/programs/add_row_tested.rs tests/programs/add_row_down.rs tests/programs/add_row_split.rs \
       tests/programs/add_row_difference.rs || exit 1
   done
-  # products and remainders digit by digit: the multiply routine's rounds of a row, and % 2 and % 5 by the last
-  # digit; past a card, a product stops with overflow checks and keeps its last three digits without them, as the
-  # routine's cells keep them
+  # products and remainders digit by digit: the multiply routine's rounds of a row, % 2 and % 5 by the last digit, and
+  # loops of a constant count worked out at once; past a card, a product stops with overflow checks and keeps its last
+  # three digits without them, as the routine's cells and the loop's stores keep them
   for c in "$checked" "$unchecked"; do
     sh native_diff.sh $c tests/programs/mul_digits.rs tests/programs/rem_digit.rs tests/programs/rem_euclid_digit.rs \
-      tests/programs/rem_digit_unsigned.rs || exit 1
+      tests/programs/rem_digit_unsigned.rs tests/programs/add_row_fixed.rs tests/programs/add_row_fixed2.rs || exit 1
   done
-  for want in "$checked:mul_past:144,-999" "$unchecked:mul_past:144,500,-500,25,-1,0,-1"; do
+  for want in "$checked:mul_past:144,-999" "$unchecked:mul_past:144,500,-500,25,-1,0,-1" \
+    "$checked:add_row_fixed_past:996,-999" "$unchecked:add_row_fixed_past:996,200,-8"; do
     c=${want%%:*}; rest=${want#*:}; n=${rest%%:*}
     out=$(./target/release/cargo-cardiac test $c tests/programs/$n.rs)
     [ "$out" = "${rest#*:}" ] && echo "MATCH  $n ($c): $out" || { echo "DIFFER $n ($c): $out, not ${rest#*:}"; exit 1; }

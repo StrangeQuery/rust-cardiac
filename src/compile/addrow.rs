@@ -80,6 +80,9 @@ enum Plan {
     Once(Vec<(i64, Operand)>),
     /// a constant each pass, whose n times is on a card: added as n times the constant, with no row
     Times(i64),
+    /// a constant count of passes, each adding the operand k times: the operand times m, the count times k, added
+    /// to the total, or the total itself where it starts from 0
+    Product(i64, Operand, bool),
 }
 
 /// Each loop of the shape, as a row; returns whether any was made.
@@ -120,7 +123,8 @@ pub fn add_rows(
                 results,
                 exact,
             };
-            if let Some(cells) = row(blocks, locals, h, &cx) {
+            let cells = row(blocks, locals, h, &cx).or_else(|| fixed_loop(blocks, locals, h, &cx));
+            if let Some(cells) = cells {
                 MADE.with(|m| m.borrow_mut().push((func.to_string(), h, cells)));
                 made = true;
                 any = true;
@@ -467,21 +471,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
             x => x,
         })
         .collect();
-    // the test, as the condition the loop goes on while: lhs < rhs, lhs <= rhs or lhs != rhs
-    let (op, lhs, rhs) = {
-        let (op, l, r) = match cmp {
-            BinOp::Gt => (BinOp::Lt, right, left),
-            BinOp::Ge => (BinOp::Le, right, left),
-            op => (*op, left, right),
-        };
-        match (on_true, op) {
-            (true, BinOp::Lt | BinOp::Le | BinOp::Ne) => (op, l, r),
-            (false, BinOp::Lt) => (BinOp::Le, r, l),
-            (false, BinOp::Le) => (BinOp::Lt, r, l),
-            (false, BinOp::Eq) => (BinOp::Ne, l, r),
-            _ => return None,
-        }
-    };
+    let (op, lhs, rhs) = going_on_while(*cmp, left, right, on_true)?;
     let bias = i128::from(op == BinOp::Le);
     // the count: e - c going up (c < e), c - e going down (e < c)
     let (e, c_left) = match (read(lhs) == Some(c), read(rhs) == Some(c)) {
@@ -539,7 +529,13 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     };
     let count = [count[0] + bias as i64, count[1] + bias as i64];
     let most = count[1];
-    if !(1..=MOST).contains(&most) || count[0] == count[1] || (op == BinOp::Ne && count[0] < 0) {
+    // a constant count: each total is what a pass adds, that many times over, worked out at once (#45)
+    let fixed_count = count[0] == count[1];
+    if fixed_count {
+        if !(1..=999).contains(&most) {
+            return None;
+        }
+    } else if !(1..=MOST).contains(&most) || (op == BinOp::Ne && count[0] < 0) {
         return None;
     }
     let guarded = count[0] < 0;
@@ -678,8 +674,30 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 };
                 // (where n times the constant takes more cells than the row would, the row)
                 let cheap = |v: i64| v.abs() == 1 || digits(v) + 2 <= most + 6;
-                let plan = if let Some(v) = constant.filter(|v| v.abs() * most <= 999 && total_on_card(*v) && cheap(*v))
-                {
+                let plan = if fixed_count {
+                    match (constant, terms.as_slice()) {
+                        (Some(v), _) if v.abs() * most <= 999 && total_on_card(v) => Plan::Times(v),
+                        (None, [(k, o)]) => {
+                            // t + m x, m = n k: by adds and shifts in the accumulator (by a constant the multiply
+                            // routine would take, the loop stays). The partial totals only grow or only shrink, so
+                            // the last is the loop's; m x on a card, it is exact in its cell, and t + m x is checked
+                            // as the loop's would be where it can't leave a card. From 0 with no check, t is m x as
+                            // the cell keeps it, past a card too, as the loop's stores kept it
+                            let m = k * most;
+                            let r = range_of(o, &fixed)?;
+                            let size = m.abs() * r[0].abs().max(r[1].abs());
+                            let sum = [ra[0] - size, ra[1] + size];
+                            let shifts = m.abs() < 100 || [100, 200].contains(&m.abs());
+                            let fits = size <= 999 && (total.check.is_none() || on_card(sum));
+                            let from_0 = ra == [0, 0] && total.check.is_none();
+                            if !shifts || digits(m) > 12 || !(fits || from_0) {
+                                return None;
+                            }
+                            Plan::Product(m, o.clone(), ra == [0, 0])
+                        }
+                        _ => return None,
+                    }
+                } else if let Some(v) = constant.filter(|v| v.abs() * most <= 999 && total_on_card(*v) && cheap(*v)) {
                     Plan::Times(v)
                 } else if length == 1 || terms.len() == 1 {
                     // one operand (k times a pass): the partial totals only grow or only shrink, so a check of the
@@ -709,7 +727,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         match plan {
             Plan::Row(terms) => terms.iter().map(|(k, _)| k.abs()).sum(),
             Plan::Once(_) => 1,
-            Plan::Times(_) => 0,
+            Plan::Times(_) | Plan::Product(..) => 0,
         }
     };
     if sums.iter().any(|(_, p, _)| length(p) * most > MOST) {
@@ -718,7 +736,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     if once_a_run
         && !sums
             .iter()
-            .all(|(_, p, _)| matches!(p, Plan::Times(v) if digits(*v) <= 3))
+            .all(|(_, p, _)| matches!(p, Plan::Times(v) if digits(*v) <= 3) || matches!(p, Plan::Product(..)))
     {
         return None;
     }
@@ -739,19 +757,9 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     let last_c = if reads_after { Some(c_after(e)?) } else { None };
     // the count, as an operand
     let mut out: Vec<Statement> = vec![];
-    let new_local = |locals: &mut Ordered<Local, Ty>| -> Local {
-        let n = locals
-            .keys()
-            .map(|l| l.0)
-            .filter(|&n| n != Local::UNIT.0)
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let l = Local(n);
-        locals.set(l, Ty::Int(IntTy::I16));
-        l
-    };
-    let times: Operand = if up {
+    let times: Operand = if fixed_count {
+        card(most as i128)
+    } else if up {
         // e - c (+ 1)
         match (int(e), rc[0] == rc[1]) {
             (_, true) if rc[0] as i128 - bias == 0 && read(e).is_some() => copy(read(e).unwrap()),
@@ -836,6 +844,25 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 ));
                 continue;
             }
+            Plan::Product(m, o, from_0) => {
+                cells += digits(m) as usize;
+                if from_0 {
+                    out.push(Statement::Assign(
+                        Place::local(acc),
+                        Rvalue::BinaryOp(BinOp::Mul, as_copy(&o), card(m as i128)),
+                    ));
+                } else {
+                    let p = new_local(locals);
+                    let product = Rvalue::BinaryOp(BinOp::Mul, as_copy(&o), card(m.abs() as i128));
+                    out.push(Statement::Assign(Place::local(p), product));
+                    let op = if m > 0 { BinOp::Add } else { BinOp::Sub };
+                    out.push(Statement::Assign(
+                        Place::local(acc),
+                        Rvalue::BinaryOp(op, copy(acc), copy(p)),
+                    ));
+                }
+                continue;
+            }
             Plan::Row(terms) => terms,
             Plan::Once(terms) => {
                 let s = new_local(locals);
@@ -881,6 +908,220 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     }
     blocks.retain(|x| !gone.contains(&x.name));
     Some(cells)
+}
+
+/// The test a loop goes on while, as `lhs < rhs`, `lhs <= rhs` or `lhs != rhs`: from its comparison, and whether
+/// the loop goes on while the comparison holds (`on_true`) or while it doesn't.
+fn going_on_while<'o>(
+    cmp: BinOp,
+    left: &'o Operand,
+    right: &'o Operand,
+    on_true: bool,
+) -> Option<(BinOp, &'o Operand, &'o Operand)> {
+    let (op, l, r) = match cmp {
+        BinOp::Gt => (BinOp::Lt, right, left),
+        BinOp::Ge => (BinOp::Le, right, left),
+        op => (op, left, right),
+    };
+    match (on_true, op) {
+        (true, BinOp::Lt | BinOp::Le | BinOp::Ne) => Some((op, l, r)),
+        (false, BinOp::Lt) => Some((BinOp::Le, r, l)),
+        (false, BinOp::Le) => Some((BinOp::Lt, r, l)),
+        (false, BinOp::Eq) => Some((BinOp::Ne, l, r)),
+        _ => None,
+    }
+}
+
+/// A loop of one block that adds what doesn't change to totals a constant number of times, as rustc leaves `for _
+/// in 0..12 { t += x; }` (the count known, its test at the end): each total worked out at once, t + 12 x by adds
+/// and shifts in the accumulator, or 12 x where t starts from 0 (#45). Not for a checked sum, whose assert ends
+/// the block; nor where a product would take the multiply routine, or more cells than the loop. A total's partial
+/// sums only grow or only shrink, so its cell keeps what the loop's stores kept, past a card too, as long as m x
+/// is exact in its own cell; from 0, the total is m x as its cell keeps it, the multiply's partial products all
+/// with x's sign. Returns the cells the products take, as `row` does.
+fn fixed_loop(blocks: &mut [Block], locals: &mut Ordered<Local, Ty>, h: BasicBlock, cx: &Context) -> Option<usize> {
+    let hi = ir::find(blocks, h)?;
+    let blk = &blocks[hi];
+    let Terminator::SwitchInt {
+        discr,
+        arms,
+        otherwise: Some(other),
+    } = &blk.terminator
+    else {
+        return None;
+    };
+    let [(0, zero)] = arms.as_slice() else { return None };
+    let (exit, on_true) = match (*other == h, *zero == h) {
+        (true, false) => (*zero, true),
+        (false, true) => (*other, false),
+        _ => return None,
+    };
+    let lines: Vec<&Statement> = blk.statements.iter().filter(|s| !idle(s)).collect();
+    let (Statement::Assign(bp, Rvalue::BinaryOp(cmp, left, right)), body) = lines.split_last()? else {
+        return None;
+    };
+    let b = bp.as_local()?;
+    if read(discr) != Some(b) || ir::occurrences(blocks, b) != 2 {
+        return None;
+    }
+    // each line a step by one, or a sum onto a total of what the loop doesn't write
+    let mut written: HashSet<Local> = HashSet::from([b]);
+    for s in body {
+        let Statement::Assign(d, _) = s else { return None };
+        written.insert(d.as_local()?);
+    }
+    let invariant =
+        |o: &Operand| int(o).is_some() || read(o).is_some_and(|l| !written.contains(&l) && !cx.huge.contains(&l));
+    let mut steps: Vec<(Local, bool)> = vec![];
+    let mut totals: Vec<(Local, i64, Operand)> = vec![];
+    for s in body {
+        let Statement::Assign(d, rv) = s else { return None };
+        let d = d.as_local()?;
+        let Rvalue::BinaryOp(op @ (BinOp::Add | BinOp::Sub), x, y) = rv else {
+            return None;
+        };
+        let by = match (read(x) == Some(d), read(y) == Some(d)) {
+            (true, false) => y,
+            (false, true) if *op == BinOp::Add => x,
+            _ => return None,
+        };
+        if int(by) == Some(1) {
+            steps.push((d, *op == BinOp::Add));
+        } else if invariant(by) {
+            totals.push((d, if *op == BinOp::Add { 1 } else { -1 }, bare(by)));
+        } else {
+            return None;
+        }
+    }
+    // the counter: the one step the test reads, after it is stepped; any other step is a total of 1s
+    let tested = |l: Local| read(left) == Some(l) || read(right) == Some(l);
+    let counters: Vec<(Local, bool)> = steps.iter().copied().filter(|(c, _)| tested(*c)).collect();
+    let [(c, up)] = counters.as_slice() else { return None };
+    let (c, up) = (*c, *up);
+    for (d, up) in steps.iter().filter(|(d, _)| *d != c) {
+        totals.push((*d, if *up { 1 } else { -1 }, card(1)));
+    }
+    let (op, lhs, rhs) = going_on_while(*cmp, left, right, on_true)?;
+    let (e, c_left) = match (read(lhs) == Some(c), read(rhs) == Some(c)) {
+        (true, false) => (rhs, true),
+        (false, true) => (lhs, false),
+        _ => return None,
+    };
+    if op == BinOp::Ne || up != c_left || !invariant(e) {
+        return None;
+    }
+    // what holds on the way in
+    let preds = ir::predecessors(blocks);
+    let entries: Vec<BasicBlock> = preds.get(&h)?.iter().copied().filter(|p| *p != h).collect();
+    if entries.is_empty() {
+        return None;
+    }
+    let range_in = |o: &Operand| -> Option<Range> {
+        if let Some(v) = int(o) {
+            return Some([v as i64, v as i64]);
+        }
+        let l = read(o)?;
+        let whole = ranges::type_range(cx.types.get(&l)?);
+        let mut hull: Option<Range> = None;
+        for p in &entries {
+            let r = cx.edges.get(&(*p, h)).and_then(|f| f.get(&l).copied()).or(whole)?;
+            hull = Some(hull.map_or(r, |q| [q[0].min(r[0]), q[1].max(r[1])]));
+        }
+        hull
+    };
+    // the passes: as many as the test passes after a step, at least the one before the first test
+    let (rc, re) = (range_in(&copy(c))?, range_in(e)?);
+    if rc[0] != rc[1] || re[0] != re[1] {
+        return None;
+    }
+    let bias = i64::from(op == BinOp::Le);
+    let n = if up { re[0] - rc[0] } else { rc[0] - re[0] } + bias;
+    if !(1..=999).contains(&n) {
+        return None;
+    }
+    let mut out: Vec<Statement> = vec![];
+    let mut cells = 0;
+    let mut seen: HashSet<Local> = HashSet::new();
+    for (t, k, x) in totals {
+        let i16 = matches!(cx.types.get(&t), Some(Ty::Int(IntTy::I16 | IntTy::Isize)));
+        if !i16 || t == b || cx.huge.contains(&t) || cx.exact.contains(&t) || cx.results.contains(&t) {
+            return None;
+        }
+        // named by its own sum alone, once
+        let own: usize = blocks[hi].lines().map(|l| l.count(t)).sum();
+        if own != 2 || !seen.insert(t) || read(e) == Some(t) {
+            return None;
+        }
+        let ra = range_in(&copy(t))?;
+        let m = k * n;
+        if let Some(v) = int(&x) {
+            // a constant: m times it, on a card
+            let v = m * v as i64;
+            if v.abs() > 999 {
+                return None;
+            }
+            // (from a known value, the last one)
+            let rv = match ra {
+                [a, b] if a == b && (a + v).abs() <= 999 => Rvalue::Use(card((a + v) as i128)),
+                _ => Rvalue::BinaryOp(BinOp::Add, copy(t), card(v as i128)),
+            };
+            out.push(Statement::Assign(Place::local(t), rv));
+            continue;
+        }
+        let r = range_in(&x)?;
+        let size = m.abs() * r[0].abs().max(r[1].abs());
+        let shifts = m.abs() < 100 || [100, 200].contains(&m.abs());
+        let from_0 = ra == [0, 0];
+        if !shifts || digits(m) > 12 || !(size <= 999 || from_0) {
+            return None;
+        }
+        cells += digits(m) as usize;
+        if from_0 {
+            out.push(Statement::Assign(
+                Place::local(t),
+                Rvalue::BinaryOp(BinOp::Mul, x, card(m as i128)),
+            ));
+        } else {
+            let p = new_local(locals);
+            out.push(Statement::Assign(
+                Place::local(p),
+                Rvalue::BinaryOp(BinOp::Mul, x, card(m.abs() as i128)),
+            ));
+            let op = if m > 0 { BinOp::Add } else { BinOp::Sub };
+            out.push(Statement::Assign(
+                Place::local(t),
+                Rvalue::BinaryOp(op, copy(t), copy(p)),
+            ));
+        }
+    }
+    // the counter's last value, where anything reads it after
+    let live = blocks::live_after_returning(blocks, cx.results);
+    let ei = ir::find(blocks, exit)?;
+    let reads_after = live
+        .get(ei)
+        .and_then(|l| l.first())
+        .is_some_and(|l| l.contains(&c) || blocks[ei].each_line().next().is_some_and(|x| x.locals().contains(&c)));
+    if reads_after {
+        let last = if up { rc[0] + n } else { rc[0] - n };
+        out.push(Statement::Assign(Place::local(c), Rvalue::Use(card(last as i128))));
+    }
+    blocks[hi].statements = out;
+    blocks[hi].terminator = Terminator::Goto(exit);
+    Some(cells)
+}
+
+/// A local of its own, an i16, for a value a row works out.
+fn new_local(locals: &mut Ordered<Local, Ty>) -> Local {
+    let n = locals
+        .keys()
+        .map(|l| l.0)
+        .filter(|&n| n != Local::UNIT.0)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let l = Local(n);
+    locals.set(l, Ty::Int(IntTy::I16));
+    l
 }
 
 /// The cells n times a constant takes: an add for each unit of its digits, and a shift for each digit after the
@@ -1020,6 +1261,43 @@ mod tests {
     fn a_constant_is_added_as_the_count_times_it() {
         let out = rowed(&masked(7, "const 1_i16"));
         assert!(out.contains(&"_0 = Add(copy _0, copy _3);".to_string()), "{out:?}");
+    }
+
+    /// `t = START; for _ in 0..12 { t += x }; return t`, as rustc leaves it: one block, its test at the end.
+    fn twelve(start: &str, x: &str) -> String {
+        format!(
+            "let mut _0: i16;\n let _1: i16;\n let mut _2: i16;\n let mut _3: bool;\n bb0: {{\n _0 = {start};\n \
+             _2 = const -12_i16;\n goto -> bb1;\n }}\n bb1: {{\n _0 = Add(copy _0, {x});\n \
+             _2 = Add(copy _2, const 1_i16);\n _3 = Lt(copy _2, const 0_i16);\n \
+             switchInt(move _3) -> [0: bb2, otherwise: bb1];\n }}\n bb2: {{\n return;\n }}\n"
+        )
+    }
+
+    #[test]
+    fn a_constant_count_from_0_is_the_product() {
+        let out = rowed(&twelve("const 0_i16", "copy _1"));
+        assert_eq!(
+            out,
+            [
+                "bb0:",
+                "_0 = const 0_i16;",
+                "_2 = const -12_i16;",
+                "_0 = Mul(copy _1, const 12_i16);",
+                "return;"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_constant_count_of_a_constant_is_the_sum() {
+        let out = rowed(&twelve("const 5_i16", "const 3_i16"));
+        assert!(out.contains(&"_0 = const 41_i16;".to_string()), "{out:?}");
+    }
+
+    #[test]
+    fn a_constant_count_from_a_value_stays_a_loop_where_the_product_can_pass_a_card() {
+        let text = twelve("copy _1", "copy _1");
+        assert!(rowed(&text).contains(&"switchInt(move _3) -> [0: bb2, otherwise: bb1];".to_string()));
     }
 
     #[test]

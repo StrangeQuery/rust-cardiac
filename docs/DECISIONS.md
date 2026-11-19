@@ -4,6 +4,33 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · A loop that adds what doesn't change a constant number of times is worked out at once
+
+- **Decision.** A loop of a constant count whose body only adds to totals what doesn't change (`for _ in 0..12 { t
+  += x; }`, #45) becomes its sums, in `addrow`: rustc leaves such a loop as one block with its test at the end, and
+  `fixed_loop` takes that shape; a loop that keeps its test at the head goes through `row` as before, which now
+  takes a constant count too. Each total is t + m x, m the count times what a pass adds: a constant's is the
+  constant m x (the last value itself where t is known), and a value's is `Mul(x, m)`, adds and decimal shifts in the
+  accumulator, added to t, or t itself where t starts from 0. The counter's last value is set where something reads
+  it.
+- **The same cards.** A total's partial sums only grow or only shrink, so its last is what the loop's stores kept.
+  Added to t, the product must be exact in its own cell: m x on a card, from the ranges. From 0 the total is the
+  product, whose partial products all have x's sign, so its cell keeps the last three digits of m x as the loop's
+  did, past a card too; that needs no check, so a build with overflow checks gets it only where the ranges show the
+  sum stays on a card. A checked sum's assert ends the loop's block, so a checked build of the one-block shape keeps
+  the loop.
+- **Cost, and when.** Where the rows are made (opt-level 1 to 3, a program fitting, not in phases or with a stack),
+  in main too: the product is no more cells than the loop, give or take a few (m by a constant the multiply routine
+  would take, or with digits adding to more than 12, keeps the loop), and the loop is 7 instructions a pass.
+- **Measured.** At opt-level 2, overflow checks off. The issue's program, `for _ in 0..12 { t += x }` then `out(t)`:
+  13 cells to 9, 126 instructions to 38. A program of three such loops (from 0, from a value, and two totals of
+  64 passes) on 3,000 random pairs: 58 cells to 45, 2.4 million instructions to 123,000, the same cards as before,
+  past a card too.
+  - The examples, the support suite and cardiac-speech: no loop of this shape; nothing changes.
+  - Card Attack's 994 machines: zoom's zm_place (`for _ in 0..64 { around += per_cell }`) is the one deck that
+    changes, 81 cells as before, the same cards on random decks, 132.0 million instructions to 130.0 million in the
+    film.
+
 ## 2026-11-19 · `% 2` and `% 5` by the last digit
 
 - **Decision.** `x % 2` and `x % 5` (and by -2 and -5, the same in Rust) take the last digit (#30). Of a signed

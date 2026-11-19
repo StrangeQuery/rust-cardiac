@@ -71,7 +71,10 @@ that d of them run: 5 instructions and one an addition, where the loop takes 8 a
 for each addition it can make, so it is made only at opt-level 1, 2 and 3 (s and z keep the loop), only for a loop
 that can run again in a run (inside another loop, or in a function), and only where the program still fits; the
 compiler gives rows back, the largest first, until it does. A constant added each pass is the count times the
-constant instead, where that is smaller.
+constant instead, where that is smaller. A loop of a constant count, `for _ in 0..12 { t += x; }`, is worked out at
+once at those opt-levels: `t + 12 * x` by adds and shifts where the product is sure to be on a card, and `12 * x`
+where t starts from 0, with no loop at all. With overflow checks on, only where the total is sure to stay on a
+card.
 
 ## Index expressions
 
