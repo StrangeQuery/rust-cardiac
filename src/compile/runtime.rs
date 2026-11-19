@@ -74,18 +74,27 @@ fn exit_cell(name: &str) -> Line {
 }
 
 thread_local! {
-    /// Multiply digit by digit (`mul_long`); off, by repeated addition (`mul_short`), which takes fewer cells: a
-    /// program that doesn't fit with the long one, or has a stack, whose depth is what memory is left, is compiled
-    /// again with the short one (`super::compile_cut`).
+    /// Multiply and divide digit by digit (`mul_long`, `div_long`); off, by repeated addition and subtraction
+    /// (`mul_short`, `div_short`), which take fewer cells: a program that doesn't fit with the long ones, or has a
+    /// stack, whose depth is what memory is left, is compiled again with the short ones (`super::compile_cut`).
     pub static LONG: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
-/// `f`, with the long or the short multiply.
+/// `f`, with the long or the short multiply and divide.
 pub fn with_long<T>(on: bool, f: impl FnOnce() -> T) -> T {
     let was = LONG.with(|l| l.replace(on));
     let r = f();
     LONG.with(|l| l.set(was));
     r
+}
+
+/// The cell a remainder is left in by the divide routine the program has.
+pub fn remainder_cell() -> &'static str {
+    if LONG.with(|l| l.get()) {
+        "rt_div_a"
+    } else {
+        "rt_div_r"
+    }
 }
 
 /// a * b by long multiplication, the product in the accumulator: for each digit of |b| from the right, a computed
@@ -216,10 +225,112 @@ fn mul_short(checked: bool) -> Vec<Line> {
     r
 }
 
+/// a / b truncated toward zero into the accumulator (and a % b, with the dividend's sign, into rt_div_a when the
+/// program asks for one): long division of |a| by |b|. The divisor, in rt_div_y, is made ten times as much while
+/// that is still less than the dividend (tested in the accumulator, which holds 10 x 999), then taken away while
+/// it goes, the quotient counted in steps of rt_div_d, and made a tenth as much again with the quotient ten times
+/// as much, until it is |b| again; what is left of |a| is the remainder. (The first digit is 10 where the dividend
+/// is ten times the divisor: 100 / 10 is one round of ten.) rt_div_d is -1 when exactly one of a and b was
+/// negative, so the quotient is built with its sign, and rt_div_rn is 1 when the dividend was. 24 + 8q
+/// instructions for a quotient q below 10 (repeated subtraction's 15 + 8q), and at most 293.
+fn div_long(rem: bool) -> Vec<Line> {
+    let mut r = asm![
+        rt_div_entry:
+            CLA 99
+            STO rt_div_exit
+            CLA k0
+            STO rt_div_q
+    ];
+    if rem {
+        r.extend(asm![STO rt_div_rn]);
+    }
+    r.extend(asm![
+            CLA 00
+            STO rt_div_d
+            CLA rt_div_b
+            TAC rt_div_nb
+        rt_div_1:
+            STO rt_div_y
+            CLA rt_div_a
+            TAC rt_div_na
+        rt_div_scale:
+            CLA rt_div_y
+            SFT 10
+            SUB rt_div_a
+            TAC rt_div_up
+        rt_div_lp:
+            CLA rt_div_a
+            SUB rt_div_y
+            TAC rt_div_down
+            STO rt_div_a
+            CLA rt_div_q
+            ADD rt_div_d
+            STO rt_div_q
+            JMP rt_div_lp
+        rt_div_down:
+            CLA rt_div_b
+            SUB rt_div_y
+            TAC rt_div_more
+    ]);
+    if rem {
+        r.extend(asm![
+                CLA rt_div_rn
+                SUB 00
+                TAC rt_div_rp
+                CLA k0
+                SUB rt_div_a
+                STO rt_div_a
+            rt_div_rp:
+        ]);
+    }
+    r.extend(asm![
+            CLA rt_div_q
+            JMP rt_div_exit
+        rt_div_more:
+            CLA rt_div_y
+            SFT 01
+            STO rt_div_y
+            CLA rt_div_q
+            SFT 10
+            STO rt_div_q
+            JMP rt_div_lp
+        rt_div_up:
+            ADD rt_div_a
+            STO rt_div_y
+            JMP rt_div_scale
+        rt_div_nb:
+            CLA k0
+            SUB 00
+            STO rt_div_d
+            CLA k0
+            SUB rt_div_b
+            STO rt_div_b
+            JMP rt_div_1
+        rt_div_na:
+            CLA k0
+            SUB rt_div_a
+            STO rt_div_a
+    ]);
+    if rem {
+        r.extend(asm![
+            CLA 00
+            STO rt_div_rn
+        ]);
+    }
+    r.extend(asm![
+            CLA k0
+            SUB rt_div_d
+            STO rt_div_d
+            JMP rt_div_scale
+    ]);
+    r.push(exit_cell("rt_div_exit"));
+    r
+}
+
 /// a / b truncated toward zero into the accumulator (and a % b, with the dividend's sign, into rt_div_r when the
 /// program asks for one): on |a| and |b| by repeated subtraction, the quotient counted in steps of rt_div_d, which
 /// is -1 when exactly one of them was negative. rt_div_rn is 1 when the dividend was negative.
-fn div(rem: bool) -> Vec<Line> {
+fn div_short(rem: bool) -> Vec<Line> {
     let mut r = asm![
         rt_div_entry:
             CLA 99
@@ -809,10 +920,18 @@ pub fn runtime(pool: &Pool, consts: &[Sym]) -> (Vec<Line>, Vec<Line>) {
         }
     }
     if pool.div {
-        code.extend(div(pool.divr));
         data.extend(["rt_div_a", "rt_div_b", "rt_div_q", "rt_div_d"].map(zero));
-        if pool.divr {
-            data.extend(["rt_div_r", "rt_div_rn"].map(zero));
+        if long {
+            code.extend(div_long(pool.divr));
+            data.push(zero("rt_div_y"));
+            if pool.divr {
+                data.push(zero("rt_div_rn"));
+            }
+        } else {
+            code.extend(div_short(pool.divr));
+            if pool.divr {
+                data.extend(["rt_div_r", "rt_div_rn"].map(zero));
+            }
         }
         needed.push(0);
     }
@@ -886,7 +1005,7 @@ mod tests {
     use crate::compile::machine::{self, Kind};
 
     /// One call of a routine on a machine of its own: the operands put in its cells, then `JMP entry`, and what
-    /// it leaves in the accumulator stored in `res` before a halt.
+    /// it leaves (the accumulator, or the remainder's cell) stored in `res` before a halt.
     struct Rig {
         machine: Machine,
         a: usize,
@@ -894,8 +1013,11 @@ mod tests {
         res: usize,
     }
 
-    fn rig(pool: &Pool, entry: &str, operands: [&str; 2]) -> Rig {
+    fn rig(pool: &Pool, entry: &str, operands: [&str; 2], result: Option<&str>) -> Rig {
         let mut lines = vec![Line::label("main"), Line::instr(Op::Jmp, Arg::sym(entry))];
+        if let Some(cell) = result {
+            lines.push(Line::instr(Op::Cla, Arg::sym(cell)));
+        }
         lines.push(Line::instr(Op::Sto, Arg::sym("res")));
         lines.push(Line::instr(Op::Hrs, Arg::Num("0".into())));
         let (code, data) = runtime(pool, &[]);
@@ -929,13 +1051,13 @@ mod tests {
         }
     }
 
-    fn pool(checked: bool) -> Pool {
+    fn pool(mul: bool, checked: bool, rem: bool) -> Pool {
         let mut p = Pool::default();
-        (p.mul, p.mul_checked, p.panic) = (true, checked, checked);
+        (p.mul, p.mul_checked, p.div, p.divr, p.panic) = (mul, checked, !mul, rem, checked);
         p
     }
 
-    /// The products the routines must give: Rust's where a card holds them; past a card, a checked
+    /// The products and quotients the routines must give: Rust's where a card holds them; past a card, a checked
     /// product panics and an unchecked one is what a cell keeps of it, its last three digits with its sign.
     fn product(a: i32, b: i32, checked: bool) -> Option<i32> {
         let p = a * b;
@@ -946,20 +1068,47 @@ mod tests {
         }
     }
 
-    /// Each pair of a and b from `values`, on the routine `long` picks, against Rust: the most instructions any pair
-    /// took, unchecked and checked (with the four of the rig's own: a product of three digits is at most three
-    /// rounds of a row).
-    fn check_all(long: bool, values: &[i32]) -> [u64; 2] {
+    /// Each pair of a and b from `values`, on the routines `long` picks, against Rust: the most instructions any
+    /// pair took, for each routine (with the four of the rig's own: a product of three digits is at most three
+    /// rounds of a row, a quotient three of nine subtractions).
+    fn check_all(long: bool, values: &[i32]) -> [u64; 4] {
         with_long(long, || {
-            let mut most = [0; 2];
+            let mut most = [0; 4];
             for (k, checked) in [false, true].into_iter().enumerate() {
-                let r = rig(&pool(checked), "rt_mul_entry", ["rt_mul_a", "rt_mul_b"]);
+                let r = rig(
+                    &pool(true, checked, false),
+                    "rt_mul_entry",
+                    ["rt_mul_a", "rt_mul_b"],
+                    None,
+                );
                 for &a in values {
                     for &b in values {
                         let (got, steps) = r.run(a, b);
                         assert_eq!(got, product(a, b, checked), "{a} * {b}, checked {checked}, long {long}");
                         most[k] = most[k].max(steps);
                     }
+                }
+            }
+            let q = rig(
+                &pool(false, false, false),
+                "rt_div_entry",
+                ["rt_div_a", "rt_div_b"],
+                None,
+            );
+            let r = rig(
+                &pool(false, false, true),
+                "rt_div_entry",
+                ["rt_div_a", "rt_div_b"],
+                Some(remainder_cell()),
+            );
+            for &a in values {
+                for &b in values.iter().filter(|&&b| b != 0) {
+                    let (got, steps) = q.run(a, b);
+                    assert_eq!(got, Some(a / b), "{a} / {b}, long {long}");
+                    most[2] = most[2].max(steps);
+                    let (got, steps) = r.run(a, b);
+                    assert_eq!(got, Some(a % b), "{a} % {b}, long {long}");
+                    most[3] = most[3].max(steps);
                 }
             }
             most
@@ -978,17 +1127,17 @@ mod tests {
     }
 
     #[test]
-    fn the_routines_multiply_as_rust_does() {
+    fn the_routines_multiply_and_divide_as_rust_does() {
         let values = sample();
         check_all(true, &values);
         check_all(false, &values);
     }
 
-    /// Every pair of cards, on the long routine: about four million runs, checked and not, some seconds.
+    /// Every pair of cards, on the long routines: about four million runs of each, some seconds.
     #[test]
-    fn the_long_routine_is_right_for_every_pair_of_cards() {
+    fn the_long_routines_are_right_for_every_pair_of_cards() {
         let values: Vec<i32> = (-999..=999).collect();
         let most = check_all(true, &values);
-        assert_eq!(most, [83, 101]);
+        assert_eq!(most, [83, 101, 297, 307]);
     }
 }

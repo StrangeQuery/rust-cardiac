@@ -4,6 +4,40 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · The divide routine works digit by digit
+
+- **Decision.** `rt_div`, which `/` and `%` of two signed variables call (and by a constant that is not a power of
+  ten, or 2, 5, 20, 25 or 50 for `/`), is long division (#43), as the site's "Dividing digit by digit" does it by
+  hand. On |a| and |b|: the divisor, in a cell of its own (`rt_div_y`), is made ten times as much while that is still
+  less than the dividend, the test worked in the accumulator, which holds ten times a card; then it is taken away
+  while it goes, the quotient counted in steps of `rt_div_d` (1, or -1 when the signs differ, so the quotient is
+  built with its sign), and made a tenth as much again, the quotient ten times as much, until it is |b| again. What
+  is left of |a| is the remainder, given the dividend's sign as before, and read from `rt_div_a` (the short routine
+  leaves it in `rt_div_r`). Where the dividend is exactly ten times the divisor the first digit is 10, one round of
+  ten subtractions (100 / 10), which saves a test of each scaling.
+- **The same answers.** Rust's: truncated toward zero, the remainder with the dividend's sign, for `/`, `%`,
+  `checked_`, `wrapping_`, `rem_euclid` and `div_euclid`, which are made of them. A unit test runs every pair of
+  cards (3,994,002 with b not 0) for the quotient and the remainder.
+- **Cost, and when.** At most 3 rounds of at most 10 subtractions of 8 instructions: 999 / 1 is 293 instructions,
+  where repeated subtraction took 8,000. But a quotient below 10 takes 24 + 8q where it took 15 + 8q, 9 more (7 more
+  for `%`), and the routine is 53 cells where it was 36 (62 and 47 with the remainder), each about three of the
+  loader's instructions a run. The crossover is a quotient of 10: below it the long routine is 9 instructions
+  slower (and the 17 cells more to load), from it on faster, by about 8 for each unit of the quotient past its digit
+  sum. So a program whose quotients are all single digits, run many times, is slower. That is the data's, not the
+  program's, and the compiler can't see it, so the long routine is the default and the
+  short one is what a program that doesn't fit, or has a stack, gets (`compile_cut`, as for the multiply). No flag.
+- **Measured.** At opt-level 2, overflow checks off. The issue's `999 / 1`: 8,172 instructions to 496 (55 cells to
+  73); `100 / 7` 292 to 300; `7 / 3` 196 to 256.
+  - Every pair of cards through compiled programs (`out(a / b)`, `out(a % b)`, opt-level 1 and 2, checks on and
+    off), on its own machine each: Rust's quotients and remainders. On a sample of 79,000 pairs, most quotients
+    small, `/` 5.8 million instructions to 4.4 million and `%` 6.6 to 4.9.
+  - The examples: gcd 78 cells to 93; 252 and 105 take 386 instructions to 446, 999 and 1 8,254 to 566.
+  - The support suite: 84 of its 2,992 compiles grow, by 18 cells (15 for `%`), all with the same outcomes.
+  - cardiac-speech's Rust machines: none divides by a variable; no deck changes, all checks exact.
+  - Card Attack's 994 machines: 3 decks change (boids' spring, deep's dhang and dlimit), 18 cells each, all still
+    fit, and give the same cards on random decks. In the film their quotients are mostly single digits: spring runs
+    9.8 million instructions to 12.1 million, dlimit (`rest * 11 / 30`) 925 to 955 million, dhang 9.8 to 7.6.
+
 ## 2026-11-19 · The multiply routine works digit by digit, a row of nine ADDs a digit
 
 - **Decision.** `rt_mul`, which `a * b` of two variables calls (and a multiply by a constant of three digits other

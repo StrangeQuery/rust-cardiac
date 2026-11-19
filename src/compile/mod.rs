@@ -99,7 +99,7 @@ pub struct Compiled {
     pub stack_cells: usize,
     /// whether an array of arrays was laid out by tens (`nested`)
     pub by_tens: bool,
-    /// whether it has the long multiply (`runtime::LONG`)
+    /// whether it has the long multiply or divide (`runtime::LONG`)
     pub long_arith: bool,
 }
 
@@ -268,9 +268,9 @@ fn largest_phase(listing: &[Line]) -> Option<usize> {
 }
 
 /// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. The long
-/// multiply (`runtime::LONG`) takes more cells than the short one, which pays only where the program has them: one
-/// that doesn't fit with it, or that has a stack (whose depth is what memory is left), is compiled again with the
-/// short one, and keeps that where it fits, or is smaller.
+/// multiply and divide (`runtime::LONG`) take more cells than the short ones, which pays only where the program has
+/// them: one that doesn't fit with them, or that has a stack (whose depth is what memory is left), is compiled
+/// again with the short ones, and keeps those where they fit, or are smaller.
 fn compile_cut(
     mir: &ir::File,
     optimize: bool,
@@ -299,7 +299,7 @@ fn compile_cut(
     }
 }
 
-/// `compile_cut`, with the multiply as `runtime::LONG` is set. A loop made a row of ADDs (`addrow`)
+/// `compile_cut`, with the multiply and divide as `runtime::LONG` is set. A loop made a row of ADDs (`addrow`)
 /// takes a cell for each addition it can make, which pays only where the program has the cells: when it doesn't
 /// fit, it is compiled again without the row that takes most, and so on. A program in phases, or with a stack
 /// (whose depth is what memory is left), has none.
@@ -1537,7 +1537,7 @@ fn compile_once(
             names: source_names,
             stack_cells,
             by_tens,
-            long_arith: sh.pool.mul && runtime::LONG.with(|l| l.get()),
+            long_arith: (sh.pool.mul || sh.pool.div) && runtime::LONG.with(|l| l.get()),
         },
         !alias.is_empty(),
         unproved,

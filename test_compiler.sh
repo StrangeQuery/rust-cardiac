@@ -293,8 +293,9 @@ for want in "0:0 147" "1:-9 148" "9:-81 156" "10:-90 148" "37:-333 157" "99:-891
   got=$("$BURN" tests/programs/add_times_count.cqb -- -9 $n 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "${want#*:} " ] && echo "MATCH  add_times(-9, $n): $got" || { echo "DIFFER add_times(-9, $n): $got, not ${want#*:}"; exit 1; }
 done
-# a * b by the routine that works digit by digit: the product and the instructions the whole run takes, 14 a digit
-# of b and one an addition (1 x 999 is 56 more than 7 x 1)
+# a * b, a / b and a % b by the routines that work digit by digit: the results and the instructions the whole run
+# takes. A product is 14 instructions a digit of b and one an addition (1 x 999 is 56 more than 7 x 1); a
+# quotient about 8 for each unit of each of its digits, twice here (/ and %)
 for c in on off; do
   ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=$c tests/programs/mul_count.rs || exit 1
   if [ $c = on ]; then wants="7,0:0,237 7,1:7,234 7,9:63,242 -7,12:-84,258 3,-333:-999,290 1,999:999,304 -1,-999:999,308"
@@ -304,6 +305,13 @@ for c in on off; do
     got=$("$BURN" tests/programs/mul_count.cqb -- $p 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ',')
     [ "$got" = "${want#*:}," ] && echo "MATCH  $p ($c): $got" || { echo "DIFFER $p ($c): $got, not ${want#*:}"; exit 1; }
   done
+done
+./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/div_count.rs || exit 1
+for want in "7,1:7,0,446" "99,10:9,9,478" "100,10:10,0,494" "999,1:999,0,846" "-999,7:-142,-5,550" "999,-7:-142,5,538" \
+  "5,-3:-1,2,362" "998,999:0,998,334" "0,5:0,0,334"; do
+  p=$(echo ${want%%:*} | tr ',' ' ')
+  got=$("$BURN" tests/programs/div_count.cqb -- $p 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ',')
+  [ "$got" = "${want#*:}," ] && echo "MATCH  $p: $got" || { echo "DIFFER $p: $got, not ${want#*:}"; exit 1; }
 done
 # a loop made a row of ADDs (addrow.rs): one instruction for each addition, for counts 0 to the most (9)
 ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/add_row_count.rs || exit 1

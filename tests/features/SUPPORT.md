@@ -6,7 +6,7 @@ status is what those runs did: **Supported** means CARDIAC printed what native R
 **Refused** that the build stopped with an error every time. Cells are for a release build (opt-level 2,
 overflow checks off), then with overflow checks on. `./test_features.sh` remakes this page.
 
-Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
+Made with cargo-cardiac v0.1.1-185-gb2ead14-dirty.
 
 | Status | Rows |
 |---|---|
@@ -280,24 +280,24 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 | `a + b` on `usize` | Supported | 14 / 27 |  |  | [add_usize.rs](expressions/add_usize.rs) |
 | Integer arithmetic with no type given (`i32`, Rust's default) | Supported | 19 / 43 |  |  | [arith_i32_default.rs](expressions/arith_i32_default.rs) |
 | Arithmetic on a variable declared `i32` | Supported | 50 / 74 |  |  | [arith_i32_typed.rs](expressions/arith_i32_typed.rs) |
-| `a / 7`: by a constant other than a power of ten | Supported | 57 / 57 |  |  | [div_const_i16.rs](expressions/div_const_i16.rs) |
+| `a / 7`: by a constant other than a power of ten | Supported | 75 / 75 |  |  | [div_const_i16.rs](expressions/div_const_i16.rs) |
 | `a / 10`: by a power of ten | Supported | 13 / 13 |  | A shift. Rounds toward zero: `-7 / 10` is 0. | [div_pow10_i16.rs](expressions/div_pow10_i16.rs) |
 | `a / b` on `u8` | Supported | 64 / 64 |  |  | [div_u8.rs](expressions/div_u8.rs) |
 | `a / b` on `usize` | Supported | 30 / 30 |  |  | [div_usize.rs](expressions/div_usize.rs) |
-| `a / b` on `i16`, both variables | Supported | 65 / 65 |  | A divide routine, put in once, runs as many steps as the quotient. Rounds toward zero, as Rust does. | [div_var_i16.rs](expressions/div_var_i16.rs) |
-| `a / b` with `b` zero panics | Supported | 55 / 55 |  |  | [div_zero_i16.rs](expressions/div_zero_i16.rs) |
+| `a / b` on `i16`, both variables | Supported | 83 / 83 |  | A divide routine, put in once, runs as many steps as the quotient. Rounds toward zero, as Rust does. | [div_var_i16.rs](expressions/div_var_i16.rs) |
+| `a / b` with `b` zero panics | Supported | 73 / 73 |  |  | [div_zero_i16.rs](expressions/div_zero_i16.rs) |
 | `a * 7`: by a constant | Supported | 16 / 27 |  |  | [mul_const_i16.rs](expressions/mul_const_i16.rs) |
 | `a * 10`: by a power of ten | Supported | 13 / 34 |  |  | [mul_pow10_i16.rs](expressions/mul_pow10_i16.rs) |
 | `a * b` on `u8` | Supported | 96 / 89 |  |  | [mul_u8.rs](expressions/mul_u8.rs) |
 | `a * b` on `usize` | Supported | 60 / 76 |  |  | [mul_usize.rs](expressions/mul_usize.rs) |
 | `a * b` on `i16`, both variables | Supported | 59 / 79 |  | A multiply routine, put in once, runs as many steps as the smaller factor. | [mul_var_i16.rs](expressions/mul_var_i16.rs) |
 | `-a` on `i16` | Supported | 14 / 14 |  |  | [neg_i16.rs](expressions/neg_i16.rs) |
-| `a % 7`: by a constant other than a power of ten | Supported | 68 / 68 |  |  | [rem_const_i16.rs](expressions/rem_const_i16.rs) |
+| `a % 7`: by a constant other than a power of ten | Supported | 84 / 84 |  |  | [rem_const_i16.rs](expressions/rem_const_i16.rs) |
 | `a % 10`: by a power of ten | Supported | 13 / 13 |  |  | [rem_pow10_i16.rs](expressions/rem_pow10_i16.rs) |
 | `a % b` on `u8` | Supported | 57 / 57 |  |  | [rem_u8.rs](expressions/rem_u8.rs) |
 | `a % b` on `usize` | Supported | 24 / 24 |  |  | [rem_usize.rs](expressions/rem_usize.rs) |
-| `a % b` on `i16`, both variables | Supported | 78 / 78 |  | The remainder takes the sign of `a`, as in Rust. | [rem_var_i16.rs](expressions/rem_var_i16.rs) |
-| `a % b` with `b` zero panics | Supported | 67 / 67 |  |  | [rem_zero_i16.rs](expressions/rem_zero_i16.rs) |
+| `a % b` on `i16`, both variables | Supported | 93 / 93 |  | The remainder takes the sign of `a`, as in Rust. | [rem_var_i16.rs](expressions/rem_var_i16.rs) |
+| `a % b` with `b` zero panics | Supported | 82 / 82 |  |  | [rem_zero_i16.rs](expressions/rem_zero_i16.rs) |
 | `a - b` on `i16` | Supported | 19 / 30 |  |  | [sub_i16.rs](expressions/sub_i16.rs) |
 | `a - b` on `u8` | Supported | 56 / 53 |  |  | [sub_u8.rs](expressions/sub_u8.rs) |
 | `a - b` on `u8` below 0: panics, or wraps with checks off | Supported | 56 / 53 |  |  | [sub_u8_underflow.rs](expressions/sub_u8_underflow.rs) |
@@ -319,8 +319,8 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | `a && b`, `a \|\| b` | Supported | 37 / 37 |  |  | [and_or.rs](expressions/and_or.rs) |
-| `&&` doesn't evaluate its right side when the left side is false | Supported | 71 / 71 |  | The right side divides by zero: evaluating it would panic. | [and_short_circuit.rs](expressions/and_short_circuit.rs) |
-| `\|\|` doesn't evaluate its right side when the left side is true | Supported | 64 / 64 |  | The right side divides by zero: evaluating it would panic. | [or_short_circuit.rs](expressions/or_short_circuit.rs) |
+| `&&` doesn't evaluate its right side when the left side is false | Supported | 89 / 89 |  | The right side divides by zero: evaluating it would panic. | [and_short_circuit.rs](expressions/and_short_circuit.rs) |
+| `\|\|` doesn't evaluate its right side when the left side is true | Supported | 82 / 82 |  | The right side divides by zero: evaluating it would panic. | [or_short_circuit.rs](expressions/or_short_circuit.rs) |
 
 ### Negation operators
 
@@ -347,11 +347,11 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | `x += a` on `i16` | Supported | 13 / 24 |  |  | [compound_add.rs](expressions/compound_add.rs) |
-| `x /= a` on `i16` | Supported | 55 / 55 |  |  | [compound_div.rs](expressions/compound_div.rs) |
+| `x /= a` on `i16` | Supported | 73 / 73 |  |  | [compound_div.rs](expressions/compound_div.rs) |
 | `t[i] += a` on an array element | Supported | 34 / 42 |  |  | [compound_element.rs](expressions/compound_element.rs) |
 | `s.f += a` on a struct field | Supported | 14 / 26 |  |  | [compound_field.rs](expressions/compound_field.rs) |
 | `x *= a` on `i16` | Supported | 56 / 76 |  |  | [compound_mul.rs](expressions/compound_mul.rs) |
-| `x %= a` on `i16` | Supported | 69 / 69 |  |  | [compound_rem.rs](expressions/compound_rem.rs) |
+| `x %= a` on `i16` | Supported | 84 / 84 |  |  | [compound_rem.rs](expressions/compound_rem.rs) |
 | `x -= a` on `i16` | Supported | 13 / 24 |  |  | [compound_sub.rs](expressions/compound_sub.rs) |
 | Destructuring assignment: `(a, b) = (b, a)` | Supported | 22 / 34 |  |  | [destructuring_assign.rs](expressions/destructuring_assign.rs) |
 
@@ -1107,11 +1107,11 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 | `a.checked_add(b)` on `i16`, on a card | Supported | 35 / 35 |  |  | [checked_add_i16.rs](integers/checked_add_i16.rs) |
 | `a.checked_add(b)` on `i16` past a card | Differs from native Rust by design |  | Never | The `None` is CARDIAC's overflow: every `i16` overflows past a card. CARDIAC's `i16` overflows past a card (999), so 1000 is `None` where native Rust has `Some(1000)`. | [checked_add_past_card.rs](integers/checked_add_past_card.rs) |
 | `a.checked_add(b)` on `u8` | Supported | 73 / 73 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [checked_add_u8.rs](integers/checked_add_u8.rs) |
-| `a.checked_div(b)` on `i16` | Supported | 65 / 65 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_div_i16.rs](integers/checked_div_i16.rs) |
+| `a.checked_div(b)` on `i16` | Supported | 83 / 83 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_div_i16.rs](integers/checked_div_i16.rs) |
 | `a.checked_mul(b)` on `i16` | Supported | 86 / 86 |  |  | [checked_mul_i16.rs](integers/checked_mul_i16.rs) |
 | `a.checked_neg()` on `i16` | Supported | 14 / 14 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_neg_i16.rs](integers/checked_neg_i16.rs) |
 | `a.checked_pow(3)` on `i16` | Supported | 79 / 79 |  | A loop of checked multiplies; rustc calls it at both opt-levels. | [checked_pow_i16.rs](integers/checked_pow_i16.rs) |
-| `a.checked_rem(b)` on `i16` | Supported | 78 / 78 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_rem_i16.rs](integers/checked_rem_i16.rs) |
+| `a.checked_rem(b)` on `i16` | Supported | 93 / 93 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_rem_i16.rs](integers/checked_rem_i16.rs) |
 | `a.checked_sub(b)` on `i16` | Supported | 35 / 35 |  |  | [checked_sub_i16.rs](integers/checked_sub_i16.rs) |
 | `a.checked_sub(b)` on `usize` | Supported | 32 / 32 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [checked_sub_usize.rs](integers/checked_sub_usize.rs) |
 
@@ -1121,7 +1121,7 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 |---|---|---|---|---|---|
 | `a.wrapping_add(b)` on `i16`, on a card | Supported | 19 / 19 |  |  | [wrapping_add_i16.rs](integers/wrapping_add_i16.rs) |
 | `a.wrapping_add(b)` on `u8` | Supported | 57 / 57 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [wrapping_add_u8.rs](integers/wrapping_add_u8.rs) |
-| `a.wrapping_div(b)` on `i16`, on a card | Supported | 65 / 65 |  | On a card it is plain `/`; rustc calls `overflowing_div` even at opt-level 2, for the `i16::MIN / -1` case that no card holds. | [wrapping_div_i16.rs](integers/wrapping_div_i16.rs) |
+| `a.wrapping_div(b)` on `i16`, on a card | Supported | 83 / 83 |  | On a card it is plain `/`; rustc calls `overflowing_div` even at opt-level 2, for the `i16::MIN / -1` case that no card holds. | [wrapping_div_i16.rs](integers/wrapping_div_i16.rs) |
 | `a.wrapping_mul(b)` on `i16`, on a card | Supported | 59 / 59 |  |  | [wrapping_mul_i16.rs](integers/wrapping_mul_i16.rs) |
 | `a.wrapping_neg()` on `i16` | Supported | 14 / 14 |  |  | [wrapping_neg_i16.rs](integers/wrapping_neg_i16.rs) |
 | `a.wrapping_rem(b)` on `i16`, on a card | Supported | 87 / 87 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [wrapping_rem_i16.rs](integers/wrapping_rem_i16.rs) |
@@ -1152,21 +1152,21 @@ Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `a.div_euclid(7)` on `i16` | Supported | 66 / 66 |  |  | [div_euclid_const_i16.rs](integers/div_euclid_const_i16.rs) |
+| `a.div_euclid(7)` on `i16` | Supported | 84 / 84 |  |  | [div_euclid_const_i16.rs](integers/div_euclid_const_i16.rs) |
 | `a.div_euclid(k)` on `i16` by 10 | Supported | 24 / 24 |  |  | [div_euclid_k10.rs](integers/div_euclid_k10.rs) |
-| `a.div_euclid(k)` on `i16` by 3 | Supported | 68 / 68 |  |  | [div_euclid_k3.rs](integers/div_euclid_k3.rs) |
-| `a.div_euclid(k)` on `i16` by 7 | Supported | 68 / 68 |  |  | [div_euclid_k7.rs](integers/div_euclid_k7.rs) |
-| `a.div_euclid(k)` on `i16` by -1 | Supported | 68 / 68 |  |  | [div_euclid_km1.rs](integers/div_euclid_km1.rs) |
+| `a.div_euclid(k)` on `i16` by 3 | Supported | 86 / 86 |  |  | [div_euclid_k3.rs](integers/div_euclid_k3.rs) |
+| `a.div_euclid(k)` on `i16` by 7 | Supported | 86 / 86 |  |  | [div_euclid_k7.rs](integers/div_euclid_k7.rs) |
+| `a.div_euclid(k)` on `i16` by -1 | Supported | 86 / 86 |  |  | [div_euclid_km1.rs](integers/div_euclid_km1.rs) |
 | `a.div_euclid(k)` on `i16` by -100 | Supported | 28 / 28 |  |  | [div_euclid_km100.rs](integers/div_euclid_km100.rs) |
-| `a.div_euclid(k)` on `i16` by -7 | Supported | 68 / 68 |  |  | [div_euclid_km7.rs](integers/div_euclid_km7.rs) |
+| `a.div_euclid(k)` on `i16` by -7 | Supported | 86 / 86 |  |  | [div_euclid_km7.rs](integers/div_euclid_km7.rs) |
 | `a.div_euclid(b)` on `i16` | Supported | 86 / 86 |  | `rem_euclid` by a variable works; `div_euclid` is the same test around a divide. | [div_euclid_var_i16.rs](integers/div_euclid_var_i16.rs) |
 | `a = a.div_euclid(b)`, the result in the dividend's own cell | Supported | 83 / 83 |  |  | [div_euclid_var_inplace.rs](integers/div_euclid_var_inplace.rs) |
 | `b = a.div_euclid(b)`, the result in the divisor's own cell | Supported | 83 / 83 |  |  | [div_euclid_var_inplace_b.rs](integers/div_euclid_var_inplace_b.rs) |
 | `a.div_euclid(b)` on `i16` by a variable: every sign, exact and not, the ends of a card | Supported | 86 / 86 |  |  | [div_euclid_var_signs.rs](integers/div_euclid_var_signs.rs) |
-| `a.div_euclid(b)` by a variable that is 0: Rust's panic | Supported | 76 / 76 |  |  | [div_euclid_var_zero.rs](integers/div_euclid_var_zero.rs) |
-| `a.rem_euclid(7)` on `i16` | Supported | 74 / 74 |  |  | [rem_euclid_const_i16.rs](integers/rem_euclid_const_i16.rs) |
+| `a.div_euclid(b)` by a variable that is 0: Rust's panic | Supported | 94 / 94 |  |  | [div_euclid_var_zero.rs](integers/div_euclid_var_zero.rs) |
+| `a.rem_euclid(7)` on `i16` | Supported | 89 / 89 |  |  | [rem_euclid_const_i16.rs](integers/rem_euclid_const_i16.rs) |
 | `a.rem_euclid(b)` on `i16` | Supported | 91 / 91 |  |  | [rem_euclid_var_i16.rs](integers/rem_euclid_var_i16.rs) |
-| `a.rem_euclid(b)` with `b` zero panics | Supported | 81 / 81 |  |  | [rem_euclid_zero_i16.rs](integers/rem_euclid_zero_i16.rs) |
+| `a.rem_euclid(b)` with `b` zero panics | Supported | 94 / 94 |  |  | [rem_euclid_zero_i16.rs](integers/rem_euclid_zero_i16.rs) |
 
 ### Powers and roots
 

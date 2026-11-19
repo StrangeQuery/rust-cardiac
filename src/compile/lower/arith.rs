@@ -284,7 +284,7 @@ impl<'a> Lowering<'a> {
             let r = self.fresh("rr");
             self.define(&r);
             if rem {
-                self.emit(Op::Cla, Sym::Runtime("rt_div_r"));
+                self.emit(Op::Cla, Sym::Runtime(crate::compile::runtime::remainder_cell()));
                 self.sh.pool.divr = true;
             }
             return self.store(&dst, "");

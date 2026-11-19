@@ -67,8 +67,10 @@ answer, but has a cheaper way when the cells or the time matter. **Refused** sto
   factor's digits: 14 instructions a digit and one for each unit of the digits, at most about 80. A program that
   doesn't fit with it gets repeated addition (about 35 cells, as many steps as the second factor). `pow` by a
   variable is that many multiplications. Multiply by a constant instead, or put the factor with fewer digits second.
-- `/` or `%` of two variables: a divide routine, put in once (about 40 cells for `/`, 50 for `%`), and repeated
-  subtraction, as many steps as the quotient. Divide by a power of ten instead, or use `digit()` for one digit.
+- `/` or `%` of two variables: a divide routine, put in once (about 60 cells for `/`, 70 for `%`), long
+  division: about 8 instructions for each unit of each digit of the quotient, at most about 300 (999 / 1). A
+  program that doesn't fit with it gets repeated subtraction (about 40 cells, 50 for `%`, as many steps as the
+  quotient). Divide by a power of ten instead, or use `digit()` for one digit.
 - `&`, `|` and `^` between integers, and shifts by a variable: a routine that reads a card's bits as Rust's `i16`
   has them, put in once. It is 66 instructions for `&` (67 for `^`), 49 for two `u8`s, 26 for `>>` and 46 for an
   `i16`'s `<<`, and a program using one has about 25 cells of its own left. Each use is about ten passes of 20
