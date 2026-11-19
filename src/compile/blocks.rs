@@ -173,8 +173,28 @@ pub fn merge_blocks(blocks: &mut Vec<ir::Block>) {
 
 /// A comparison turned over, `b = Eq(x, y); c = Not(move b)` (a derived `!=`, or `!(x < y)`), is the opposite
 /// comparison, `c = Ne(x, y)`, when nothing else reads b: then a branch on c can test x and y itself, where b would
-/// be stored as 0 or 1, turned over and tested again.
+/// be stored as 0 or 1, turned over and tested again. A bool compared with a constant one first is the bool or its
+/// `!`: `b != false` and `b == true` are b, `b == false` and `b != true` are `!b` (a `bool` const generic, which is a
+/// constant in each instance: `(x < 0) != NEG` is `x < 0` where NEG is false); and `b = Lt(x, y); c = copy b`, b read
+/// nowhere else, is `c = Lt(x, y)`.
 pub fn not_of_comparisons(blocks: &mut [ir::Block]) {
+    for b in blocks.iter_mut() {
+        for s in &mut b.statements {
+            let Statement::Assign(_, rv @ Rvalue::BinaryOp(ir::BinOp::Eq | ir::BinOp::Ne, ..)) = s else { continue };
+            let Rvalue::BinaryOp(op, x, y) = &*rv else { continue };
+            let (v, k, ne) = match (x, y) {
+                (v, ir::Operand::Constant(ir::Const::Bool(k))) | (ir::Operand::Constant(ir::Const::Bool(k)), v) => {
+                    (v.clone(), *k, *op == ir::BinOp::Ne)
+                }
+                _ => continue,
+            };
+            *rv = if ne != k {
+                Rvalue::Use(v)
+            } else {
+                Rvalue::UnaryOp(ir::UnOp::Not, v)
+            };
+        }
+    }
     let opposite = |op: ir::BinOp| {
         use ir::BinOp::*;
         Some(match op {
@@ -197,6 +217,12 @@ pub fn not_of_comparisons(blocks: &mut [ir::Block]) {
                     Statement::Assign(c, Rvalue::UnaryOp(ir::UnOp::Not, ir::Operand::Copy(n) | ir::Operand::Move(n))),
                 ) if b.as_local().is_some() && n == b => {
                     opposite(*op).map(|op| (b.clone(), c.clone(), op, x.clone(), y.clone()))
+                }
+                (
+                    Statement::Assign(b, Rvalue::BinaryOp(op, x, y)),
+                    Statement::Assign(c, Rvalue::Use(ir::Operand::Copy(n) | ir::Operand::Move(n))),
+                ) if b.as_local().is_some() && n == b && opposite(*op).is_some() => {
+                    Some((b.clone(), c.clone(), *op, x.clone(), y.clone()))
                 }
                 _ => None,
             };

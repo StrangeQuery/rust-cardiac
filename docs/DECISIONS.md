@@ -4,6 +4,21 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · A bool compared with a constant bool is the bool or its `!`
+
+- **Decision.** Before the comparisons turned over are folded (`blocks::not_of_comparisons`), `b != false` and
+  `b == true` become b, and `b == false` and `b != true` become `!b`, with the constant on either side; and
+  `b = x < y; c = b`, b read nowhere else, is `c = x < y`. A `bool` const generic is a constant in each instance, so
+  `(x < 0) != NEG` with NEG false is the test `x < 0`, fused into its branch, and with NEG true it is `x >= 0`.
+  Fixes #38.
+- **Why.** Each instance of a generic function is a function of its own, with the const argument written in, but
+  the comparison with it stayed: the bool was stored as 1 or 0 and tested again (`SUB 00`, `TAC`).
+- **Cost.** None. The issue's program goes from 25 cells to 18; `tests/programs/const_bool_generic.rs`, two
+  instances of two such tests, from 106 cells, which didn't fit, to 73. No example and no Card Attack machine
+  changes; one feature test does (`matches!`, 34 cells to 25, 157 instructions to 117). The issue's other point,
+  that `run` is called rather than put in place though it is called once, stays: there is no inliner of our own
+  (2026-10-19).
+
 ## 2026-11-19 · Two shifts one after the other are one shift
 
 - **Decision.** A peephole rule (16) joins two SFTs in a row, no label between, into one. `SFT l r` then `SFT 0 b`
