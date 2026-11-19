@@ -30,7 +30,7 @@ card, as its plain arithmetic does, and `checked_add` is `None` past 999.
 | Method | What it costs | Cheaper |
 |--------|---------------|---------|
 | `count_ones`, `leading_zeros`, `trailing_zeros`, a `u8`'s rotations | They walk the cell's bits: about 20 to 40 cells a call, written where it is called, and up to ten passes. The build warns about them (RCW0001). | A table, or arithmetic on the digits. |
-| `.rem_euclid()` by a variable | The divide routine, as for `%`, and about 10 cells more to make a negative remainder positive. | By a constant: a power of ten is shifts, as for `%`. |
+| `.rem_euclid()` by a variable | The divide routine, as for `%`, and about 10 cells more to make a negative remainder positive. | By a constant: a power of ten is shifts, and 2 or 5 the last digit, as for `%`. |
 
 **Refused:**
 

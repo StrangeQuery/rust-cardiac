@@ -4,6 +4,32 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · `% 2` and `% 5` by the last digit
+
+- **Decision.** `x % 2` and `x % 5` (and by -2 and -5, the same in Rust) take the last digit (#30). Of a signed
+  value: 5x (or 2x) is ten times x / k plus 5 (or 2) times x % k, all with x's sign, so its last digit, `SFT 33`, is
+  that many times Rust's remainder, the dividend's sign included; k times that is ten times the remainder, and `SFT
+  01` leaves it. 9 instructions and cells, and a scratch cell, for any sign: `CLA x, ADD x x4, SFT 33, STO t, ADD t,
+  SFT 01` for `% 2`. Of a value that is never below 0 (a u8, a usize on a card, an i16 the range pass shows is not
+  negative), `SFT 33` before the subtracting loop it had, which then makes a pass or two. `rem_euclid(2)` and
+  `rem_euclid(5)` are a `%` and a fix, so they get it too. `/ 2` and `/ 5` were adds and a shift already, and
+  powers of ten shifts.
+- **Why.** A signed `% 2` called the divide routine, about 4x + 25 instructions (4,017 for 999); an unsigned one
+  was the loop, about 1.5x. 5x is four digits at most, which the accumulator holds, and a dividend in a cell is on
+  a card.
+- **Cost.** Against the routine, fewer cells and instructions always; against the loop, one cell more (the shift),
+  at most about 20 instructions where it took up to 1,500.
+- **Measured.** At opt-level 2, overflow checks off. The issue's `loop { let n = inp(); out(n % 2); }`: 61 cells to
+  14, and 9,028 instructions to 163 for 0 1 2 7 -3 -8 999 -999 128.
+  - Every card through compiled programs of `% 2`, `% 5`, `% -5`, `rem_euclid(2)` and `rem_euclid(5)`, and of a
+    usize's and a u8's `% 2` and `% 5`, at opt-level 1 and 2, checks on and off: Rust's answers. The signed one
+    didn't fit before (107 cells); the unsigned one is 43 cells to 47, 1.35 million instructions to 58,000.
+  - The examples: fizzbuzz 45 cells to 46 and 10,065 instructions to 8,293; collatz 45 to 46, 7 in 948 to 622 and
+    27 in 13,797 to 1,251.
+  - The support suite: if_let_chain 84 cells to 35 (its `% 2` called the divide routine), continue_while 20 to 21;
+    nothing else changes.
+  - cardiac-speech and Card Attack: none of their machines takes `% 2` or `% 5`; no deck changes.
+
 ## 2026-11-19 · The divide routine works digit by digit
 
 - **Decision.** `rt_div`, which `/` and `%` of two signed variables call (and by a constant that is not a power of

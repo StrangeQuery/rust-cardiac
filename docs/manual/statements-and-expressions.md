@@ -23,7 +23,7 @@ itself, because storing K first keeps x alive across the test, which can cost a 
 ## Operators
 
 **Works well:** `+`, `-`, unary `-` and comparisons. `*` by a constant, which becomes additions and decimal shifts.
-`/` and `%` by a power of ten, which are shifts. `!` on integers, and `<<` and `>>` by a constant. `x & m` for a
+`/` and `%` by a power of ten, which are shifts, and `%` by 2 or 5, which is the last digit. `!` on integers, and `<<` and `>>` by a constant. `x & m` for a
 mask one below a power of two: `x & 3` is `x.rem_euclid(4)`, a subtracting loop. Compound assignment, and
 destructuring assignment (`(a, b) = (b, a)`).
 

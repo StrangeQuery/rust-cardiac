@@ -15,6 +15,7 @@ divide        tests/fuzz/programs/divide.rs   -999..999 -999..999
 multiply      tests/fuzz/programs/multiply.rs -31..31 -31..31
 multiply_wide tests/fuzz/programs/multiply.rs -999..999 -999..999
 divide_small  tests/fuzz/programs/divide.rs   -999..999 -12..12
+remainders    tests/fuzz/programs/remainders.rs -999..999
 euclid        tests/fuzz/programs/euclid.rs   -999..999 -999..999
 compare       tests/fuzz/programs/compare.rs  -999..999 -999..999
 edges         tests/fuzz/programs/edges.rs    -999..999

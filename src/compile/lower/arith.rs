@@ -273,6 +273,29 @@ impl<'a> Lowering<'a> {
                 return self.store(&dst, "");
             }
         }
+        // x % 2 and x % 5 are the last digit's, as 10 is a multiple of both
+        let by_digit = match b.k().map(i64::abs) {
+            Some(k @ (2 | 5)) if rem && !self.is_huge(x) => Some(k),
+            _ => None,
+        };
+        if let (Some(k), true) = (by_digit, signed && !unsigned) {
+            // signed: 5x (or 2x) is 10 (x / k) plus 5 (or 2) times x % k, all with x's sign, so its last digit, SFT
+            // 33, is that many times the remainder Rust's % gives (the dividend's sign); k times that is ten times
+            // the remainder, and a shift right leaves it. 5x is four digits at most, which the accumulator holds
+            self.load(&a)?;
+            for i in 1..10 / k {
+                let v = self.arith(&a)?;
+                self.emit_c(Op::Add, v, if i == 1 { src } else { "" });
+            }
+            self.emit(Op::Sft, shift(3, 3));
+            let t = self.temp();
+            self.emit(Op::Sto, t.clone());
+            for _ in 1..k {
+                self.emit(Op::Add, t.clone());
+            }
+            self.emit(Op::Sft, shift(0, 1));
+            return self.store(&dst, "");
+        }
         if signed && !unsigned {
             // signed: the shared routine
             self.use_div();
@@ -293,9 +316,13 @@ impl<'a> Lowering<'a> {
         let (lp, done) = (self.fresh("div"), self.fresh("d"));
         if rem {
             self.load(&a)?;
+            if by_digit.is_some() {
+                // the last digit, 0 to 9: a pass or two of the loop, where the whole number could take hundreds
+                self.emit_c(Op::Sft, shift(3, 3), src);
+            }
             self.define(&lp);
             let v = self.arith(&b)?;
-            self.emit_c(Op::Sub, v, src);
+            self.emit_c(Op::Sub, v, if by_digit.is_some() { "" } else { src });
             self.emit(Op::Tac, done.clone());
             self.emit(Op::Jmp, lp);
             self.define(&done);

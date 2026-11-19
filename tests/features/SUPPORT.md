@@ -6,7 +6,7 @@ status is what those runs did: **Supported** means CARDIAC printed what native R
 **Refused** that the build stopped with an error every time. Cells are for a release build (opt-level 2,
 overflow checks off), then with overflow checks on. `./test_features.sh` remakes this page.
 
-Made with cargo-cardiac v0.1.1-185-gb2ead14-dirty.
+Made with cargo-cardiac v0.1.1-186-g81f0f17-dirty.
 
 | Status | Rows |
 |---|---|
@@ -462,7 +462,7 @@ Made with cargo-cardiac v0.1.1-185-gb2ead14-dirty.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `continue` in a `while` loop | Supported | 20 / 20 |  |  | [continue_while.rs](expressions/continue_while.rs) |
+| `continue` in a `while` loop | Supported | 21 / 21 |  |  | [continue_while.rs](expressions/continue_while.rs) |
 | `for x in array` | Supported | 29 / 29 |  | The same as `for i in 0..N` with `t[i]`. | [for_array.rs](expressions/for_array.rs) |
 | `for x in &array` and `array.iter()` | Supported | 45 / 56 |  | The same as `for i in 0..N` with `t[i]`. | [for_array_ref.rs](expressions/for_array_ref.rs) |
 | `for (i, x) in array.iter().enumerate()` | Supported | 32 / 46 |  |  | [for_enumerate.rs](expressions/for_enumerate.rs) |
@@ -489,7 +489,7 @@ Made with cargo-cardiac v0.1.1-185-gb2ead14-dirty.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | An `if` / `else if` / `else` chain | Supported | 35 / 35 |  |  | [if_else_chain.rs](expressions/if_else_chain.rs) |
-| A let chain, `if let ... && ...` | Supported | 84 / 84 |  | Let chains are Rust 2024's: the row is built in that edition, natively too. | [if_let_chain.rs](expressions/if_let_chain.rs) |
+| A let chain, `if let ... && ...` | Supported | 35 / 35 |  | Let chains are Rust 2024's: the row is built in that edition, natively too. | [if_let_chain.rs](expressions/if_let_chain.rs) |
 | `if let` on an enum variant with fields | Supported | 51 / 62 |  |  | [if_let_enum.rs](expressions/if_let_enum.rs) |
 | `if let Some(x) = ... else` | Supported | 29 / 40 |  |  | [if_let_option.rs](expressions/if_let_option.rs) |
 | `if` as a value, `let x = if c { a } else { b };` | Supported | 16 / 16 |  |  | [if_value.rs](expressions/if_value.rs) |
