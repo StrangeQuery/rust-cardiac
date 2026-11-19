@@ -99,6 +99,8 @@ pub struct Compiled {
     pub stack_cells: usize,
     /// whether an array of arrays was laid out by tens (`nested`)
     pub by_tens: bool,
+    /// whether it has the long multiply (`runtime::LONG`)
+    pub long_arith: bool,
 }
 
 impl Compiled {
@@ -265,11 +267,43 @@ fn largest_phase(listing: &[Line]) -> Option<usize> {
     r.code.iter().map(|c| cells(&r.data) + cells(c)).max()
 }
 
-/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. A loop
-/// made a row of ADDs (`addrow`) takes a cell for each addition it can make, which pays only where the program
-/// has the cells: when it doesn't fit, it is compiled again without the row that takes most, and so on. A program
-/// in phases, or with a stack (whose depth is what memory is left), has none.
+/// The compile, with main cut into phases at `cuts`; None: at its own overlay() calls, auto-overlay off. The long
+/// multiply (`runtime::LONG`) takes more cells than the short one, which pays only where the program has them: one
+/// that doesn't fit with it, or that has a stack (whose depth is what memory is left), is compiled again with the
+/// short one, and keeps that where it fits, or is smaller.
 fn compile_cut(
+    mir: &ir::File,
+    optimize: bool,
+    debug_assertions: bool,
+    enums: &[enums::EnumDef],
+    structs: &[structs::StructDef],
+    cuts: Option<&[phases::Cut]>,
+    tens: bool,
+) -> Result<Compiled, Fail> {
+    let rows = || compile_rows(mir, optimize, debug_assertions, enums, structs, cuts, tens);
+    if !runtime::LONG.with(|l| l.get()) {
+        return rows();
+    }
+    let long = rows();
+    let fits = |c: &Compiled| largest_phase(&c.listing).is_some_and(|n| n <= MEMORY);
+    match &long {
+        Ok(c) if !c.long_arith || (fits(c) && c.stack_cells == 0) => return long,
+        _ => {}
+    }
+    let short = runtime::with_long(false, rows);
+    match (&long, &short) {
+        (Ok(l), Ok(s)) if fits(l) && !fits(s) && l.stack_cells == 0 => long,
+        (Ok(l), Ok(s)) if !fits(l) && !fits(s) && cells(&l.listing) <= cells(&s.listing) => long,
+        (_, Ok(_)) => short,
+        _ => long,
+    }
+}
+
+/// `compile_cut`, with the multiply as `runtime::LONG` is set. A loop made a row of ADDs (`addrow`)
+/// takes a cell for each addition it can make, which pays only where the program has the cells: when it doesn't
+/// fit, it is compiled again without the row that takes most, and so on. A program in phases, or with a stack
+/// (whose depth is what memory is left), has none.
+fn compile_rows(
     mir: &ir::File,
     optimize: bool,
     debug_assertions: bool,
@@ -1503,6 +1537,7 @@ fn compile_once(
             names: source_names,
             stack_cells,
             by_tens,
+            long_arith: sh.pool.mul && runtime::LONG.with(|l| l.get()),
         },
         !alias.is_empty(),
         unproved,

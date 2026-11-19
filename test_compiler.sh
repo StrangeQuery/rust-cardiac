@@ -71,6 +71,16 @@ for opt in 1 2; do
       tests/programs/add_row_tested.rs tests/programs/add_row_down.rs tests/programs/add_row_split.rs \
       tests/programs/add_row_difference.rs || exit 1
   done
+  # products of two variables digit by digit, the multiply routine's rounds of a row; past a card, a product stops
+  # with overflow checks and keeps its last three digits without them, as the routine's cells keep them
+  for c in "$checked" "$unchecked"; do
+    sh native_diff.sh $c tests/programs/mul_digits.rs || exit 1
+  done
+  for want in "$checked:mul_past:144,-999" "$unchecked:mul_past:144,500,-500,25,-1,0,-1"; do
+    c=${want%%:*}; rest=${want#*:}; n=${rest%%:*}
+    out=$(./target/release/cargo-cardiac test $c tests/programs/$n.rs)
+    [ "$out" = "${rest#*:}" ] && echo "MATCH  $n ($c): $out" || { echo "DIFFER $n ($c): $out, not ${rest#*:}"; exit 1; }
+  done
   out=$(./target/release/cargo-cardiac test $checked tests/programs/add_row_overflow.rs)
   [ "$out" = "0,5,125,-120,250,-245,375,-370,500,-495,625,-620,750,-745,875,-870,-999" ] &&
     echo "MATCH  add_row_overflow: $out" || { echo "DIFFER add_row_overflow: $out"; exit 1; }
@@ -282,6 +292,18 @@ for want in "0:0 147" "1:-9 148" "9:-81 156" "10:-90 148" "37:-333 157" "99:-891
   n=${want%%:*}
   got=$("$BURN" tests/programs/add_times_count.cqb -- -9 $n 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ' ')
   [ "$got" = "${want#*:} " ] && echo "MATCH  add_times(-9, $n): $got" || { echo "DIFFER add_times(-9, $n): $got, not ${want#*:}"; exit 1; }
+done
+# a * b by the routine that works digit by digit: the product and the instructions the whole run takes, 14 a digit
+# of b and one an addition (1 x 999 is 56 more than 7 x 1)
+for c in on off; do
+  ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=$c tests/programs/mul_count.rs || exit 1
+  if [ $c = on ]; then wants="7,0:0,237 7,1:7,234 7,9:63,242 -7,12:-84,258 3,-333:-999,290 1,999:999,304 -1,-999:999,308"
+  else wants="7,0:0,165 7,1:7,162 7,9:63,170 -7,12:-84,179 3,-333:-999,204 1,999:999,218 -1,-999:999,222 500,2:0,163"; fi
+  for want in $wants; do
+    p=$(echo ${want%%:*} | tr ',' ' ')
+    got=$("$BURN" tests/programs/mul_count.cqb -- $p 2>&1 | sed 's/ *halted after \([0-9]*\) instructions/\1/' | tr '\n' ',')
+    [ "$got" = "${want#*:}," ] && echo "MATCH  $p ($c): $got" || { echo "DIFFER $p ($c): $got, not ${want#*:}"; exit 1; }
+  done
 done
 # a loop made a row of ADDs (addrow.rs): one instruction for each addition, for counts 0 to the most (9)
 ./target/release/cargo-cardiac build -q -C opt-level=2 -C overflow-checks=off tests/programs/add_row_count.rs || exit 1

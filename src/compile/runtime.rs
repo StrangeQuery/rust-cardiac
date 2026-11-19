@@ -73,9 +73,103 @@ fn exit_cell(name: &str) -> Line {
     line
 }
 
+thread_local! {
+    /// Multiply digit by digit (`mul_long`); off, by repeated addition (`mul_short`), which takes fewer cells: a
+    /// program that doesn't fit with the long one, or has a stack, whose depth is what memory is left, is compiled
+    /// again with the short one (`super::compile_cut`).
+    pub static LONG: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// `f`, with the long or the short multiply.
+pub fn with_long<T>(on: bool, f: impl FnOnce() -> T) -> T {
+    let was = LONG.with(|l| l.replace(on));
+    let r = f();
+    LONG.with(|l| l.set(was));
+    r
+}
+
+/// a * b by long multiplication, the product in the accumulator: for each digit of |b| from the right, a computed
+/// jump into a row of nine `ADD rt_mul_a` adds a that digit's number of times, and then a is made ten times as
+/// much for the next. b is held as -|b| (and a negated with it when b is below 0), so that its last digit, `SFT
+/// 33`, is minus the count, and `JMP rt_mul_end` plus it is the jump in. A round is 10 instructions and one an
+/// addition, a digit more 4: 20 + d for a one-digit b above 0, and at most 79. The partial products all
+/// have a's sign, and the cells keep three digits of each as the old routine's stores did, so a product past a
+/// card is what it was; the accumulator never passes four digits (999 + 9 x 999). Checked: the product is checked
+/// at each store, and a made ten times as much is checked when another digit is to come: past a card there, the
+/// product is too, as that digit is at least 1.
+fn mul_long(checked: bool) -> Vec<Line> {
+    let mut r = asm![
+        rt_mul_entry:
+            CLA 99
+            STO rt_mul_exit
+            CLA k0
+            STO rt_mul_r
+            SUB rt_mul_b
+            TAC rt_mul_pos
+            CLA k0
+            SUB rt_mul_a
+            STO rt_mul_a
+            CLA rt_mul_b
+        rt_mul_pos:
+            STO rt_mul_b
+        rt_mul_digit:
+            CLA rt_mul_b
+            SFT 33
+            ADD jmp_rt_mul_end
+            STO rt_mul_go
+            CLA rt_mul_r
+    ];
+    r.push(slot("rt_mul_go", "becomes JMP into the row: the digit"));
+    for _ in 0..ROW - 1 {
+        r.push(Line::instr(Op::Add, Arg::sym("rt_mul_a")));
+    }
+    r.extend(asm![
+        rt_mul_end:
+            STO rt_mul_r
+    ]);
+    if checked {
+        // what the cell kept is all of it only on a card
+        r.extend(asm![
+                SUB rt_mul_r
+                TAC rt_panic
+                SUB 00
+                TAC rt_mul_fits
+                JMP rt_panic
+            rt_mul_fits:
+        ]);
+    }
+    r.extend(asm![
+            CLA rt_mul_b
+            SFT 01
+            TAC rt_mul_up
+            CLA rt_mul_r
+    ]);
+    r.push(exit_cell("rt_mul_exit"));
+    r.extend(asm![
+        rt_mul_up:
+            STO rt_mul_b
+            CLA rt_mul_a
+            SFT 10
+            STO rt_mul_a
+    ]);
+    if checked {
+        r.extend(asm![
+            SUB rt_mul_a
+            TAC rt_panic
+            SUB 00
+            TAC rt_mul_digit
+            JMP rt_panic
+        ]);
+    } else {
+        r.extend(asm![JMP rt_mul_digit]);
+    }
+    r.push(on_end(Access::Jump, "rt_mul_end"));
+    r
+}
+
 /// a * b by repeated addition, |b| times (put the smaller factor second); the product in the accumulator.
 /// Checked: every partial product must stay a card, else panic (the partials only grow).
-fn mul(checked: bool) -> Vec<Line> {
+fn mul_short(checked: bool) -> Vec<Line> {
     let mut r = asm![
         rt_mul_entry:
             CLA 99
@@ -699,13 +793,19 @@ pub fn runtime(pool: &Pool, consts: &[Sym]) -> (Vec<Line>, Vec<Line>) {
     let zero = |name: &str| Line::data_cell(name, Arg::Num("0".into()));
     let mut needed: Vec<i64> = vec![];
     let mut panics = pool.panic;
+    let long = LONG.with(|l| l.get());
     if pool.mul {
-        code.extend(mul(pool.mul_checked));
         data.extend(["rt_mul_a", "rt_mul_b", "rt_mul_r"].map(zero));
         needed.push(0);
-        if pool.mul_checked {
-            needed.push(999);
-            panics = true;
+        if long {
+            code.extend(mul_long(pool.mul_checked));
+            panics |= pool.mul_checked;
+        } else {
+            code.extend(mul_short(pool.mul_checked));
+            if pool.mul_checked {
+                needed.push(999);
+                panics = true;
+            }
         }
     }
     if pool.div {
@@ -777,4 +877,118 @@ pub fn runtime(pool: &Pool, consts: &[Sym]) -> (Vec<Line>, Vec<Line>) {
             .map(|c| Line::data_cell(&c.to_string(), c.contents().expect("a constant cell"))),
     );
     (code, data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cardiac::Machine;
+    use crate::compile::machine::{self, Kind};
+
+    /// One call of a routine on a machine of its own: the operands put in its cells, then `JMP entry`, and what
+    /// it leaves in the accumulator stored in `res` before a halt.
+    struct Rig {
+        machine: Machine,
+        a: usize,
+        b: usize,
+        res: usize,
+    }
+
+    fn rig(pool: &Pool, entry: &str, operands: [&str; 2]) -> Rig {
+        let mut lines = vec![Line::label("main"), Line::instr(Op::Jmp, Arg::sym(entry))];
+        lines.push(Line::instr(Op::Sto, Arg::sym("res")));
+        lines.push(Line::instr(Op::Hrs, Arg::Num("0".into())));
+        let (code, data) = runtime(pool, &[]);
+        lines.extend(code);
+        lines.push(Line::new(Kind::DataStart));
+        lines.extend(data);
+        lines.push(Line::data_cell("res", Arg::Num("0".into())));
+        let p = crate::asm::assemble(3, &machine::print(&lines)).unwrap();
+        let mut machine = Machine::new();
+        let cells: Vec<(usize, i32)> = p.cells.iter().map(|&(a, v)| (a as usize, v)).collect();
+        machine.load_cells(&cells);
+        machine.set_pc(p.label("main") as usize);
+        let at = |l: &str| p.label(l) as usize;
+        Rig {
+            machine,
+            a: at(operands[0]),
+            b: at(operands[1]),
+            res: at("res"),
+        }
+    }
+
+    impl Rig {
+        /// What the routine gives for a and b, and the instructions it took; None where it panicked.
+        fn run(&self, a: i32, b: i32) -> (Option<i32>, u64) {
+            let mut m = self.machine.clone();
+            m.set_cell(self.a, a);
+            m.set_cell(self.b, b);
+            let mut out: Vec<i32> = vec![];
+            m.run(100_000, &mut out);
+            ((out.is_empty()).then(|| m.cell(self.res)), m.steps())
+        }
+    }
+
+    fn pool(checked: bool) -> Pool {
+        let mut p = Pool::default();
+        (p.mul, p.mul_checked, p.panic) = (true, checked, checked);
+        p
+    }
+
+    /// The products the routines must give: Rust's where a card holds them; past a card, a checked
+    /// product panics and an unchecked one is what a cell keeps of it, its last three digits with its sign.
+    fn product(a: i32, b: i32, checked: bool) -> Option<i32> {
+        let p = a * b;
+        if checked && p.abs() > 999 {
+            None
+        } else {
+            Some(p % 1000)
+        }
+    }
+
+    /// Each pair of a and b from `values`, on the routine `long` picks, against Rust: the most instructions any pair
+    /// took, unchecked and checked (with the four of the rig's own: a product of three digits is at most three
+    /// rounds of a row).
+    fn check_all(long: bool, values: &[i32]) -> [u64; 2] {
+        with_long(long, || {
+            let mut most = [0; 2];
+            for (k, checked) in [false, true].into_iter().enumerate() {
+                let r = rig(&pool(checked), "rt_mul_entry", ["rt_mul_a", "rt_mul_b"]);
+                for &a in values {
+                    for &b in values {
+                        let (got, steps) = r.run(a, b);
+                        assert_eq!(got, product(a, b, checked), "{a} * {b}, checked {checked}, long {long}");
+                        most[k] = most[k].max(steps);
+                    }
+                }
+            }
+            most
+        })
+    }
+
+    /// Every small value, the values around each power of ten and each digit's edge, and the extremes.
+    fn sample() -> Vec<i32> {
+        let mut v: Vec<i32> = (-120..=120).collect();
+        for k in [
+            199, 200, 201, 250, 299, 333, 499, 500, 501, 666, 799, 899, 900, 901, 989, 990, 991, 995, 998, 999,
+        ] {
+            v.extend([k, -k]);
+        }
+        v
+    }
+
+    #[test]
+    fn the_routines_multiply_as_rust_does() {
+        let values = sample();
+        check_all(true, &values);
+        check_all(false, &values);
+    }
+
+    /// Every pair of cards, on the long routine: about four million runs, checked and not, some seconds.
+    #[test]
+    fn the_long_routine_is_right_for_every_pair_of_cards() {
+        let values: Vec<i32> = (-999..=999).collect();
+        let most = check_all(true, &values);
+        assert_eq!(most, [83, 101]);
+    }
 }

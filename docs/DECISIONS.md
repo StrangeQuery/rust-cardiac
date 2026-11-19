@@ -4,6 +4,45 @@ Newest first. Each entry is the decision, why, and what it costs. (The project w
 released on its own as rust-cardiac, was cargo-cardiac for a day, and is rust-cardiac again: the project is
 rust-cardiac, and cargo-cardiac is what you install.)
 
+## 2026-11-19 · The multiply routine works digit by digit, a row of nine ADDs a digit
+
+- **Decision.** `rt_mul`, which `a * b` of two variables calls (and a multiply by a constant of three digits other
+  than 100 and 200), is long multiplication (#47). b is held as -|b|, with a negated when b is below 0, so that its
+  last digit, `SFT 33`, is minus that digit's count and `JMP rt_mul_end` plus it is the jump into a row of nine
+  `ADD rt_mul_a`, which falls through to the product's store. For each digit of |b| from the right: that jump, then,
+  while digits are left, a made ten times as much (`SFT 10`) for the next. It is the row `add_times()` and `addrow`
+  build, entered by a jump built on the row's end, kept as `DAT rt_mul_end+800` after the routine's code. A round is
+  10 instructions and one an addition, and a digit after the first 4 more: 20 + d for a one-digit b above 0, at most
+  79, where repeated addition was 11 + 8|b| (13|b| checked), up to 8,000.
+- **The same products.** The partial products all have a's sign, and each store keeps three digits of one, as the
+  old routine's stores did, so a product past a card is what it was: its last three digits, with its sign, the rule
+  of 2026-11-06. The accumulator never holds more than 999 + 9 x 999, so the digits don't depend on how a machine
+  bounds its accumulator either. With overflow checks, the product is checked at each store (`STO` then `SUB` of the
+  cell, 0 only on a card) and a made ten times as much is checked when another digit is to come: past a card there,
+  the product is too, as that digit is at least 1, and a product checked on a card at each round is exact. So it
+  panics exactly where the old routine did. A unit test runs every pair of cards, 3,996,001, checked and not.
+- **Cost, and when.** 38 cells of code where repeated addition took 23 (47 and 29 checked), once a program, and
+  every cell is also about three of the loader's instructions each run. Only for b of 0 or 1 is it slower, by 12
+  instructions and 1. The bigger routine pays where the program has the cells: `compile_cut` compiles a program that
+  doesn't fit with it again with the short routines (`runtime::LONG` off), and keeps those where they fit, or are
+  smaller; a program with a stack, whose depth is the memory left over, has the short ones too. No flag: where the
+  cells are needed the compiler takes the short routine itself, and the long one is faster for every multiplier but
+  0 and 1.
+- **Measured.** At opt-level 2, overflow checks off unless said. The issue's `7 * 999`: 8,104 instructions to 219
+  (34 cells to 49), `999 * 7` 168 to 169.
+  - Every pair of cards through a compiled program (`out(a * b)` in a loop, opt-level 1 and 2, checks on and off),
+    on its own machine each: the same cards and panics as Rust's answers and the old routine's past a card; on a
+    sample of 79,000 pairs 93.3 million instructions to 4.4 million (24.5 to 4.2 checked).
+  - The examples: ray/hit 77 cells to 92, its test run 337 instructions to 381 (small factors, and the cells to load);
+    the rest unchanged.
+  - The support suite: 64 of its 2,992 compiles grow, by 15 cells (18 checked), all with the same outcomes; the
+    largest is mul_u8, 96.
+  - cardiac-speech's Rust machines: none multiplies two variables; no deck changes, and check_text, check_front and
+    check_voice with --rust and --all-rust are all exact.
+  - Card Attack's 994 machines: 3 decks change (boids' dist, the ray machines' hit, shared mul), 15 cells each, all
+    still fit, and give the same cards on random decks. In the film, dist runs 201 million instructions to 151
+    million, mul 23.8 to 25.4 million (its multipliers are single digits).
+
 ## 2026-11-19 · A dense switch is a jump into a table of JMPs when that is fewer cells
 
 - **Decision.** A switch whose arms are on consecutive values (a `match d { 0 => .., 1 => .., .. }`, an enum's

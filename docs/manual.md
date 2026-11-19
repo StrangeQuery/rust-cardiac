@@ -63,9 +63,10 @@ answer, but has a cheaper way when the cells or the time matter. **Refused** sto
 
 **Costs more than it looks**
 
-- `*` of two variables: a multiply routine, put in once (about 35 cells), and repeated addition, as many steps as
-  the smaller factor. `pow` by a variable is that many multiplications. Multiply by a constant instead, or keep the
-  smaller factor second.
+- `*` of two variables: a multiply routine, put in once (about 50 cells), long multiplication by the second
+  factor's digits: 14 instructions a digit and one for each unit of the digits, at most about 80. A program that
+  doesn't fit with it gets repeated addition (about 35 cells, as many steps as the second factor). `pow` by a
+  variable is that many multiplications. Multiply by a constant instead, or put the factor with fewer digits second.
 - `/` or `%` of two variables: a divide routine, put in once (about 40 cells for `/`, 50 for `%`), and repeated
   subtraction, as many steps as the quotient. Divide by a power of ten instead, or use `digit()` for one digit.
 - `&`, `|` and `^` between integers, and shifts by a variable: a routine that reads a card's bits as Rust's `i16`

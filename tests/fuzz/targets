@@ -13,6 +13,7 @@ days_assumed  examples/days_assumed.rs        1..12
 collatz       examples/collatz/collatz.rs     -999..999
 divide        tests/fuzz/programs/divide.rs   -999..999 -999..999
 multiply      tests/fuzz/programs/multiply.rs -31..31 -31..31
+multiply_wide tests/fuzz/programs/multiply.rs -999..999 -999..999
 compare       tests/fuzz/programs/compare.rs  -999..999 -999..999
 edges         tests/fuzz/programs/edges.rs    -999..999
 promise       tests/fuzz/programs/promise.rs  1..999 0..999

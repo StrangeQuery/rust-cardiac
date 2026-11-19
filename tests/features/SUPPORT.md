@@ -6,7 +6,7 @@ status is what those runs did: **Supported** means CARDIAC printed what native R
 **Refused** that the build stopped with an error every time. Cells are for a release build (opt-level 2,
 overflow checks off), then with overflow checks on. `./test_features.sh` remakes this page.
 
-Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
+Made with cargo-cardiac v0.1.1-184-ge6fa8df-dirty.
 
 | Status | Rows |
 |---|---|
@@ -32,7 +32,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 |---|---|---|---|---|---|
 | `i16 as i8` and `i8 as i16` | Supported | 35 / 35 |  | The values here fit in an `i8`, so the cast keeps them as they are. | [cast_i16_i8.rs](types/cast_i16_i8.rs) |
 | `u8 as usize` and `usize as u8` | Supported | 39 / 48 |  |  | [cast_u8_usize.rs](types/cast_u8_usize.rs) |
-| An `i32` holding more than a card (50 * 50 = 2500), divided back onto one | Differs from native Rust by design | 35 / 54 | Never | A cell holds -999..=999, so an `i32` past a card cannot be held, even for a moment. The product 2500 is past a card: with overflow checks on CARDIAC panics, and with them off it keeps the low three digits (500), so it prints 50 where Rust prints 250. | [i32_past_card.rs](types/i32_past_card.rs) |
+| An `i32` holding more than a card (50 * 50 = 2500), divided back onto one | Differs from native Rust by design | 50 / 72 | Never | A cell holds -999..=999, so an `i32` past a card cannot be held, even for a moment. The product 2500 is past a card: with overflow checks on CARDIAC panics, and with them off it keeps the low three digits (500), so it prints 50 where Rust prints 250. | [i32_past_card.rs](types/i32_past_card.rs) |
 | `i128`: declared, added, subtracted, compared and cast back to `i16` | Refused |  | Never | The compiler says: `RCE0004: unsupported local type i128 for _1 (this backend has u8, i16, usize and bool)` | [int_i128.rs](types/int_i128.rs) |
 | `i16`: declared, added, subtracted, compared and cast back to `i16` | Supported | 32 / 45 |  |  | [int_i16.rs](types/int_i16.rs) |
 | `i32`: declared, added, subtracted, compared and cast back to `i16` | Supported | 32 / 47 |  | The values fit on a card here; an `i32` past a card is its own row. | [int_i32.rs](types/int_i32.rs) |
@@ -181,13 +181,13 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
 | A `&dyn Trait` whose type is chosen at run time | **The test is too big** (it doesn't fit in 96 cells) | 88 | On demand | The compiler says: `RCE0032: program runs past cell 98` | [dyn_choose.rs](types/dyn_choose.rs) |
-| A `&dyn Trait` with one implementation | Supported | 46 / 63 |  | Dynamic dispatch needs a vtable and an indirect call, the same machinery as function pointers. | [dyn_one.rs](types/dyn_one.rs) |
+| A `&dyn Trait` with one implementation | Supported | 61 / 81 |  | Dynamic dispatch needs a vtable and an indirect call, the same machinery as function pointers. | [dyn_one.rs](types/dyn_one.rs) |
 
 ### Impl trait type
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `impl Trait` as a parameter type | Supported | 63 / 88 |  | `impl Trait` in argument position is a generic function. | [impl_arg.rs](types/impl_arg.rs) |
+| `impl Trait` as a parameter type | Supported | 78 / 88 |  | `impl Trait` in argument position is a generic function. | [impl_arg.rs](types/impl_arg.rs) |
 | `impl Fn(i16) -> i16` returned from a function | Supported | 9 / 20 |  | At opt-level 1 rustc calls `adder`, which returns a closure: a struct the compiler would have to pass back. | [impl_return.rs](types/impl_return.rs) |
 
 ### Type aliases
@@ -279,7 +279,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `a + b` on `u8` past 255: panics, or wraps with checks off | Supported | 57 / 57 |  |  | [add_u8_overflow.rs](expressions/add_u8_overflow.rs) |
 | `a + b` on `usize` | Supported | 14 / 27 |  |  | [add_usize.rs](expressions/add_usize.rs) |
 | Integer arithmetic with no type given (`i32`, Rust's default) | Supported | 19 / 43 |  |  | [arith_i32_default.rs](expressions/arith_i32_default.rs) |
-| Arithmetic on a variable declared `i32` | Supported | 35 / 56 |  |  | [arith_i32_typed.rs](expressions/arith_i32_typed.rs) |
+| Arithmetic on a variable declared `i32` | Supported | 50 / 74 |  |  | [arith_i32_typed.rs](expressions/arith_i32_typed.rs) |
 | `a / 7`: by a constant other than a power of ten | Supported | 57 / 57 |  |  | [div_const_i16.rs](expressions/div_const_i16.rs) |
 | `a / 10`: by a power of ten | Supported | 13 / 13 |  | A shift. Rounds toward zero: `-7 / 10` is 0. | [div_pow10_i16.rs](expressions/div_pow10_i16.rs) |
 | `a / b` on `u8` | Supported | 64 / 64 |  |  | [div_u8.rs](expressions/div_u8.rs) |
@@ -288,9 +288,9 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `a / b` with `b` zero panics | Supported | 55 / 55 |  |  | [div_zero_i16.rs](expressions/div_zero_i16.rs) |
 | `a * 7`: by a constant | Supported | 16 / 27 |  |  | [mul_const_i16.rs](expressions/mul_const_i16.rs) |
 | `a * 10`: by a power of ten | Supported | 13 / 34 |  |  | [mul_pow10_i16.rs](expressions/mul_pow10_i16.rs) |
-| `a * b` on `u8` | Supported | 81 / 89 |  |  | [mul_u8.rs](expressions/mul_u8.rs) |
-| `a * b` on `usize` | Supported | 45 / 58 |  |  | [mul_usize.rs](expressions/mul_usize.rs) |
-| `a * b` on `i16`, both variables | Supported | 44 / 61 |  | A multiply routine, put in once, runs as many steps as the smaller factor. | [mul_var_i16.rs](expressions/mul_var_i16.rs) |
+| `a * b` on `u8` | Supported | 96 / 89 |  |  | [mul_u8.rs](expressions/mul_u8.rs) |
+| `a * b` on `usize` | Supported | 60 / 76 |  |  | [mul_usize.rs](expressions/mul_usize.rs) |
+| `a * b` on `i16`, both variables | Supported | 59 / 79 |  | A multiply routine, put in once, runs as many steps as the smaller factor. | [mul_var_i16.rs](expressions/mul_var_i16.rs) |
 | `-a` on `i16` | Supported | 14 / 14 |  |  | [neg_i16.rs](expressions/neg_i16.rs) |
 | `a % 7`: by a constant other than a power of ten | Supported | 68 / 68 |  |  | [rem_const_i16.rs](expressions/rem_const_i16.rs) |
 | `a % 10`: by a power of ten | Supported | 13 / 13 |  |  | [rem_pow10_i16.rs](expressions/rem_pow10_i16.rs) |
@@ -350,7 +350,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `x /= a` on `i16` | Supported | 55 / 55 |  |  | [compound_div.rs](expressions/compound_div.rs) |
 | `t[i] += a` on an array element | Supported | 34 / 42 |  |  | [compound_element.rs](expressions/compound_element.rs) |
 | `s.f += a` on a struct field | Supported | 14 / 26 |  |  | [compound_field.rs](expressions/compound_field.rs) |
-| `x *= a` on `i16` | Supported | 41 / 58 |  |  | [compound_mul.rs](expressions/compound_mul.rs) |
+| `x *= a` on `i16` | Supported | 56 / 76 |  |  | [compound_mul.rs](expressions/compound_mul.rs) |
 | `x %= a` on `i16` | Supported | 69 / 69 |  |  | [compound_rem.rs](expressions/compound_rem.rs) |
 | `x -= a` on `i16` | Supported | 13 / 24 |  |  | [compound_sub.rs](expressions/compound_sub.rs) |
 | Destructuring assignment: `(a, b) = (b, a)` | Supported | 22 / 34 |  |  | [destructuring_assign.rs](expressions/destructuring_assign.rs) |
@@ -427,7 +427,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | A trait object, `&dyn Trait`, chosen at run time | Supported | 40 / 51 |  | Dynamic dispatch needs a vtable and an indirect call, which CARDIAC can build as it builds an indexed read. | [method_dyn.rs](expressions/method_dyn.rs) |
 | An inherent method taking `&self` | Supported | 15 / 26 |  |  | [method_inherent.rs](expressions/method_inherent.rs) |
 | A method taking `&mut self` | Supported | 30 / 41 |  |  | [method_mut_self.rs](expressions/method_mut_self.rs) |
-| A trait method, two types implementing it | Supported | 56 / 77 |  |  | [method_trait.rs](expressions/method_trait.rs) |
+| A trait method, two types implementing it | Supported | 71 / 95 |  |  | [method_trait.rs](expressions/method_trait.rs) |
 | A trait's default method calling a required one | Supported | 9 / 20 |  | At opt-level 1 rustc calls the default method with the struct by reference, which inherent methods already handle. | [method_trait_default.rs](expressions/method_trait_default.rs) |
 
 ### Field access expressions
@@ -606,7 +606,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 
 | Feature | Status | Cells | If not supported | Notes | Test |
 |---|---|---|---|---|---|
-| `&x` and `&(a, b)` in a `match` | Supported | 38 / 55 |  |  | [ref_pat_match.rs](patterns/ref_pat_match.rs) |
+| `&x` and `&(a, b)` in a `match` | Supported | 53 / 73 |  |  | [ref_pat_match.rs](patterns/ref_pat_match.rs) |
 | `&x` in a parameter (`fn f(&x: &i16)`) | Supported | 18 / 29 |  |  | [ref_pat_param.rs](patterns/ref_pat_param.rs) |
 
 ### Struct patterns
@@ -737,7 +737,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `use Enum::*` to bring variants into scope | Supported | 28 / 28 |  |  | [use_enum_variants.rs](items/use_enum_variants.rs) |
 | `use m::*` (glob import) | Supported | 19 / 34 |  |  | [use_glob.rs](items/use_glob.rs) |
 | `use m::{self, f}` (nested groups with `self`) | Supported | 16 / 27 |  |  | [use_group_self.rs](items/use_group_self.rs) |
-| `pub use` to re-export | Supported | 34 / 51 |  |  | [use_pub_reexport.rs](items/use_pub_reexport.rs) |
+| `pub use` to re-export | Supported | 49 / 69 |  |  | [use_pub_reexport.rs](items/use_pub_reexport.rs) |
 | `use ... as` to rename | Supported | 8 / 8 |  |  | [use_rename.rs](items/use_rename.rs) |
 | `use` of a function from a module | Supported | 8 / 8 |  |  | [use_simple.rs](items/use_simple.rs) |
 
@@ -752,7 +752,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | A diverging function (`-> !`) | Supported | 19 / 19 |  | A call that never returns needs nothing after it; the second card is negative, so the program then panics. | [fn_diverging.rs](items/fn_diverging.rs) |
 | A generic function rustc inlines | Supported | 59 / 59 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [fn_generic_inlined.rs](items/fn_generic_inlined.rs) |
 | A generic function marked `#[inline(never)]` | Supported | 59 / 59 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [fn_generic_not_inlined.rs](items/fn_generic_not_inlined.rs) |
-| `impl Trait` in argument position | Supported | 68 / 89 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [fn_impl_trait_arg.rs](items/fn_impl_trait_arg.rs) |
+| `impl Trait` in argument position | Supported | 83 / 89 |  | rustc writes the MIR of each instance (`f::<i16>`); compiling it as an ordinary function is what the compiler already does for non-generic ones. | [fn_impl_trait_arg.rs](items/fn_impl_trait_arg.rs) |
 | `impl Trait` in return position | Supported | 14 / 25 |  |  | [fn_impl_trait_return.rs](items/fn_impl_trait_return.rs) |
 | `#[inline(always)]` on a helper | Supported | 11 / 25 |  |  | [fn_inline_always.rs](items/fn_inline_always.rs) |
 | A small helper rustc inlines, called twice | Supported | 13 / 26 |  |  | [fn_inlined.rs](items/fn_inlined.rs) |
@@ -798,7 +798,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 |---|---|---|---|---|---|
 | A C-like enum with given discriminants, cast with `as` | Supported | 24 / 24 |  |  | [enum_clike.rs](items/enum_clike.rs) |
 | An enum whose variants carry data, built from `inp()` in a function that returns it | Supported | 63 / 78 |  | A wrong answer: `Shape::Rect(inp(), inp())` returned from a function loses its second field (prints 3 for 3 - 4); with the fields read into locals first it is right. Even `fn read() -> Shape { Shape::Rect(inp(), inp()) }` alone gives 0, 0. | [enum_data.rs](items/enum_data.rs) |
-| An enum whose variants carry data, built from locals and passed to a function | Supported | 64 / 83 |  |  | [enum_data_locals.rs](items/enum_data_locals.rs) |
+| An enum whose variants carry data, built from locals and passed to a function | Supported | 79 / 83 |  |  | [enum_data_locals.rs](items/enum_data_locals.rs) |
 | `==` on an enum with `#[derive(PartialEq)]` | Supported | 65 / 65 |  |  | [enum_derive_partialeq.rs](items/enum_derive_partialeq.rs) |
 | A generic enum of your own (`enum Maybe<T>`) | Supported | 37 / 37 |  | Once rustc fills in `T`, the layout is the same as a non-generic enum's, which already works. | [enum_generic.rs](items/enum_generic.rs) |
 | A recursive enum through `Box` | Refused |  | Never | `Box` needs a heap; this row uses a `&'static` link instead, the nearest a `no_std` program gets without an allocator. The compiler says: `RCE0004: enum main::List: field 1 of Cons is &main::List: the fields of an enum's variants must be scalars (i16, u8, usize, bool), enums, structs or arrays of scalars for now` | [enum_recursive_box.rs](items/enum_recursive_box.rs) |
@@ -1108,7 +1108,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `a.checked_add(b)` on `i16` past a card | Differs from native Rust by design |  | Never | The `None` is CARDIAC's overflow: every `i16` overflows past a card. CARDIAC's `i16` overflows past a card (999), so 1000 is `None` where native Rust has `Some(1000)`. | [checked_add_past_card.rs](integers/checked_add_past_card.rs) |
 | `a.checked_add(b)` on `u8` | Supported | 73 / 73 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [checked_add_u8.rs](integers/checked_add_u8.rs) |
 | `a.checked_div(b)` on `i16` | Supported | 65 / 65 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_div_i16.rs](integers/checked_div_i16.rs) |
-| `a.checked_mul(b)` on `i16` | Supported | 68 / 68 |  |  | [checked_mul_i16.rs](integers/checked_mul_i16.rs) |
+| `a.checked_mul(b)` on `i16` | Supported | 86 / 86 |  |  | [checked_mul_i16.rs](integers/checked_mul_i16.rs) |
 | `a.checked_neg()` on `i16` | Supported | 14 / 14 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_neg_i16.rs](integers/checked_neg_i16.rs) |
 | `a.checked_pow(3)` on `i16` | Supported | 79 / 79 |  | A loop of checked multiplies; rustc calls it at both opt-levels. | [checked_pow_i16.rs](integers/checked_pow_i16.rs) |
 | `a.checked_rem(b)` on `i16` | Supported | 78 / 78 |  | The compiler crashes at opt-level 2: rustc's inlined test against `i16::MIN` puts -32768 into a card, and the compiler panics instead of refusing it. No card holds `i16::MIN`, so on CARDIAC the test is never true. At opt-level 1 it is a call. | [checked_rem_i16.rs](integers/checked_rem_i16.rs) |
@@ -1122,7 +1122,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `a.wrapping_add(b)` on `i16`, on a card | Supported | 19 / 19 |  |  | [wrapping_add_i16.rs](integers/wrapping_add_i16.rs) |
 | `a.wrapping_add(b)` on `u8` | Supported | 57 / 57 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [wrapping_add_u8.rs](integers/wrapping_add_u8.rs) |
 | `a.wrapping_div(b)` on `i16`, on a card | Supported | 65 / 65 |  | On a card it is plain `/`; rustc calls `overflowing_div` even at opt-level 2, for the `i16::MIN / -1` case that no card holds. | [wrapping_div_i16.rs](integers/wrapping_div_i16.rs) |
-| `a.wrapping_mul(b)` on `i16`, on a card | Supported | 44 / 44 |  |  | [wrapping_mul_i16.rs](integers/wrapping_mul_i16.rs) |
+| `a.wrapping_mul(b)` on `i16`, on a card | Supported | 59 / 59 |  |  | [wrapping_mul_i16.rs](integers/wrapping_mul_i16.rs) |
 | `a.wrapping_neg()` on `i16` | Supported | 14 / 14 |  |  | [wrapping_neg_i16.rs](integers/wrapping_neg_i16.rs) |
 | `a.wrapping_rem(b)` on `i16`, on a card | Supported | 87 / 87 |  | At opt-level 1 rustc calls the method rather than inlining it; the compiler could write what rustc inlines at opt-level 2, as it does for `min` and `max`. | [wrapping_rem_i16.rs](integers/wrapping_rem_i16.rs) |
 | `a.wrapping_sub(b)` on `i16`, on a card | Supported | 19 / 19 |  |  | [wrapping_sub_i16.rs](integers/wrapping_sub_i16.rs) |
@@ -1134,7 +1134,7 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 |---|---|---|---|---|---|
 | `a.saturating_add(b)` on `i16`, on a card | Supported | 30 / 30 |  | Rust saturates at 32767, which no card holds, so past a card CARDIAC would print something else; on a card it is a plain add. | [saturating_add_i16.rs](integers/saturating_add_i16.rs) |
 | `a.saturating_add(b)` on `u8` | Supported | 60 / 60 |  | 255 fits on a card, so this is an add and a compare; rustc uses the `saturating_add` intrinsic, which the compiler doesn't know. | [saturating_add_u8.rs](integers/saturating_add_u8.rs) |
-| `a.saturating_mul(b)` on `i16`, on a card | Supported | 51 / 51 |  | As for `saturating_add`. At opt-level 2 the compiler crashes: rustc's inlined version picks between 32767 and -32768, and the compiler panics on a constant no card holds instead of refusing it. | [saturating_mul_i16.rs](integers/saturating_mul_i16.rs) |
+| `a.saturating_mul(b)` on `i16`, on a card | Supported | 69 / 69 |  | As for `saturating_add`. At opt-level 2 the compiler crashes: rustc's inlined version picks between 32767 and -32768, and the compiler panics on a constant no card holds instead of refusing it. | [saturating_mul_i16.rs](integers/saturating_mul_i16.rs) |
 | `a.saturating_mul(b)` on `u8` | Supported | 67 / 67 |  | At opt-level 2 rustc's inlined version doesn't fit in the cells; a multiply and a compare would. | [saturating_mul_u8.rs](integers/saturating_mul_u8.rs) |
 | `a.saturating_sub(b)` on `i16`, on a card | Supported | 30 / 30 |  | As for `saturating_add`: Rust's limit is -32768, which no card holds. | [saturating_sub_i16.rs](integers/saturating_sub_i16.rs) |
 | `a.saturating_sub(b)` on `u8` | Supported | 57 / 57 |  |  | [saturating_sub_u8.rs](integers/saturating_sub_u8.rs) |
@@ -1184,8 +1184,8 @@ Made with cargo-cardiac v0.1.1-183-g795e2ac-dirty.
 | `a.midpoint(b)` on `u8` | Supported | 58 / 58 |  | rustc adds in `u16`, which the compiler lacks; the sum of two `u8`s always fits on a card. | [midpoint_u8.rs](integers/midpoint_u8.rs) |
 | `a.next_power_of_two()` on `u8` | Supported | 88 / 88 |  | rustc counts leading zeros (in `u32`); on a card it would be a loop of doublings. | [next_power_of_two_u8.rs](integers/next_power_of_two_u8.rs) |
 | `a.next_power_of_two()` on `usize` | Supported | 90 / 95 |  | As for `u8`. | [next_power_of_two_usize.rs](integers/next_power_of_two_usize.rs) |
-| `a.pow(3)` on `i16` | Supported | 67 / 67 |  | With a constant exponent `pow` is a few multiplies, but rustc calls it at both opt-levels. | [pow_const_i16.rs](integers/pow_const_i16.rs) |
-| `a.pow(n)` on `i16`, `n` from a card | Supported | 76 / 76 |  | The exponent is a `u32`, which the compiler lacks; after that it is a loop of multiplies. | [pow_var_i16.rs](integers/pow_var_i16.rs) |
+| `a.pow(3)` on `i16` | Supported | 85 / 85 |  | With a constant exponent `pow` is a few multiplies, but rustc calls it at both opt-levels. | [pow_const_i16.rs](integers/pow_const_i16.rs) |
+| `a.pow(n)` on `i16`, `n` from a card | Supported | 94 / 94 |  | The exponent is a `u32`, which the compiler lacks; after that it is a loop of multiplies. | [pow_var_i16.rs](integers/pow_var_i16.rs) |
 
 ### Bits
 
