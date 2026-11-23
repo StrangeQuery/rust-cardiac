@@ -95,6 +95,12 @@ pub fn add_rows(
     if OFF.with(|o| o.get()) {
         return false;
     }
+    if std::env::var_os("CARDIAC_DUMP_ROWS").is_some() {
+        eprintln!("=== {func}");
+        for b in blocks.iter() {
+            eprint!("{b}");
+        }
+    }
     let mut tried: HashSet<BasicBlock> = HashSet::new();
     let mut any = false;
     loop {
@@ -120,7 +126,11 @@ pub fn add_rows(
                 results,
                 exact,
             };
+            if std::env::var_os("CARDIAC_TRACE_ROWS").is_some() { eprintln!("try {func} {h:?}"); }
             if let Some(cells) = row(blocks, locals, h, &cx) {
+                if std::env::var_os("CARDIAC_TRACE_ROWS").is_some() {
+                    eprintln!("  made row: {func} {h:?} {cells}");
+                }
                 MADE.with(|m| m.borrow_mut().push((func.to_string(), h, cells)));
                 made = true;
                 any = true;
@@ -190,31 +200,38 @@ fn idle(s: &Statement) -> bool {
 }
 
 /// The loop whose head is block `h`, as a row: the cells its ADDs take, or None where it isn't one.
+fn no<T>(line: u32) -> Option<T> {
+    if std::env::var_os("CARDIAC_TRACE_ROWS").is_some() {
+        eprintln!("  no row: addrow.rs:{line}");
+    }
+    None
+}
+
 fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, cx: &Context) -> Option<usize> {
-    let hi = ir::find(blocks, h)?;
+    let hi = ir::find(blocks, h).or_else(|| no(line!()))?;
     // (not the function's first block, which is entered from outside as well)
     if hi == 0 {
-        return None;
+        return no(line!());
     }
     let head = &blocks[hi];
     let stmts: Vec<&Statement> = head.statements.iter().filter(|s| !idle(s)).collect();
     let [Statement::Assign(bp, Rvalue::BinaryOp(cmp, left, right))] = stmts.as_slice() else {
-        return None;
+        return no(line!());
     };
-    let b = bp.as_local()?;
+    let b = bp.as_local().or_else(|| no(line!()))?;
     let Terminator::SwitchInt {
         discr,
         arms,
         otherwise: Some(other),
     } = &head.terminator
     else {
-        return None;
+        return no(line!());
     };
     let ([(0, zero)], Some(true)) = (arms.as_slice(), read(discr).map(|d| d == b)) else {
-        return None;
+        return no(line!());
     };
     if ir::occurrences(blocks, b) != 2 {
-        return None;
+        return no(line!());
     }
     let preds = ir::predecessors(blocks);
     // the body: from one of the ways out, blocks each entered only from the one before, back to the head
@@ -224,17 +241,17 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         let mut from = h;
         loop {
             if at == h || chain.len() >= 6 {
-                return None;
+                return no(line!());
             }
-            let i = ir::find(blocks, at)?;
+            let i = ir::find(blocks, at).or_else(|| no(line!()))?;
             if preds.get(&at).map(|v| v.as_slice()) != Some(&[from][..]) || chain.contains(&i) {
-                return None;
+                return no(line!());
             }
             chain.push(i);
             let next = match &blocks[i].terminator {
                 Terminator::Goto(n) => *n,
                 t @ Terminator::Assert { target, .. } if ranges::overflow_assert(t).is_some() => *target,
-                _ => return None,
+                _ => return no(line!()),
             };
             if next == h {
                 return Some(chain);
@@ -246,7 +263,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     let (chain, exit, on_true) = match (chain_from(*other), chain_from(*zero)) {
         (Some(c), None) => (c, *zero, true),
         (None, Some(c)) => (c, *other, false),
-        _ => return None,
+        _ => return no(line!()),
     };
     // A row's cells cost a run the time to load them too, about three instructions each, which a loop main runs
     // once a run seldom wins back: only a loop that can run again in a run (inside another, or in a function other
@@ -275,7 +292,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     let latch = blocks[*chain.last().unwrap()].name;
     let entries: Vec<BasicBlock> = preds.get(&h)?.iter().copied().filter(|p| *p != latch).collect();
     if entries.is_empty() || entries.iter().any(|p| chain.iter().any(|&i| blocks[i].name == *p)) {
-        return None;
+        return no(line!());
     }
     // the body's lines, in order
     let mut items: Vec<Item> = vec![];
@@ -289,15 +306,15 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
             if let Some((p, _)) = ranges::overflow_assert(&blocks[chain[k - 1]].terminator) {
                 // (taken with the sum, below)
                 let Some(Statement::Assign(d, Rvalue::Use(Operand::Move(q) | Operand::Copy(q)))) = lines.first() else {
-                    return None;
+                    return no(line!());
                 };
                 let moved =
                     q.base_local() == Some(p) && matches!(q.projection.as_slice(), [ir::Projection::Field(0, _)]);
                 let Some(Item::Total(t)) = items.last() else {
-                    return None;
+                    return no(line!());
                 };
                 if !moved || d.as_local() != Some(t.acc) {
-                    return None;
+                    return no(line!());
                 }
                 j = 1;
             }
@@ -305,9 +322,9 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         while j < lines.len() {
             let last = j + 1 == lines.len();
             let Statement::Assign(d, rv) = lines[j] else {
-                return None;
+                return no(line!());
             };
-            let d = d.as_local()?;
+            let d = d.as_local().or_else(|| no(line!()))?;
             let item = match rv {
                 // the overflow-checked sum, `p = AddWithOverflow(copy t, x)` or `p = SumWithOverflow(+copy t, ..)`,
                 // its assert, and `t = move (p.0)`
@@ -315,8 +332,8 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     if last && checked == Some(d) =>
                 {
                     let sub = *op == BinOp::SubWithOverflow;
-                    let acc = read(x)?;
-                    let msg = assert_message(&blk.terminator)?;
+                    let acc = read(x).or_else(|| no(line!()))?;
+                    let msg = assert_message(&blk.terminator).or_else(|| no(line!()))?;
                     Item::Total(Total {
                         acc,
                         step: Step::One(y.clone()),
@@ -332,8 +349,8 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     })
                 }
                 Rvalue::Sum(terms) if last && checked == Some(d) => {
-                    let msg = assert_message(&blk.terminator)?;
-                    let (acc, rest) = split_sum(terms)?;
+                    let msg = assert_message(&blk.terminator).or_else(|| no(line!()))?;
+                    let (acc, rest) = split_sum(terms).or_else(|| no(line!()))?;
                     Item::Total(Total {
                         acc,
                         step: rest,
@@ -375,7 +392,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                             first: true,
                         })
                     } else {
-                        return None;
+                        return no(line!());
                     }
                 }
                 Rvalue::BinaryOp(
@@ -387,7 +404,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     Item::Step(d, up)
                 }
                 Rvalue::Lin(terms) if terms.iter().any(|(k, o)| *k == 1 && read(o) == Some(d)) => {
-                    let at = terms.iter().position(|(k, o)| *k == 1 && read(o) == Some(d))?;
+                    let at = terms.iter().position(|(k, o)| *k == 1 && read(o) == Some(d)).or_else(|| no(line!()))?;
                     let mut rest = terms.clone();
                     rest.remove(at);
                     Item::Total(Total {
@@ -431,7 +448,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     for &i in &chain {
         for s in &blocks[i].statements {
             if let Statement::Assign(d, _) = s {
-                written.insert(d.base_local()?);
+                written.insert(d.base_local().or_else(|| no(line!()))?);
             }
         }
     }
@@ -449,7 +466,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
             _ => None,
         })
         .collect();
-    let [(c, up)] = counters.as_slice() else { return None };
+    let [(c, up)] = counters.as_slice() else { return no(line!()) };
     let (c, up) = (*c, *up);
     let items: Vec<Item> = items
         .into_iter()
@@ -479,7 +496,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
             (false, BinOp::Lt) => (BinOp::Le, r, l),
             (false, BinOp::Le) => (BinOp::Lt, r, l),
             (false, BinOp::Eq) => (BinOp::Ne, l, r),
-            _ => return None,
+            _ => return no(line!()),
         }
     };
     let bias = i128::from(op == BinOp::Le);
@@ -487,26 +504,26 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     let (e, c_left) = match (read(lhs) == Some(c), read(rhs) == Some(c)) {
         (true, false) => (rhs, true),
         (false, true) => (lhs, false),
-        _ => return None,
+        _ => return no(line!()),
     };
     if op != BinOp::Ne && up != c_left {
-        return None;
+        return no(line!());
     }
     let fixed_local = |l: Local| !written.contains(&l) && !cx.huge.contains(&l);
     let invariant = |o: &Operand| int(o).is_some() || read(o).is_some_and(fixed_local);
     if !invariant(e) || cx.huge.contains(&c) {
-        return None;
+        return no(line!());
     }
     // what holds on the way in; for the count's operands, what held there before the passes too
     let range_in = |o: &Operand, counted: bool| -> Option<Range> {
         if let Some(v) = int(o) {
             return Some([v as i64, v as i64]);
         }
-        let l = read(o)?;
-        let whole = ranges::type_range(cx.types.get(&l)?);
+        let l = read(o).or_else(|| no(line!()))?;
+        let whole = ranges::type_range(cx.types.get(&l).or_else(|| no(line!()))?);
         let mut hull: Option<Range> = None;
         for p in &entries {
-            let r = cx.edges.get(&(*p, h)).and_then(|f| f.get(&l).copied()).or(whole)?;
+            let r = cx.edges.get(&(*p, h)).and_then(|f| f.get(&l).copied()).or(whole).or_else(|| no(line!()))?;
             hull = Some(hull.map_or(r, |q| [q[0].min(r[0]), q[1].max(r[1])]));
         }
         // and what held at the head before the passes, on any way in (the loop's own too): both hold on the way in
@@ -520,10 +537,10 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     .map(|(_, f)| f.get(&l).copied().or(whole))
                     .collect();
                 if ins.is_empty() || ins.iter().any(|r| r.is_none()) {
-                    return None;
+                    return no(line!());
                 }
                 let ins: Vec<Range> = ins.into_iter().flatten().collect();
-                Some([ins.iter().map(|r| r[0]).min()?, ins.iter().map(|r| r[1]).max()?])
+                Some([ins.iter().map(|r| r[0]).min().or_else(|| no(line!()))?, ins.iter().map(|r| r[1]).max().or_else(|| no(line!()))?])
             });
         match (hull, early) {
             (Some(a), Some(b)) if a[0].max(b[0]) <= a[1].min(b[1]) => Some([a[0].max(b[0]), a[1].min(b[1])]),
@@ -531,7 +548,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         }
     };
     let entry_range = |o: &Operand| range_in(o, false);
-    let (rc, re) = (range_in(&copy(c), true)?, range_in(e, true)?);
+    let (rc, re) = (range_in(&copy(c), true).or_else(|| no(line!()))?, range_in(e, true).or_else(|| no(line!()))?);
     let count = if up {
         [re[0] - rc[1], re[1] - rc[0]]
     } else {
@@ -540,7 +557,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     let count = [count[0] + bias as i64, count[1] + bias as i64];
     let most = count[1];
     if !(1..=MOST).contains(&most) || count[0] == count[1] || (op == BinOp::Ne && count[0] < 0) {
-        return None;
+        return no(line!());
     }
     let guarded = count[0] < 0;
     // the values worked out once, and the totals
@@ -549,9 +566,9 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     // range
     let element = |o: &Operand| -> Option<Range> {
         let (Operand::Copy(p) | Operand::Move(p)) = o else {
-            return None;
+            return no(line!());
         };
-        let base = p.base_local().filter(|b| fixed_local(*b))?;
+        let base = p.base_local().filter(|b| fixed_local(*b)).or_else(|| no(line!()))?;
         let fixed_index = match p.projection.as_slice() {
             [ir::Projection::Index(i) | ir::Projection::IndexPlus(i, _)] => fixed_local(*i),
             [ir::Projection::ConstantIndex { .. }] => true,
@@ -581,10 +598,10 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         match x {
             Item::Step(..) => {}
             Item::Fixed(t, rv) => {
-                let r = pure_range(rv, &|o| if ok(o, &fixed) { range_of(o, &fixed) } else { None })?;
+                let r = pure_range(rv, &|o| if ok(o, &fixed) { range_of(o, &fixed) } else { None }).or_else(|| no(line!()))?;
                 let i16 = matches!(cx.types.get(t), Some(Ty::Int(IntTy::I16 | IntTy::Isize)));
                 if !i16 || fixed.contains_key(t) || cx.results.contains(t) || cx.exact.contains(t) {
-                    return None;
+                    return no(line!());
                 }
                 // named in the loop alone, and set before it is read
                 let inside: usize = chain
@@ -592,7 +609,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     .map(|&i| blocks[i].lines().map(|l| l.count(*t)).sum::<usize>())
                     .sum();
                 if inside != ir::occurrences(blocks, *t) {
-                    return None;
+                    return no(line!());
                 }
                 // a value read whole from the accumulator by the line after it would be read from its cell once
                 // the lines between are gone: so a value read as the first operand of another must be on a card
@@ -602,7 +619,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     .and_then(|o| read(o))
                     .and_then(|l| fixed.get(&l).copied());
                 if matches!(rv, Rvalue::BinaryOp(..)) && first_read.is_some_and(|r| !on_card(r)) {
-                    return None;
+                    return no(line!());
                 }
                 fixed.insert(*t, r);
                 once.push(Statement::Assign(Place::local(*t), rv.clone()));
@@ -611,10 +628,10 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 let acc = total.acc;
                 let i16 = matches!(cx.types.get(&acc), Some(Ty::Int(IntTy::I16 | IntTy::Isize)));
                 if !i16 || acc == c || acc == b || cx.huge.contains(&acc) || cx.exact.contains(&acc) {
-                    return None;
+                    return no(line!());
                 }
                 if sums.iter().any(|(t, ..)| *t == acc) || read(e) == Some(acc) {
-                    return None;
+                    return no(line!());
                 }
                 // named in the loop by its own lines alone (and a checked one's pair too)
                 let inside: usize = chain
@@ -622,7 +639,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     .map(|&i| blocks[i].lines().map(|l| l.count(acc)).sum::<usize>())
                     .sum();
                 if inside != total.own {
-                    return None;
+                    return no(line!());
                 }
                 if let Some(p) = total.pair {
                     let named: usize = chain
@@ -630,7 +647,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                         .map(|&i| blocks[i].lines().map(|l| l.count(p)).sum::<usize>())
                         .sum();
                     if named != ir::occurrences(blocks, p) {
-                        return None;
+                        return no(line!());
                     }
                 }
                 let terms: Vec<(i64, Operand)> = match &total.step {
@@ -649,21 +666,21 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     }
                 };
                 if terms.is_empty() || !terms.iter().all(|(k, o)| *k != 0 && ok(o, &fixed) && int(o) != Some(0)) {
-                    return None;
+                    return no(line!());
                 }
                 // a value worked out once and read whole as the sum's first operand, past a card, would be read
                 // from its cell
                 if let (Step::One(o), true) = (&total.step, total.first) {
                     if read(o).and_then(|l| fixed.get(&l)).is_some_and(|r| !on_card(*r)) {
-                        return None;
+                        return no(line!());
                     }
                 }
-                let ra = entry_range(&copy(acc))?;
+                let ra = entry_range(&copy(acc)).or_else(|| no(line!()))?;
                 let size = |terms: &[(i64, Operand)]| -> Option<i64> {
                     let each = terms.iter().try_fold(0i64, |s, (k, o)| {
-                        let r = range_of(o, &fixed)?;
+                        let r = range_of(o, &fixed).or_else(|| no(line!()))?;
                         Some(s + k.abs() * r[0].abs().max(r[1].abs()))
-                    })?;
+                    }).or_else(|| no(line!()))?;
                     Some(ra[0].abs().max(ra[1].abs()) + most * each)
                 };
                 let length: i64 = terms.iter().map(|(k, _)| k.abs()).sum();
@@ -685,7 +702,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                     // one operand (k times a pass): the partial totals only grow or only shrink, so a check of the
                     // last is a check of each; the accumulator's four digits must hold them for that
                     if total.check.is_some() && size(&terms)? > 9999 {
-                        return None;
+                        return no(line!());
                     }
                     Plan::Row(terms)
                 } else if lin_range(&terms, &|o| range_of(o, &fixed)).is_some_and(on_card) {
@@ -694,7 +711,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 } else {
                     // else each pass's terms in the row, which needs the four digits for every partial total
                     if size(&terms)? > 9999 {
-                        return None;
+                        return no(line!());
                     }
                     Plan::Row(terms)
                 };
@@ -703,7 +720,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         }
     }
     if sums.is_empty() {
-        return None;
+        return no(line!());
     }
     let length = |plan: &Plan| -> i64 {
         match plan {
@@ -713,18 +730,18 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
         }
     };
     if sums.iter().any(|(_, p, _)| length(p) * most > MOST) {
-        return None;
+        return no(line!());
     }
     if once_a_run
         && !sums
             .iter()
             .all(|(_, p, _)| matches!(p, Plan::Times(v) if digits(*v) <= 3))
     {
-        return None;
+        return no(line!());
     }
     // the counter after the loop: e (or e + 1), when anything reads it
     let live = blocks::live_after_returning(blocks, cx.results);
-    let ei = ir::find(blocks, exit)?;
+    let ei = ir::find(blocks, exit).or_else(|| no(line!()))?;
     let reads_after = live
         .get(ei)
         .and_then(|l| l.first())
@@ -736,7 +753,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
             int(e).map(|k| Statement::Assign(Place::local(c), Rvalue::Use(card(k + 1))))
         }
     };
-    let last_c = if reads_after { Some(c_after(e)?) } else { None };
+    let last_c = if reads_after { Some(c_after(e).or_else(|| no(line!()))?) } else { None };
     // the count, as an operand
     let mut out: Vec<Statement> = vec![];
     let new_local = |locals: &mut Ordered<Local, Ty>| -> Local {
@@ -768,7 +785,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 let k = rc[0] as i128 - bias;
                 out.push(Statement::Assign(
                     Place::local(n),
-                    Rvalue::BinaryOp(BinOp::Sub, copy(read(e)?), card(k)),
+                    Rvalue::BinaryOp(BinOp::Sub, copy(read(e).or_else(|| no(line!()))?), card(k)),
                 ));
                 copy(n)
             }
@@ -776,11 +793,11 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 let n = new_local(locals);
                 out.push(Statement::Assign(
                     Place::local(n),
-                    Rvalue::BinaryOp(BinOp::Sub, copy(read(e)?), copy(c)),
+                    Rvalue::BinaryOp(BinOp::Sub, copy(read(e).or_else(|| no(line!()))?), copy(c)),
                 ));
                 copy(n)
             }
-            _ => return None,
+            _ => return no(line!()),
         }
     } else {
         // c - e (+ 1)
@@ -798,11 +815,11 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
                 let n = new_local(locals);
                 out.push(Statement::Assign(
                     Place::local(n),
-                    Rvalue::BinaryOp(BinOp::Sub, copy(c), copy(read(e)?)),
+                    Rvalue::BinaryOp(BinOp::Sub, copy(c), copy(read(e).or_else(|| no(line!()))?)),
                 ));
                 copy(n)
             }
-            None => return None,
+            None => return no(line!()),
         }
     };
     let as_copy = |o: &Operand| match o {
@@ -873,7 +890,7 @@ fn row(blocks: &mut Vec<Block>, locals: &mut Ordered<Local, Ty>, h: BasicBlock, 
     blocks[bi].statements = out;
     blocks[bi].terminator = Terminator::Goto(exit);
     if !guarded {
-        let hi = ir::find(blocks, h)?;
+        let hi = ir::find(blocks, h).or_else(|| no(line!()))?;
         blocks[hi]
             .statements
             .retain(|s| !matches!(s, Statement::Assign(d, _) if d.as_local() == Some(b)));
